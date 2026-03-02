@@ -1,0 +1,93 @@
+{% load humanize %}
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-gradient-primary text-white">
+    <h5 class="mb-0">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      Low Stock & Reorder Alerts
+      <span class="badge bg-light text-dark ms-2">{{ total_alerts }}</span>
+    </h5>
+  </div>
+
+  <div class="card-body">
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-4 col-sm-6">
+        <div class="card text-white bg-danger h-100">
+          <div class="card-body text-center">
+            <h6 class="card-title">Critical (Below Safety)</h6>
+            <p class="display-5 fw-bold mb-0">{{ critical_count }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4 col-sm-6">
+        <div class="card text-white bg-warning h-100">
+          <div class="card-body text-center">
+            <h6 class="card-title">Reorder Needed</h6>
+            <p class="display-5 fw-bold mb-0">{{ reorder_count }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4 col-sm-6">
+        <div class="card text-white bg-secondary h-100">
+          <div class="card-body text-center">
+            <h6 class="card-title">Total Alerts</h6>
+            <p class="display-5 fw-bold mb-0">{{ total_alerts }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Critical Items List -->
+    {% if critical_items %}
+      <h6 class="text-danger mb-3">
+        <i class="bi bi-arrow-down-circle-fill me-1"></i>
+        Top Critical Items (Below Safety Stock)
+      </h6>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Item</th>
+              <th>Warehouse</th>
+              <th>Current Qty</th>
+              <th>Min Level</th>
+              <th>Reorder Point</th>
+              <th>Suggested Order Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for stock in critical_items %}
+            <tr>
+              <td>
+                <strong>{{ stock.item.code }}</strong><br>
+                <small class="text-muted">{{ stock.item.name }}</small>
+              </td>
+              <td>{{ stock.warehouse.name }}</td>
+              <td class="text-danger fw-bold text-end">{{ stock.quantity|floatformat:2 }}</td>
+              <td class="text-end">{{ stock.item.min_stock_level|floatformat:2 }}</td>
+              <td class="text-end">{{ stock.item.reorder_point|floatformat:2 }}</td>
+              <td class="text-end">{{ stock.item.reorder_quantity|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="text-end mt-3">
+        <a href="{% url 'inventory:low_stock_alerts' %}" class="btn btn-sm btn-outline-danger">
+          View All Alerts <i class="bi bi-arrow-right"></i>
+        </a>
+      </div>
+    {% else %}
+      <div class="alert alert-success text-center py-4">
+        <i class="bi bi-check-circle-fill fs-3 me-2"></i>
+        <strong>All clear!</strong> No items are currently below safety stock or reorder point.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card-footer text-muted small text-center">
+    Last updated: {{ today|date:"d M Y H:i" }} EAT
+  </div>
+</div>

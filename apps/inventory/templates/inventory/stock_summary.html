@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stock Summary Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .near-expiry { background-color: #ffc107; color: #333; }
+        .expired { background-color: #dc3545; color: white; }
+        .summary-box { 
+            background-color: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            border-radius: 5px; 
+            padding: 15px; 
+            margin-bottom: 20px;
+        }
+        .nav-links { margin-bottom: 20px; }
+        .nav-links a { 
+            margin-right: 15px; 
+            text-decoration: none; 
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-links">
+        <a href="{% url 'inventory:dashboard' %}">Dashboard</a>
+        <a href="{% url 'inventory:current_stock' %}">Current Stock</a>
+        <a href="{% url 'inventory:stock_summary' %}">Stock Summary</a>
+        <a href="{% url 'admin:index' %}">Admin</a>
+        <a href="{% url 'inventory:low_stock_widget' %}">Low Stock Widget</a>
+    </div>
+ 
+    <h1>Stock Summary Report</h1>
+    <p>Generated on: {{ today }}</p>
+
+    <div class="summary-box">
+        <h2>Total Stock by Item</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item Code</th>
+                    <th>Item Name</th>
+                    <th>Unit</th>
+                    <th>Total Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in stock_by_item %}
+                <tr>
+                    <td>{{ item.item__code }}</td>
+                    <td>{{ item.item__name }}</td>
+                    <td>{{ item.item__unit__abbreviation }}</td>
+                    <td>{{ item.total_qty|floatformat:3 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4">No stock items found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Near-Expiry Lots (≤ 90 days)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Batch Number</th>
+                <th>Item</th>
+                <th>Expiry Date</th>
+                <th>Days to Expire</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lot in near_expiry_lots %}
+            <tr class="near-expiry">
+                <td>{{ lot.batch_number }}</td>
+                <td>{{ lot.item.code }} - {{ lot.item.name }}</td>
+                <td>{{ lot.expiry_date }}</td>
+                <td>{{ lot.days_to_expire }} days</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4">No near-expiry lots found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Expired Lots</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Batch Number</th>
+                <th>Item</th>
+                <th>Expiry Date</th>
+                <th>Days Expired</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lot in expired_lots %}
+            <tr class="expired">
+                <td>{{ lot.batch_number }}</td>
+                <td>{{ lot.item.code }} - {{ lot.item.name }}</td>
+                <td>{{ lot.expiry_date }}</td>
+                <td>{{ lot.days_to_expire|stringformat:"+d" }} days</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4">No expired lots found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <p><a href="{% url 'inventory:dashboard' %}">← Back to Dashboard</a></p>
+</body>
+</html>

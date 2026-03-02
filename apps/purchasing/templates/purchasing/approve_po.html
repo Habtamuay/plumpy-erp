@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h1>Approve/Reject Purchase Order #{{ po.po_number }}</h1>
+<p>Level {{ approval.level }} - {{ approval.get_status_display }}</p>
+
+<div class="card">
+  <div class="card-body">
+    <h5>PO Details</h5>
+    <p><strong>Supplier:</strong> {{ po.supplier }}</p>
+    <p><strong>Total Amount:</strong> {{ po.total_amount|floatformat:2 }}</p>
+    <p><strong>Required Date:</strong> {{ po.expected_delivery_date }}</p>
+    <p><strong>Requester:</strong> {{ po.created_by }}</p>
+  </div>
+</div>
+
+{% if can_approve %}
+  <form method="post" class="mt-4">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="comment" class="form-label">Comment / Reason</label>
+      <textarea name="comment" id="comment" class="form-control" rows="3"></textarea>
+    </div>
+
+    <div class="btn-group">
+      <button type="submit" name="action" value="approve" class="btn btn-success">
+        Approve Level {{ approval.level }}
+      </button>
+      <button type="submit" name="action" value="reject" class="btn btn-danger">
+        Reject Level {{ approval.level }}
+      </button>
+    </div>
+  </form>
+{% else %}
+  <div class="alert alert-info mt-4">
+    This approval level is already processed or not assigned to you.
+  </div>
+{% endif %}
+
+{% endblock %}

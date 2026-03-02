@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1>{{ supplier.name }} – Supplier Detail</h1>
+
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5>Basic Info</h5>
+        <p><strong>TIN:</strong> {{ supplier.tin|default:"-" }}</p>
+        <p><strong>Phone:</strong> {{ supplier.phone|default:"-" }}</p>
+        <p><strong>Email:</strong> {{ supplier.email|default:"-" }}</p>
+        <p><strong>Address:</strong> {{ supplier.address|linebreaks }}</p>
+        <p><strong>Payment Terms:</strong> {{ supplier.credit_terms_days }} days</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5>Financial Summary</h5>
+        <p><strong>Total Spend:</strong> {{ total_spend|floatformat:0|intcomma }} ETB</p>
+        <p><strong>Outstanding Payable:</strong> {{ outstanding|floatformat:0|intcomma }} ETB</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent POs -->
+<h4>Recent Purchase Orders</h4>
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>PO #</th>
+      <th>Date</th>
+      <th>Expected Delivery</th>
+      <th>Status</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for po in pos %}
+    <tr>
+      <td><a href="{% url 'purchasing:po_detail' po.id %}">{{ po.po_number }}</a></td>
+      <td>{{ po.order_date|date:"d M Y" }}</td>
+      <td>{{ po.expected_delivery_date|date:"d M Y" }}</td>
+      <td>{{ po.get_status_display }}</td>
+      <td>{{ po.total_amount|floatformat:0|intcomma }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">No purchase orders found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Recent Bills -->
+<h4 class="mt-4">Recent Purchase Bills</h4>
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>Bill #</th>
+      <th>Date</th>
+      <th>Due Date</th>
+      <th>Status</th>
+      <th>Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for bill in bills %}
+    <tr>
+      <td>{{ bill.bill_number }}</td>
+      <td>{{ bill.bill_date|date:"d M Y" }}</td>
+      <td>{{ bill.due_date|date:"d M Y" }}</td>
+      <td>{{ bill.get_status_display }}</td>
+      <td>{{ bill.total_amount|floatformat:0|intcomma }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">No bills found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Payments Received -->
+<h4 class="mt-4">Payments Made</h4>
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>Reference</th>
+      <th>Reconciled</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in payments %}
+    <tr>
+      <td>{{ p.date|date:"d M Y" }}</td>
+      <td>{{ p.amount|floatformat:0|intcomma }}</td>
+      <td>{{ p.reference|default:"-" }}</td>
+      <td>
+        {% if p.reconciled_at %}
+          Yes ({{ p.reconciled_at|date:"d M Y" }})
+        {% else %}
+          Pending
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">No payments found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

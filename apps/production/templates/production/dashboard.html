@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Plumpy ERP - Dashboard{% endblock %}
+
+{% block content %}
+
+<h1>Plumpy ERP Dashboard</h1>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; margin: 20px 0;">
+
+    <!-- Stock Alerts -->
+    <div style="border: 2px solid #dc3545; padding: 20px; border-radius: 8px; background: #fff5f5;">
+        <h2 style="margin-top:0; color: #dc3545;">⚠️ Stock Alerts</h2>
+        {% if low_stock or out_of_stock %}
+            <ul style="list-style: none; padding-left: 0;">
+                {% for item in low_stock %}
+                    <li style="margin: 8px 0;">
+                        <strong>{{ item.code }} – {{ item.name }}</strong><br>
+                        Stock: {{ item.current_stock|floatformat:2 }} / Min: {{ item.minimum_stock|floatformat:2 }}
+                    </li>
+                {% endfor %}
+                {% for item in out_of_stock %}
+                    <li style="margin: 8px 0; color: red;">
+                        <strong>{{ item.code }} – {{ item.name }}</strong><br>
+                        <strong>OUT OF STOCK</strong>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color: green; font-weight: bold;">All items above minimum stock ✓</p>
+        {% endif %}
+    </div>
+
+    <!-- Production Overview -->
+    <div style="border: 2px solid #007bff; padding: 20px; border-radius: 8px; background: #f0f8ff;">
+        <h2 style="margin-top:0; color: #007bff;">Production Overview</h2>
+        <p><strong>Active BOMs:</strong> {{ active_boms.count }}</p>
+
+        <h3>Planned Runs</h3>
+        {% if planned_runs %}
+            <ul>{% for run in planned_runs %}
+                <li>Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }} ({{ run.start_date|date:"d M Y" }})</li>
+            {% endfor %}</ul>
+        {% else %}
+            <p>No planned runs</p>
+        {% endif %}
+
+        <h3>In Progress</h3>
+        {% if in_progress_runs %}
+            <ul>{% for run in in_progress_runs %}
+                <li>Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }}</li>
+            {% endfor %}</ul>
+        {% else %}
+            <p>No runs in progress</p>
+        {% endif %}
+    </div>
+
+    <!-- Recent Movements -->
+    <div style="grid-column: span 2; border: 1px solid #6c757d; padding: 20px; border-radius: 8px;">
+        <h2 style="margin-top:0;">Recent Stock Movements (last 15)</h2>
+        {% if recent_movements %}
+            <table style="width:100%; border-collapse:collapse;">
+                <tr style="background:#f1f3f5;">
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Type</th>
+                    <th>Run</th>
+                    <th>User</th>
+                </tr>
+                {% for m in recent_movements %}
+                <tr>
+                    <td>{{ m.created_at|date:"d M Y H:i" }}</td>
+                    <td>{{ m.item.code }} – {{ m.item.name }}</td>
+                    <td>{{ m.quantity|floatformat:2 }}</td>
+                    <td>{{ m.get_movement_type_display }}</td>
+                    <td>{% if m.production_run %}Run #{{ m.production_run.id }}{% else %}—{% endif %}</td>
+                    <td>{{ m.created_by.username|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p>No recent movements.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endblock %}

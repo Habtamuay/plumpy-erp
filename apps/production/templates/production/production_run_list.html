@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Production Runs</h2>
+
+<a href="{% url 'production:start_run' %}" class="btn btn-primary mb-3">Start New Run</a>
+
+{% if runs %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Product</th>
+                <th>BOM</th>
+                <th>Planned Qty</th>
+                <th>Actual Qty</th>
+                <th>Status</th>
+                <th>Start</th>
+                <th>End</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for run in runs %}
+            <tr>
+                <td>{{ run.id }}</td>
+                <td>{{ run.product }}</td>
+                <td>{{ run.bom }}</td>
+                <td>{{ run.planned_quantity|floatformat:2 }}</td>
+                <td>{{ run.actual_quantity|default:"—"|floatformat:2 }}</td>
+                <td>{{ run.display_status }}</td>
+                <td>{{ run.start_date|date:"d M Y H:i" }}</td>
+                <td>{{ run.end_date|date:"d M Y H:i"|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No production runs yet. <a href="{% url 'production:start_run' %}">Start one</a>.</p>
+{% endif %}
+{% endblock %}

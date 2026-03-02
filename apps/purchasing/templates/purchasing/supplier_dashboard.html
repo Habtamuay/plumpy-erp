@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<h1 class="mb-4">Supplier Management Dashboard</h1>
+
+<!-- Search & Filters -->
+<form method="get" class="mb-4">
+  <div class="row g-3">
+    <!-- Search -->
+    <div class="col-md-4">
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" name="q" class="form-control" placeholder="Search by name, TIN, phone..." value="{{ search_query }}">
+      </div>
+    </div>
+
+    <!-- Active/Inactive filter -->
+    <div class="col-md-2">
+      <select name="active" class="form-select">
+        <option value="all" {% if filter_active == 'all' %}selected{% endif %}>All Status</option>
+        <option value="active" {% if filter_active == 'active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if filter_active == 'inactive' %}selected{% endif %}>Inactive</option>
+      </select>
+    </div>
+
+    <!-- Has PO filter -->
+    <div class="col-md-2">
+      <select name="has_po" class="form-select">
+        <option value="all" {% if filter_has_po == 'all' %}selected{% endif %}>All POs</option>
+        <option value="recent" {% if filter_has_po == 'recent' %}selected{% endif %}>Recent POs (90d)</option>
+        <option value="no_po" {% if filter_has_po == 'no_po' %}selected{% endif %}>No POs</option>
+      </select>
+    </div>
+
+    <!-- Risk filter -->
+    <div class="col-md-2">
+      <select name="risk" class="form-select">
+        <option value="all" {% if filter_risk == 'all' %}selected{% endif %}>All Risk</option>
+        <option value="high" {% if filter_risk == 'high' %}selected{% endif %}>High Risk</option>
+      </select>
+    </div>
+
+    <!-- Submit -->
+    <div class="col-md-2 d-flex align-items-end">
+      <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+    </div>
+  </div>
+</form>
+
+<!-- Summary Cards -->
+<div class="row g-4 mb-5">
+  <div class="col-md-3">
+    <div class="card text-white bg-primary">
+      <div class="card-body text-center">
+        <h6>Active Suppliers</h6>
+        <p class="display-5 fw-bold">{{ total_suppliers }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-success">
+      <div class="card-body text-center">
+        <h6>Total Spend (ETB)</h6>
+        <p class="display-5 fw-bold">{{ total_spend|floatformat:0|intcomma }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-warning">
+      <div class="card-body text-center">
+        <h6>Late Deliveries</h6>
+        <p class="display-5 fw-bold">{{ late_deliveries }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-danger">
+      <div class="card-body text-center">
+        <h6>High Risk Suppliers</h6>
+        <p class="display-5 fw-bold">{{ risky_count }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Supplier Table -->
+<div class="card shadow">
+  <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Suppliers List</h5>
+    <small>Showing {{ suppliers.count }} of {{ total_suppliers }}</small>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>
+              <a href="?sort=name&order={% if sort_by == 'name' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" class="text-dark text-decoration-none">
+                Supplier Name {% if sort_by == 'name' %}{% if sort_order == 'asc' %}<i class="bi bi-arrow-up-short"></i>{% else %}<i class="bi bi-arrow-down-short"></i>{% endif %}{% endif %}
+              </a>
+            </th>
+            <th>TIN</th>
+            <th>Phone / Email</th>
+            <th>
+              <a href="?sort=spend&order={% if sort_by == 'spend' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" class="text-dark text-decoration-none">
+                Total Spend (ETB) {% if sort_by == 'spend' %}{% if sort_order == 'asc' %}<i class="bi bi-arrow-up-short"></i>{% else %}<i class="bi bi-arrow-down-short"></i>{% endif %}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="?sort=pos&order={% if sort_by == 'pos' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" class="text-dark text-decoration-none">
+                Total POs {% if sort_by == 'pos' %}{% if sort_order == 'asc' %}<i class="bi bi-arrow-up-short"></i>{% else %}<i class="bi bi-arrow-down-short"></i>{% endif %}{% endif %}
+              </a>
+            </th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in suppliers %}
+          <tr>
+            <td>
+              <strong>{{ s.name }}</strong><br>
+              <small class="text-muted">Code: {{ s.code|default:"-" }}</small>
+            </td>
+            <td>{{ s.tin|default:"-" }}</td>
+            <td>
+              {{ s.phone|default:"-" }}<br>
+              <small>{{ s.email|default:"-" }}</small>
+            </td>
+            <td class="text-end fw-bold">{{ s.total_spend|default:0|floatformat:0|intcomma }}</td>
+            <td class="text-center">{{ s.total_pos|default:0 }}</td>
+            <td>
+              <a href="{% url 'purchasing:supplier_detail' s.id %}" class="btn btn-sm btn-outline-primary">
+                View POs
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center py-4">No suppliers match the current filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

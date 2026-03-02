@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<h1>{{ supplier.name }} – Supplier Ledger</h1>
+
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card bg-light">
+      <div class="card-body">
+        <h5>Summary</h5>
+        <p><strong>Total Invoiced:</strong> {{ total_invoiced|floatformat:0|intcomma }} ETB</p>
+        <p><strong>Total Received:</strong> {{ total_received|floatformat:0|intcomma }} ETB</p>
+        <p><strong>Outstanding AP:</strong> <strong class="text-danger">{{ outstanding|floatformat:0|intcomma }} ETB</strong></p>
+      </div>
+    </div>
+  </div>
+  <!-- Add more cards if needed -->
+</div>
+
+<h4>Sales Invoices</h4>
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>Invoice #</th>
+      <th>Date</th>
+      <th>Due Date</th>
+      <th>Amount</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for inv in invoices %}
+    <tr>
+      <td>{{ inv.invoice_number }}</td>
+      <td>{{ inv.invoice_date|date:"d M Y" }}</td>
+      <td>{{ inv.due_date|date:"d M Y" }}</td>
+      <td>{{ inv.grand_total|floatformat:0|intcomma }}</td>
+      <td>{{ inv.get_status_display }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">No invoices found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h4 class="mt-4">Payments Received</h4>
+<table class="table table-bordered table-sm">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>Reference</th>
+      <th>Reconciled</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in receipts %}
+    <tr>
+      <td>{{ p.date|date:"d M Y" }}</td>
+      <td>{{ p.amount|floatformat:0|intcomma }}</td>
+      <td>{{ p.reference|default:"-" }}</td>
+      <td>
+        {% if p.reconciled_at %}Yes{% else %}Pending{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">No payments found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

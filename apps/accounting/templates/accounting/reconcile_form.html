@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1>Reconcile Payment #{{ payment.id }}</h1>
+
+<p><strong>Amount:</strong> {{ payment.amount|floatformat:0|intcomma }} ETB</p>
+<p><strong>Type:</strong> {{ payment.get_payment_type_display }}</p>
+<p><strong>Date:</strong> {{ payment.date|date:"d M Y" }}</p>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label for="doc_type" class="form-label">Reconcile Against</label>
+    <select name="doc_type" id="doc_type" class="form-select">
+      <option value="invoice">Customer Invoice (AR)</option>
+      <option value="bill">Supplier Bill (AP)</option>
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label for="doc_id" class="form-label">Select Document</label>
+    <select name="doc_id" id="doc_id" class="form-select">
+      {% for doc in documents %}
+      <option value="{{ doc.id }}">
+        {{ doc.invoice_number|default:doc.bill_number }} - {{ doc.customer.name|default:doc.supplier.name }} - {{ doc.total_amount|floatformat:0|intcomma }} ETB
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label for="amount_applied" class="form-label">Amount to Apply</label>
+    <input type="number" name="amount_applied" id="amount_applied" class="form-control" step="0.01" required>
+  </div>
+
+  <div class="mb-3">
+    <label for="notes" class="form-label">Reconciliation Notes</label>
+    <textarea name="notes" id="notes" class="form-control" rows="3"></textarea>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Reconcile Payment</button>
+</form>
+
+{% endblock %}

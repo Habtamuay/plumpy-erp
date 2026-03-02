@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Inventory Trends - Plumpy ERP{% endblock %}
+
+{% block content %}
+
+<h1 class="mb-4">📈 Inventory & Production Trends (Last {{ months_back }} Months)</h1>
+
+<div class="row g-4">
+    <!-- Inventory Value Trend -->
+    <div class="col-xl-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Inventory Value Trend (ETB)</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 350px;">
+                    <canvas id="inventoryValueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Production Output Trend -->
+    <div class="col-xl-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Monthly Production Output (kg)</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 350px;">
+                    <canvas id="productionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Raw Material Consumption Trends -->
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Key Raw Material Consumption (kg)</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 400px;">
+                    <canvas id="consumptionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js Script -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Data from Django
+    const labels = {{ labels_json|safe }};
+    const inventoryValues = {{ inventory_value_json|safe }};
+    const productionData = {{ production_json|safe }};
+    const groundPeanutData = {{ consumption_ground_peanut_json|safe }};
+    const sugarData = {{ consumption_sugar_json|safe }};
+    const palmOilData = {{ consumption_palm_oil_json|safe }};
+
+    // 1. Inventory Value Chart
+    new Chart(document.getElementById('inventoryValueChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Inventory Value (ETB)',
+                data: inventoryValues,
+                borderColor: '#0d6efd',
+                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.parsed.y.toLocaleString() + ' ETB'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => v.toLocaleString() }
+                }
+            }
+        }
+    });
+
+    // 2. Production Chart
+    new Chart(document.getElementById('productionChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Production (kg)',
+                data: productionData,
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.parsed.y.toLocaleString() + ' kg'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => v.toLocaleString() }
+                }
+            }
+        }
+    });
+
+    // 3. Consumption Chart (Multi-line)
+    new Chart(document.getElementById('consumptionChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Ground Peanut',
+                    data: groundPeanutData,
+                    borderColor: '#dc3545',
+                    tension: 0.2
+                },
+                {
+                    label: 'Sugar',
+                    data: sugarData,
+                    borderColor: '#ffc107',
+                    tension: 0.2
+                },
+                {
+                    label: 'Palm Oil',
+                    data: palmOilData,
+                    borderColor: '#0dcaf0',
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Consumption (kg)' }
+                }
+            }
+        }
+    });
+</script>
+
+{% endblock %}

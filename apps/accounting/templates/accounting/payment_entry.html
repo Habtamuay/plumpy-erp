@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1>New Payment / Receipt Entry</h1>
+
+<form method="post">
+  {% csrf_token %}
+
+  <div class="mb-3">
+    <label class="form-label">Type</label>
+    <select name="payment_type" id="payment_type" class="form-select">
+      <option value="customer">Receipt from Customer</option>
+      <option value="supplier">Payment to Supplier</option>
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Party</label>
+    <select name="party_id" id="party_id" class="form-select">
+      <!-- Populated by JS or two separate selects -->
+      {% for c in customers %}
+      <option value="{{ c.id }}" class="customer-option">{{ c.name }} (Customer)</option>
+      {% endfor %}
+      {% for s in suppliers %}
+      <option value="{{ s.id }}" class="supplier-option" style="display:none;">{{ s.name }} (Supplier)</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Amount (ETB)</label>
+    <input type="number" name="amount" class="form-control" step="0.01" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Date</label>
+    <input type="date" name="date" class="form-control" value="{{ today|date:'Y-m-d' }}" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Reference / Cheque #</label>
+    <input type="text" name="reference" class="form-control">
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Notes</label>
+    <textarea name="notes" class="form-control" rows="3"></textarea>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Record Payment</button>
+</form>
+
+<script>
+  document.getElementById('payment_type').addEventListener('change', function() {
+    const type = this.value;
+    document.querySelectorAll('.customer-option').forEach(opt => opt.style.display = type === 'customer' ? '' : 'none');
+    document.querySelectorAll('.supplier-option').forEach(opt => opt.style.display = type === 'supplier' ? '' : 'none');
+  });
+</script>
+
+{% endblock %}

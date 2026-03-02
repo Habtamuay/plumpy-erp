@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Inventory Dashboard - Plumpy ERP{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0"><i class="bi bi-speedometer2 me-2 text-primary"></i>Inventory Dashboard</h1>
+    <div>
+        <span class="badge bg-secondary">Last Updated: {% now "d M Y H:i" %}</span>
+    </div>
+</div>
+
+<!-- Navigation Links -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'inventory:dashboard' %}" class="btn btn-primary btn-sm">
+                <i class="bi bi-speedometer2 me-1"></i> Dashboard
+            </a>
+            <a href="{% url 'inventory:current_stock' %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-boxes me-1"></i> Current Stock
+            </a>
+            <a href="{% url 'inventory:stock_summary' %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pie-chart me-1"></i> Stock Summary
+            </a>
+            <a href="{% url 'inventory:consumption_vs_bom' %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-bar-chart me-1"></i> Consumption vs BOM
+            </a>
+            <a href="{% url 'inventory:low_stock_alerts' %}" class="btn btn-warning btn-sm">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> 
+                Low Stock Alerts {% if total_low_items %}<span class="badge bg-danger ms-1">{{ total_low_items }}</span>{% endif %}
+            </a>
+            <a href="{% url 'inventory:inventory_analytics' %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-graph-up me-1"></i> Analytics
+            </a>
+            <a href="{% url 'admin:index' %}" class="btn btn-outline-secondary btn-sm ms-auto">
+                <i class="bi bi-gear me-1"></i> Admin
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Content - Left Column (8 cols) -->
+    <div class="col-lg-8">
+        <!-- Stats Cards -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center">
+                        <div class="text-primary mb-2">
+                            <i class="bi bi-building" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="display-6 fw-bold text-primary mb-1">{{ warehouse_count }}</h3>
+                        <p class="text-muted mb-0">Active Warehouses</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center">
+                        <div class="text-success mb-2">
+                            <i class="bi bi-upc-scan" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="display-6 fw-bold text-success mb-1">{{ active_lots }}</h3>
+                        <p class="text-muted mb-0">Active Lots/Batches</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center">
+                        <div class="text-info mb-2">
+                            <i class="bi bi-arrow-left-right" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="display-6 fw-bold text-info mb-1">{{ recent_transactions|length }}</h3>
+                        <p class="text-muted mb-0">Recent Transactions</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Transactions Table -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2 text-info"></i>Recent Transactions</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Type</th>
+                                <th>Item</th>
+                                <th class="text-end">Quantity</th>
+                                <th>Reference</th>
+                                <th>Warehouse</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in recent_transactions %}
+                            <tr>
+                                <td>{{ transaction.transaction_date|date:"d M Y H:i" }}</td>
+                                <td>
+                                    {% if transaction.transaction_type == 'receipt' %}
+                                        <span class="badge bg-success">Receipt</span>
+                                    {% elif transaction.transaction_type == 'issue' %}
+                                        <span class="badge bg-warning text-dark">Issue</span>
+                                    {% elif transaction.transaction_type == 'transfer' %}
+                                        <span class="badge bg-info">Transfer</span>
+                                    {% elif transaction.transaction_type == 'adjustment' %}
+                                        <span class="badge bg-secondary">Adjustment</span>
+                                    {% else %}
+                                        {{ transaction.get_transaction_type_display }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ transaction.item.code }}</strong><br>
+                                    <small class="text-muted">{{ transaction.item.name|truncatechars:30 }}</small>
+                                </td>
+                                <td class="text-end fw-bold {% if transaction.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ transaction.quantity|floatformat:2 }} {{ transaction.item.unit.abbreviation }}
+                                </td>
+                                <td>{{ transaction.reference|default:"—" }}</td>
+                                <td>
+                                    {% if transaction.warehouse_to %}
+                                        {{ transaction.warehouse_to.code }}
+                                    {% elif transaction.warehouse_from %}
+                                        {{ transaction.warehouse_from.code }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                    <p class="mt-2 mb-0">No recent transactions</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if recent_transactions %}
+            <div class="card-footer bg-white text-end">
+                <a href="{% url 'admin:inventory_stocktransaction_changelist' %}" class="btn btn-sm btn-outline-primary">
+                    View All Transactions <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Stock Summary Preview (optional) -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-pie-chart me-2 text-success"></i>Stock Summary by Category</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Raw Materials
+                                <span class="badge bg-primary rounded-pill">{% with count=0 %}{{ count }}{% endwith %}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Packing Materials
+                                <span class="badge bg-primary rounded-pill">{% with count=0 %}{{ count }}{% endwith %}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Finished Products
+                                <span class="badge bg-primary rounded-pill">{% with count=0 %}{{ count }}{% endwith %}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="{% url 'inventory:stock_summary' %}" class="btn btn-outline-success w-100">
+                            View Full Summary <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column - Low Stock Widget (4 cols) -->
+    <div class="col-lg-4">
+        {% include 'inventory/low_stock_widget.html' %}
+        
+        <!-- Quick Actions Card -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-lightning-charge me-2 text-warning"></i>Quick Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'admin:inventory_stocktransaction_add' %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-circle me-1"></i> New Stock Transaction
+                    </a>
+                    <a href="{% url 'admin:inventory_lot_add' %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-upc-scan me-1"></i> Create New Lot/Batch
+                    </a>
+                    <a href="{% url 'admin:inventory_warehouse_add' %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-building me-1"></i> Add Warehouse
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info Card -->
+        <div class="card shadow-sm mt-4 bg-light">
+            <div class="card-body p-3">
+                <h6 class="mb-2"><i class="bi bi-info-circle me-2 text-info"></i>System Information</h6>
+                <p class="small text-muted mb-1">
+                    <i class="bi bi-calendar me-1"></i> Server Time: {% now "d M Y H:i:s" %}
+                </p>
+                <p class="small text-muted mb-0">
+                    <i class="bi bi-database me-1"></i> Total Items: {{ total_items|default:"—" }}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh data every 60 seconds (optional)
+    // setTimeout(function() {
+    //     location.reload();
+    // }, 60000);
+</script>
+{% endblock %}

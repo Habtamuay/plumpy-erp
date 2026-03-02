@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<h1>Payment Reconciliation Screen</h1>
+
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'ar' %}active{% endif %}" href="?tab=ar">Accounts Receivable</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'ap' %}active{% endif %}" href="?tab=ap">Accounts Payable</a>
+  </li>
+</ul>
+
+<!-- Outstanding Documents -->
+{% if tab == 'ar' %}
+  <h4>Outstanding Customer Invoices</h4>
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover table-sm">
+      <thead class="table-light">
+        <tr>
+          <th>Invoice #</th>
+          <th>Customer</th>
+          <th>Due Date</th>
+          <th>Amount (ETB)</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in ar_invoices %}
+        <tr>
+          <td>{{ inv.invoice_number }}</td>
+          <td>{{ inv.customer.name }}</td>
+          <td>{{ inv.due_date|date:"d M Y" }}</td>
+          <td class="text-end">{{ inv.total_amount|floatformat:0|intcomma }}</td>
+          <td>{{ inv.get_status_display }}</td>
+          <td>
+            <a href="{% url 'accounting:reconcile_payment' payment_id=some_payment_id %}" class="btn btn-sm btn-outline-primary">
+              Reconcile
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-4">No outstanding AR invoices.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <!-- Similar table for AP bills -->
+{% endif %}
+
+<!-- Recent Payments -->
+<h4 class="mt-5">Recent Payments (Last 30 Days)</h4>
+<div class="table-responsive">
+  <table class="table table-bordered table-hover table-sm">
+    <thead class="table-light">
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Amount (ETB)</th>
+        <th>Customer / Supplier</th>
+        <th>Reconciled?</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in recent_payments %}
+      <tr>
+        <td>{{ p.date|date:"d M Y" }}</td>
+        <td>{{ p.get_payment_type_display }}</td>
+        <td class="text-end">{{ p.amount|floatformat:0|intcomma }}</td>
+        <td>{{ p.customer.name|default:p.supplier.name }}</td>
+        <td>
+          {% if p.reconciled_at %}
+            <span class="badge bg-success">Yes - {{ p.reconciled_at|date:"d M Y H:i" }}</span>
+          {% else %}
+            <span class="badge bg-warning">Pending</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{% url 'accounting:reconcile_payment' p.id %}" class="btn btn-sm btn-outline-primary">
+            Reconcile
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center py-4">No recent payments.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

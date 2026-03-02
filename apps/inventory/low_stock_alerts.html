@@ -1,0 +1,357 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load inventory_filters %}
+
+{% block title %}Low Stock Alerts - Plumpy ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .alert-card {
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+    .alert-card.critical {
+        border-left-color: #dc3545;
+        background-color: #fff8f8;
+    }
+    .alert-card.warning {
+        border-left-color: #ffc107;
+        background-color: #fffcf0;
+    }
+    .alert-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.65rem;
+    }
+    .progress-threshold {
+        height: 8px;
+        border-radius: 4px;
+    }
+    .threshold-marker {
+        position: absolute;
+        top: -4px;
+        width: 2px;
+        height: 16px;
+        background-color: #333;
+        z-index: 2;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0"><i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>Low Stock & Reorder Alerts</h1>
+    <div>
+        <span class="badge bg-secondary me-2">Last Updated: {{ today|date:"d M Y H:i" }}</span>
+        <a href="?export=excel" class="btn btn-sm btn-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-danger h-100 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-white-50 mb-2">Critical (Below Safety)</h6>
+                        <h2 class="mb-0">{{ critical }}</h2>
+                        <small class="text-white-50">Items requiring immediate action</small>
+                    </div>
+                    <i class="bi bi-exclamation-octagon-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card text-white bg-warning h-100 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-white-50 mb-2">Reorder Needed</h6>
+                        <h2 class="mb-0">{{ reorder_needed }}</h2>
+                        <small class="text-white-50">Items at or below reorder point</small>
+                    </div>
+                    <i class="bi bi-cart-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card text-white bg-secondary h-100 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-white-50 mb-2">Total Alerts</h6>
+                        <h2 class="mb-0">{{ total_low_items }}</h2>
+                        <small class="text-white-50">Items requiring attention</small>
+                    </div>
+                    <i class="bi bi-bell-fill" style="font-size: 2.5rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="mb-4">
+    <button class="btn btn-primary" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print Report
+    </button>
+    <a href="{% url 'admin:purchasing_purchaseorder_add' %}" class="btn btn-success ms-2">
+        <i class="bi bi-plus-circle me-1"></i> Create Purchase Order
+    </a>
+</div>
+
+<!-- Low Stock Items List -->
+{% if low_stock_items %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <ul class="nav nav-tabs card-header-tabs" id="alertTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">
+                        All Alerts <span class="badge bg-secondary ms-1">{{ total_low_items }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="critical-tab" data-bs-toggle="tab" data-bs-target="#critical" type="button" role="tab">
+                        Critical <span class="badge bg-danger ms-1">{{ critical }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="reorder-tab" data-bs-toggle="tab" data-bs-target="#reorder" type="button" role="tab">
+                        Reorder Needed <span class="badge bg-warning ms-1">{{ reorder_needed }}</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            <div class="tab-content" id="alertTabsContent">
+                <!-- All Alerts Tab -->
+                <div class="tab-pane fade show active" id="all" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Warehouse</th>
+                                    <th>Lot/Batch</th>
+                                    <th>Current Qty</th>
+                                    <th>Min Stock</th>
+                                    <th>Reorder Point</th>
+                                    <th>Suggested Order</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stock in low_stock_items %}
+                                <tr class="{% if stock.quantity < stock.item.minimum_stock %}table-danger{% elif stock.quantity <= stock.item.reorder_point %}table-warning{% endif %}">
+                                    <td><strong>{{ stock.item.code }}</strong></td>
+                                    <td>{{ stock.item.name|truncatechars:30 }}</td>
+                                    <td>{{ stock.warehouse.name }}</td>
+                                    <td>
+                                        {% if stock.lot %}
+                                            <span class="badge bg-secondary">{{ stock.lot.batch_number }}</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end fw-bold">{{ stock.quantity|floatformat:2 }} {{ stock.item.unit.abbreviation }}</td>
+                                    <td class="text-end">{{ stock.item.minimum_stock|floatformat:2 }}</td>
+                                    <td class="text-end">{{ stock.item.reorder_point|floatformat:2 }}</td>
+                                    <td class="text-end text-primary fw-bold">{{ stock.item.reorder_quantity|floatformat:2 }}</td>
+                                    <td>
+                                        {% if stock.quantity < stock.item.minimum_stock %}
+                                            <span class="badge bg-danger status-badge">Critical</span>
+                                        {% elif stock.quantity <= stock.item.reorder_point %}
+                                            <span class="badge bg-warning text-dark status-badge">Reorder</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'admin:core_item_change' stock.item.id %}" class="btn btn-outline-primary" title="Edit Item">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{% url 'admin:purchasing_purchaseorder_add' %}?item={{ stock.item.id }}" class="btn btn-outline-success" title="Create PO">
+                                                <i class="bi bi-cart-plus"></i>
+                                            </a>
+                                            <a href="{% url 'admin:inventory_stocktransaction_changelist' %}?item__id__exact={{ stock.item.id }}" class="btn btn-outline-info" title="View Transactions">
+                                                <i class="bi bi-clock-history"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Critical Tab -->
+                <div class="tab-pane fade" id="critical" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Warehouse</th>
+                                    <th>Current Qty</th>
+                                    <th>Min Stock</th>
+                                    <th>Deficit</th>
+                                    <th>Suggested Order</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stock in low_stock_items %}
+                                    {% if stock.quantity < stock.item.minimum_stock %}
+                                    <tr class="table-danger">
+                                        <td><strong>{{ stock.item.code }}</strong></td>
+                                        <td>{{ stock.item.name|truncatechars:30 }}</td>
+                                        <td>{{ stock.warehouse.name }}</td>
+                                        <td class="text-end fw-bold">{{ stock.quantity|floatformat:2 }}</td>
+                                        <td class="text-end">{{ stock.item.minimum_stock|floatformat:2 }}</td>
+                                        <td class="text-end text-danger fw-bold">
+                                            {{ stock.item.minimum_stock|sub:stock.quantity|floatformat:2 }}
+                                        </td>
+                                        <td class="text-end text-primary fw-bold">{{ stock.item.reorder_quantity|floatformat:2 }}</td>
+                                        <td>
+                                            <a href="{% url 'admin:purchasing_purchaseorder_add' %}?item={{ stock.item.id }}" class="btn btn-sm btn-success">
+                                                <i class="bi bi-cart-plus"></i> Order
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Reorder Tab -->
+                <div class="tab-pane fade" id="reorder" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Warehouse</th>
+                                    <th>Current Qty</th>
+                                    <th>Reorder Point</th>
+                                    <th>Suggested Order</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stock in low_stock_items %}
+                                    {% if stock.quantity <= stock.item.reorder_point and stock.quantity >= stock.item.minimum_stock %}
+                                    <tr class="table-warning">
+                                        <td><strong>{{ stock.item.code }}</strong></td>
+                                        <td>{{ stock.item.name|truncatechars:30 }}</td>
+                                        <td>{{ stock.warehouse.name }}</td>
+                                        <td class="text-end fw-bold">{{ stock.quantity|floatformat:2 }}</td>
+                                        <td class="text-end">{{ stock.item.reorder_point|floatformat:2 }}</td>
+                                        <td class="text-end text-primary fw-bold">{{ stock.item.reorder_quantity|floatformat:2 }}</td>
+                                        <td>
+                                            <a href="{% url 'admin:purchasing_purchaseorder_add' %}?item={{ stock.item.id }}" class="btn btn-sm btn-warning">
+                                                <i class="bi bi-cart-plus"></i> Reorder
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Summary -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6><i class="bi bi-lightbulb me-2 text-warning"></i>Suggested Purchase Summary</h6>
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            {% regroup low_stock_items by item as item_list %}
+                            {% for item_group in item_list %}
+                            <tr>
+                                <td><strong>{{ item_group.grouper.code }}</strong> - {{ item_group.grouper.name|truncatechars:30 }}</td>
+                                <td class="text-end">Suggested: {{ item_group.grouper.reorder_quantity|floatformat:2 }}</td>
+                                <td class="text-end">
+                                    <a href="{% url 'admin:purchasing_purchaseorder_add' %}?item={{ item_group.grouper.id }}" class="btn btn-sm btn-outline-primary">
+                                        Create PO
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6><i class="bi bi-info-circle me-2 text-info"></i>Understanding Alerts</h6>
+                    <ul class="mb-0 small">
+                        <li class="mb-2"><span class="badge bg-danger">Critical</span> = Current stock is below the minimum safety level. Immediate action required.</li>
+                        <li class="mb-2"><span class="badge bg-warning text-dark">Reorder</span> = Stock is at or below reorder point. Plan to reorder soon.</li>
+                        <li>Suggested order quantities are based on item settings in the system.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% else %}
+    <!-- No Alerts Message -->
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <div class="mb-3">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+            </div>
+            <h4>All Clear!</h4>
+            <p class="text-muted mb-4">No items are currently below reorder point or safety stock levels.</p>
+            <a href="{% url 'inventory:current_stock' %}" class="btn btn-primary">
+                <i class="bi bi-boxes me-1"></i> View Current Stock
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+<!-- Helper function for formatting -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Format numbers with commas
+        document.querySelectorAll('.text-end.fw-bold').forEach(el => {
+            let text = el.textContent;
+            if (!isNaN(parseFloat(text)) && text.includes('.')) {
+                let num = parseFloat(text);
+                if (!isNaN(num)) {
+                    el.textContent = num.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
+            }
+        });
+    });
+</script>
+
+{% endblock %}

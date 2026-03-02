@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<h1>Accounts Payable Aging Report</h1>
+<p>As of: {{ today|date:"d M Y" }}</p>
+
+<div class="row g-4 mb-5">
+  <div class="col-md-3">
+    <div class="card bg-light">
+      <div class="card-body text-center">
+        <h6>Current</h6>
+        <p class="fs-4 fw-bold">{{ buckets.current.amount|floatformat:0|intcomma }}</p>
+        <small>{{ buckets.current.count }} invoices</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-warning text-white">
+      <div class="card-body text-center">
+        <h6>1–30 days</h6>
+        <p class="fs-4 fw-bold">{{ buckets.0_30.amount|floatformat:0|intcomma }}</p>
+        <small>{{ buckets.0_30.count }} invoices</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-orange text-white">
+      <div class="card-body text-center">
+        <h6>31–60 days</h6>
+        <p class="fs-4 fw-bold">{{ buckets.31_60.amount|floatformat:0|intcomma }}</p>
+        <small>{{ buckets.31_60.count }} invoices</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-danger text-white">
+      <div class="card-body text-center">
+        <h6>61+ days</h6>
+        <p class="fs-4 fw-bold">{{ buckets.61_90.amount|floatformat:0|intcomma }} + {{ buckets.90_plus.amount|floatformat:0|intcomma }}</p>
+        <small>{{ buckets.61_90.count + buckets.90_plus.count }} invoices</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow">
+  <div class="card-header bg-primary text-white">
+    <h5 class="mb-0">Detailed AP Aging</h5>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Invoice #</th>
+            <th>Supplier</th>
+            <th>Invoice Date</th>
+            <th>Due Date</th>
+            <th>Days Overdue</th>
+            <th>Amount (ETB)</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inv in invoices %}
+          <tr {% if inv.days_overdue > 60 %}class="table-danger"{% elif inv.days_overdue > 30 %}class="table-warning"{% endif %}>
+            <td>{{ inv.invoice_number }}</td>
+            <td>{{ inv.supplier.name }}</td>
+            <td>{{ inv.invoice_date|date:"d M Y" }}</td>
+            <td>{{ inv.due_date|date:"d M Y" }}</td>
+            <td class="text-center fw-bold">{{ inv.days_overdue }}</td>
+            <td class="text-end">{{ inv.total_amount|floatformat:0|intcomma }}</td>
+            <td>{{ inv.get_status_display }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center py-4">No outstanding payables.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="mb-3">
+  <a href="?export=excel" class="btn btn-success">
+    <i class="bi bi-file-earmark-spreadsheet"></i> Export to Excel
+  </a>
+  <button id="btn-pdf-export" class="btn btn-danger ms-2">
+    <i class="bi bi-file-earmark-pdf"></i> Export to PDF
+  </button>
+</div>
+{% endblock %}

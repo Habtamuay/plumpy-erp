@@ -1,0 +1,473 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Consumption vs BOM Report - Plumpy ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .variance-positive {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .variance-negative {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .summary-box {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4CAF50;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    .table-active {
+        background-color: #fff3cd !important;
+        font-weight: bold;
+    }
+    .btn-group {
+        margin-right: 10px;
+    }
+    .interpretation-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #17a2b8;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h1 class="mb-4">📉 Consumption vs BOM Standard Report</h1>
+
+<!-- Filter Form -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="product" class="form-label fw-bold">Product</label>
+                <select name="product" id="product" class="form-select">
+                    <option value="FIN-PNUT" {% if product.code == 'FIN-PNUT' %}selected{% endif %}>Plumpy'Nut</option>
+                    <option value="FIN-PSUP" {% if product.code == 'FIN-PSUP' %}selected{% endif %}>Plumpy'Sup</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="from" class="form-label fw-bold">From Date</label>
+                <input type="date" name="from" id="from" class="form-control" value="{{ period_from|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="to" class="form-label fw-bold">To Date</label>
+                <input type="date" name="to" id="to" class="form-control" value="{{ period_to|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Generate Report
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Export Buttons -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+    <div class="btn-group" role="group">
+        <a href="?export=excel&{{ request.GET.urlencode }}" class="btn btn-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+        <button type="submit" name="export" value="excel" class="btn btn-success">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export to Excel
+        </button>  
+        </a>
+        <button id="btn-pdf-export" class="btn btn-danger">
+            <i class="bi bi-file-earmark-pdf me-1"></i> Export to PDF
+        </button>
+    </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>Error:</strong> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+{% if no_data %}
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    No completed production records found for the selected period.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% else %}
+
+<!-- Summary Card -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <h5 class="card-title text-primary mb-3">
+                    <i class="bi bi-clipboard-data"></i> Report Summary
+                </h5>
+                <p class="mb-1"><strong>Product:</strong> {{ product.name }} ({{ product.code }})</p>
+                <p class="mb-1"><strong>Period:</strong> {{ period_from|date:"d M Y" }} – {{ period_to|date:"d M Y" }}</p>
+                <p class="mb-1"><strong>BOM Version:</strong> v{{ bom_version }}</p>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-box text-center">
+                    <h6 class="text-success mb-2">Total Production</h6>
+                    <p class="display-6 fw-bold text-success">{{ total_produced_kg|floatformat:2 }} kg</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toggle & Action Buttons (Added here before the chart) -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+    <div class="btn-group" role="group">
+        <button id="toggle-percent" type="button" class="btn btn-outline-primary active">Variance %</button>
+        <button id="toggle-kg" type="button" class="btn btn-outline-primary">Variance kg</button>
+        <button id="toggle-sidebyside" type="button" class="btn btn-outline-primary">Expected vs Actual</button>
+    </div>
+
+    <div class="btn-group" role="group">
+        <button id="reset-zoom" type="button" class="btn btn-outline-secondary">Reset Zoom</button>
+        <button id="download-png" type="button" class="btn btn-outline-success">Download PNG</button>
+    </div>
+</div>
+
+<!-- Variance Bar Chart -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Variance Analysis Chart</h5>
+    </div>
+    <div class="card-body">
+        <div style="height: 400px; position: relative;">
+            <canvas id="varianceChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Report Table -->
+<div class="card shadow-sm">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-table me-2"></i>Detailed Consumption vs BOM</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Component</th>
+                        <th class="text-end">Std Qty/kg</th>
+                        <th class="text-end">Wastage %</th>
+                        <th class="text-end">Expected Total</th>
+                        <th class="text-end">Actual Issued</th>
+                        <th class="text-end">Variance (kg)</th>
+                        <th class="text-end">Variance (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in report_rows %}
+                    <tr {% if row.variance_qty > 0 %}class="table-danger"{% elif row.variance_qty < 0 %}class="table-success"{% endif %}>
+                        <td>
+                            <strong>{{ row.component_code }}</strong><br>
+                            <small class="text-muted">{{ row.component_name }}</small>
+                        </td>
+                        <td class="text-end">{{ row.std_qty_per_kg|floatformat:6 }}</td>
+                        <td class="text-end">{{ row.wastage_pct|floatformat:1 }}%</td>
+                        <td class="text-end">{{ row.expected_total|floatformat:2 }}</td>
+                        <td class="text-end">{{ row.actual_issued|floatformat:2 }}</td>
+                        <td class="text-end fw-bold {% if row.variance_qty > 0 %}variance-positive{% elif row.variance_qty < 0 %}variance-negative{% endif %}">
+                            {{ row.variance_qty|floatformat:2 }}
+                        </td>
+                        <td class="text-end fw-bold {% if row.variance_pct > 0 %}variance-positive{% elif row.variance_pct < 0 %}variance-negative{% endif %}">
+                            {{ row.variance_pct|floatformat:1 }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-primary">
+                    <tr>
+                        <td colspan="3" class="text-end fw-bold">TOTAL</td>
+                        <td class="text-end fw-bold">{{ total_expected|floatformat:2 }}</td>
+                        <td class="text-end fw-bold">{{ total_actual|floatformat:2 }}</td>
+                        <td class="text-end fw-bold {% if total_variance_qty > 0 %}variance-positive{% elif total_variance_qty < 0 %}variance-negative{% endif %}">
+                            {{ total_variance_qty|floatformat:2 }}
+                        </td>
+                        <td class="text-end fw-bold {% if total_variance_pct > 0 %}variance-positive{% elif total_variance_pct < 0 %}variance-negative{% endif %}">
+                            {{ total_variance_pct|floatformat:1 }}%
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+<tfoot class="table-primary">
+  <tr>
+    <td colspan="4" class="text-end fw-bold">TOTAL</td>
+    <td class="text-end fw-bold">{{ total_expected|floatformat:2 }}</td>
+    <td class="text-end fw-bold">{{ total_actual|floatformat:2 }}</td>
+    <td class="text-end fw-bold {% if total_variance_qty > 0 %}text-danger{% elif total_variance_qty < 0 %}text-success{% endif %}">
+      {{ total_variance_qty|floatformat:2 }}
+    </td>
+    <td class="text-end fw-bold {% if total_variance_pct > 0 %}text-danger{% elif total_variance_pct < 0 %}text-success{% endif %}">
+      {{ total_variance_pct|floatformat:1 }}%
+    </td>
+  </tr>
+</tfoot>
+
+<!-- Interpretation Guide -->
+<div class="interpretation-box mt-4">
+    <h5><i class="bi bi-question-circle-fill me-2 text-info"></i>How to read this report:</h5>
+    <ul class="mb-0">
+        <li><span class="variance-positive">Positive variance (red)</span> = More material used than standard → Potential waste or inefficiency</li>
+        <li><span class="variance-negative">Negative variance (green)</span> = Less material used than standard → Potential savings or incorrect BOM</li>
+        <li>Expected total includes standard wastage percentage</li>
+        <li>Click on bars in the chart to highlight the corresponding row in the table</li>
+        <li>Use zoom buttons or mouse wheel to zoom in/out on the chart</li>
+    </ul>
+</div>
+
+{% endif %}
+
+<!-- Updated Chart.js Script with Toggle Buttons - Fixed map filter error -->
+<script>
+  // Prepare data from Django template context - without using map filter
+  const labels = [
+    {% for row in report_rows %}
+      "{{ row.component_name }}"{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
+  const component_codes = [
+    {% for row in report_rows %}
+      "{{ row.component_code }}"{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
+  const expected_kg = [
+    {% for row in report_rows %}
+      {{ row.expected_total }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
+  const actual_kg = [
+    {% for row in report_rows %}
+      {{ row.actual_issued }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
+  const variance_pct = [
+    {% for row in report_rows %}
+      {{ row.variance_pct }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
+  const variance_kg = [
+    {% for row in report_rows %}
+      {{ row.variance_qty }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  let currentMode = 'percent';  // 'percent', 'kg', 'sidebyside'
+
+  const ctx = document.getElementById('varianceChart').getContext('2d');
+
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Variance (%)',
+        data: variance_pct,
+        backgroundColor: variance_pct.map(v => v > 0 ? 'rgba(220, 53, 69, 0.75)' : v < 0 ? 'rgba(40, 167, 69, 0.75)' : 'rgba(108, 117, 125, 0.6)'),
+        borderColor: variance_pct.map(v => v > 0 ? '#dc3545' : v < 0 ? '#28a745' : '#6c757d'),
+        borderWidth: 1.5,
+        borderRadius: 4,
+        yAxisID: 'y',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 800, easing: 'easeOutQuart' },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Variance (%)' },
+          ticks: { callback: v => v + '%' }
+        },
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 50,
+            minRotation: 50,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          callbacks: {
+            title: ctx => ctx[0].label,
+            label: ctx => {
+              const idx = ctx.dataIndex;
+              if (currentMode === 'percent') {
+                return [
+                  `Variance: ${ctx.parsed.y.toFixed(1)}%`,
+                  `Absolute: ${variance_kg[idx].toFixed(2)} kg`
+                ];
+              } else if (currentMode === 'kg') {
+                return `Variance: ${ctx.parsed.y.toFixed(2)} kg`;
+              } else {
+                return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' kg';
+              }
+            }
+          }
+        },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true, speed: 0.1 },
+            pinch: { enabled: true },
+            mode: 'xy',
+          },
+          pan: {
+            enabled: true,
+            mode: 'xy',
+          },
+          limits: { y: { min: -100, max: 100 } }
+        }
+      },
+      onClick: (e, elements) => {
+        if (!elements.length) return;
+        const index = elements[0].index;
+        const code = component_codes[index];
+
+        document.querySelectorAll('table tbody tr').forEach(row => {
+          row.classList.remove('table-active');
+          if (row.textContent.includes(code)) {
+            row.classList.add('table-active');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+      }
+    }
+  });
+
+  // ────────────────────────────────────────────────
+  // Toggle buttons
+  // ────────────────────────────────────────────────
+  document.getElementById('toggle-percent')?.addEventListener('click', () => {
+    currentMode = 'percent';
+    chart.data.datasets = [{
+      label: 'Variance (%)',
+      data: variance_pct,
+      backgroundColor: variance_pct.map(v => v > 0 ? 'rgba(220, 53, 69, 0.75)' : v < 0 ? 'rgba(40, 167, 69, 0.75)' : 'rgba(108, 117, 125, 0.6)'),
+      borderColor: variance_pct.map(v => v > 0 ? '#dc3545' : v < 0 ? '#28a745' : '#6c757d'),
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }];
+    chart.options.scales.y.title.text = 'Variance (%)';
+    chart.options.scales.y.ticks.callback = v => v + '%';
+    chart.update();
+    
+    // Update active button state
+    document.querySelectorAll('#toggle-percent, #toggle-kg, #toggle-sidebyside').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById('toggle-percent').classList.add('active');
+  });
+
+  document.getElementById('toggle-kg')?.addEventListener('click', () => {
+    currentMode = 'kg';
+    chart.data.datasets = [{
+      label: 'Variance (kg)',
+      data: variance_kg,
+      backgroundColor: variance_kg.map(v => v > 0 ? 'rgba(220, 53, 69, 0.75)' : v < 0 ? 'rgba(40, 167, 69, 0.75)' : 'rgba(108, 117, 125, 0.6)'),
+      borderColor: variance_kg.map(v => v > 0 ? '#dc3545' : v < 0 ? '#28a745' : '#6c757d'),
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }];
+    chart.options.scales.y.title.text = 'Variance (kg)';
+    chart.options.scales.y.ticks.callback = v => v;
+    chart.update();
+    
+    // Update active button state
+    document.querySelectorAll('#toggle-percent, #toggle-kg, #toggle-sidebyside').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById('toggle-kg').classList.add('active');
+  });
+
+  document.getElementById('toggle-sidebyside')?.addEventListener('click', () => {
+    currentMode = 'sidebyside';
+    chart.data.datasets = [
+      {
+        label: 'Expected (kg)',
+        data: expected_kg,
+        backgroundColor: 'rgba(13, 110, 253, 0.6)',
+        borderColor: '#0d6efd',
+        borderWidth: 1.5,
+        borderRadius: 4,
+      },
+      {
+        label: 'Actual Issued (kg)',
+        data: actual_kg,
+        backgroundColor: 'rgba(253, 126, 20, 0.6)',
+        borderColor: '#fd7e14',
+        borderWidth: 1.5,
+        borderRadius: 4,
+      }
+    ];
+    chart.options.scales.y.title.text = 'Quantity (kg)';
+    chart.options.scales.y.ticks.callback = v => v;
+    chart.update();
+    
+    // Update active button state
+    document.querySelectorAll('#toggle-percent, #toggle-kg, #toggle-sidebyside').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById('toggle-sidebyside').classList.add('active');
+  });
+
+  // Reset zoom button
+  document.getElementById('reset-zoom')?.addEventListener('click', () => {
+    chart.resetZoom();
+  });
+
+  // Download as PNG
+  document.getElementById('download-png')?.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = `variance_chart_${currentMode}_${new Date().toISOString().slice(0,10)}.png`;
+    link.href = chart.toBase64Image('image/png', 1.0);
+    link.click();
+  });
+
+  // PDF Export (simplified)
+  document.getElementById('btn-pdf-export')?.addEventListener('click', async () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    
+    doc.setFontSize(18);
+    doc.setTextColor(0, 77, 153);
+    doc.text('HILINA ENRICHED FOODS PLC', 15, 15);
+    
+    doc.setFontSize(14);
+    doc.text('Consumption vs BOM Standard Report', 15, 25);
+    
+    doc.setFontSize(11);
+    doc.text(`Product: {{ product.name }} • Produced: {{ total_produced_kg }} kg`, 15, 35);
+    doc.text(`Period: {{ period_from|date:"d M Y" }} – {{ period_to|date:"d M Y" }}`, 15, 42);
+    
+    doc.setFontSize(8);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 15, 48);
+    
+    doc.save(`consumption_report_{{ period_from|date:"Y-m-d" }}_{{ period_to|date:"Y-m-d" }}.pdf`);
+  });
+</script>
+
+{% endblock %}
