@@ -1,42 +1,254 @@
-{% extends 'base.html' %}
+{% extends 'reports/base_report.html' %}
+{% load humanize %}
 
-{% block content %}
-<div class="container mt-4">
-    <h1>{{ title }}</h1>
-    <div class="alert alert-info">
-        {{ message }}
-    </div>
-    
-    <div class="row mt-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5>Inventory Reports</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group">
-                        <li class="list-group-item">
-                            <a href="{% url 'reports:stock_report' %}">Stock Report</a>
-                        </li>
-                        <li class="list-group-item">
-                            <a href="{% url 'reports:consumption_report' %}">Consumption vs BOM Report</a>
-                        </li>
-                    </ul>
+{% block report_title %}Reports Dashboard{% endblock %}
+{% block report_heading %}Reports Dashboard{% endblock %}
+{% block report_description %}Overview of all available reports and quick access{% endblock %}
+
+{% block report_content %}
+<div class="row">
+    <!-- Inventory Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-boxes me-2"></i>Inventory Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:stock_summary' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Stock Summary
+                        <span class="badge bg-primary rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:stock_value' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Stock Value
+                        <span class="badge bg-primary rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:stock_aging' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Stock Aging
+                        <span class="badge bg-primary rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:low_stock' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Low Stock Alert
+                        <span class="badge bg-warning rounded-pill">Alert</span>
+                    </a>
+                    <a href="{% url 'reports:expiry_report' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Expiry Report
+                        <span class="badge bg-danger rounded-pill">Urgent</span>
+                    </a>
+                    <a href="{% url 'reports:inventory_movements' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Stock Movements
+                        <span class="badge bg-primary rounded-pill">View</span>
+                    </a>
                 </div>
             </div>
         </div>
-        
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5>Financial Reports</h5>
+    </div>
+
+    <!-- Production Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-gear-wide-connected me-2"></i>Production Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:production_runs' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Production Runs
+                        <span class="badge bg-success rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:cost_variance' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Cost Variance
+                        <span class="badge bg-success rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:production_yield' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Production Yield
+                        <span class="badge bg-success rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:material_consumption' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Material Consumption
+                        <span class="badge bg-success rounded-pill">View</span>
+                    </a>
                 </div>
-                <div class="card-body">
-                    <ul class="list-group">
-                        <li class="list-group-item">
-                            <a href="{% url 'reports:financial_report' %}">Financial Report</a>
-                        </li>
-                    </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Purchasing Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-cart me-2"></i>Purchasing Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:po_summary' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        PO Summary
+                        <span class="badge bg-warning text-dark rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:supplier_performance' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Supplier Performance
+                        <span class="badge bg-warning text-dark rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:spend_analysis' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Spend Analysis
+                        <span class="badge bg-warning text-dark rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:lead_time' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Lead Time Analysis
+                        <span class="badge bg-warning text-dark rounded-pill">View</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sales Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-graph-up me-2"></i>Sales Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:revenue_analysis' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Revenue Analysis
+                        <span class="badge bg-info rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:customer_performance' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Customer Performance
+                        <span class="badge bg-info rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:product_sales' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Product Sales
+                        <span class="badge bg-info rounded-pill">View</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-cash-stack me-2"></i>Financial Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:profit_loss' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Profit & Loss
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:balance_sheet' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Balance Sheet
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:cash_flow' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Cash Flow
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:trial_balance' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Trial Balance
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:ar_report' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        AR Aging
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:ap_report' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        AP Aging
+                        <span class="badge bg-danger rounded-pill">View</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Reports -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-stars me-2"></i>Custom Reports
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'reports:executive_summary' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Executive Summary
+                        <span class="badge bg-secondary rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:kpi_dashboard' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        KPI Dashboard
+                        <span class="badge bg-secondary rounded-pill">View</span>
+                    </a>
+                    <a href="{% url 'reports:comparative_analysis' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        Comparative Analysis
+                        <span class="badge bg-secondary rounded-pill">View</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats Summary -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-speedometer2 me-2 text-primary"></i>Quick Stats
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ total_items|default:"0" }}</div>
+                            <small class="text-muted">Total Items</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ total_suppliers|default:"0" }}</div>
+                            <small class="text-muted">Suppliers</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ active_production|default:"0" }}</div>
+                            <small class="text-muted">Active Production</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ pending_orders|default:"0" }}</div>
+                            <small class="text-muted">Pending Orders</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ monthly_revenue|default:"0"|floatformat:0 }}</div>
+                            <small class="text-muted">Monthly Revenue</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-3">
+                        <div class="p-3 border rounded">
+                            <div class="h4 mb-1">{{ scheduled_reports|default:"0" }}</div>
+                            <small class="text-muted">Scheduled Reports</small>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

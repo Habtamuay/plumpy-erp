@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ company.name }} - Company Details{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">
+            <i class="bi bi-building me-2"></i>{{ company.name }}
+        </h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'company:company_list' %}">Companies</a></li>
+                <li class="breadcrumb-item active">{{ company.name }}</li>
+            </ol>
+        </nav>
+    </div>
+    <div>
+        <a href="{% url 'admin:company_company_change' company.id %}" class="btn btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+    </div>
+</div>
+
+<!-- Company Info Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Company Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Name:</th>
+                        <td><strong>{{ company.name }}</strong></td>
+                    </tr>
+                    {% if company.legal_name %}
+                    <tr>
+                        <th>Legal Name:</th>
+                        <td>{{ company.legal_name }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>TIN Number:</th>
+                        <td>{{ company.tin_number|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Registration:</th>
+                        <td>{{ company.registration_number|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td>
+                            {% if company.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-telephone me-2 text-success"></i>Contact Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 100px;">Phone:</th>
+                        <td>{{ company.phone|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Email:</th>
+                        <td>{{ company.email|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Website:</th>
+                        <td>
+                            {% if company.website %}
+                            <a href="{{ company.website }}" target="_blank">{{ company.website }}</a>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Address:</th>
+                        <td>{{ company.address|linebreaksbr|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Row -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h2>{{ branches_count|default:"0" }}</h2>
+                <p class="mb-0">Branches</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h2>{{ departments_count|default:"0" }}</h2>
+                <p class="mb-0">Departments</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h2>{{ customers_count|default:"0" }}</h2>
+                <p class="mb-0">Customers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <h2>{{ employees_count|default:"0" }}</h2>
+                <p class="mb-0">Employees</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Branches Section -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-diagram-3 me-2 text-primary"></i>Branches</h5>
+        <a href="{% url 'admin:company_branch_add' %}?company={{ company.id }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus-circle me-1"></i> Add Branch
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Code</th>
+                        <th>City</th>
+                        <th>Main</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for branch in company.branches.all %}
+                    <tr>
+                        <td><strong>{{ branch.name }}</strong></td>
+                        <td>{{ branch.code }}</td>
+                        <td>{{ branch.city|default:"—" }}</td>
+                        <td>
+                            {% if branch.is_main %}
+                            <span class="badge bg-success">Main</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if branch.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'admin:company_branch_change' branch.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">
+                            No branches found for this company
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Back button -->
+<div class="mt-3">
+    <a href="{% url 'company:company_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Companies
+    </a>
+</div>
+
+{% endblock %}

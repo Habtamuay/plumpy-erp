@@ -1,0 +1,98 @@
+<!-- reports/financial/purchase_journal.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Purchase Journal{% endblock %}
+{% block report_title %}Purchase Journal{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-3">
+                <label for="date_from">From Date:</label>
+                {{ form.date_from }}
+            </div>
+            <div class="col-md-3">
+                <label for="date_to">To Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-3 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Purchases</h5>
+                <h3 class="text-primary">${{ total_purchases|floatformat:2 }}</h3>
+                <small class="text-muted">{{ purchases|length }} transactions</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Period</h5>
+                <h6 class="text-primary">{{ date_from|date:"M d, Y" }} - {{ date_to|date:"M d, Y" }}</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Purchase Transactions</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Narration</th>
+                        <th>Supplier</th>
+                        <th>PO Reference</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for purchase in purchases %}
+                    <tr>
+                        <td>{{ purchase.date|date:"M d, Y" }}</td>
+                        <td>{{ purchase.reference }}</td>
+                        <td>{{ purchase.narration }}</td>
+                        <td>{{ purchase.supplier }}</td>
+                        <td>{{ purchase.po_ref }}</td>
+                        <td class="text-end">
+                            <strong class="text-primary">${{ purchase.amount|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-dark">
+                        <td colspan="5" class="text-end"><strong>Total Purchases:</strong></td>
+                        <td class="text-end">
+                            <strong class="text-primary">${{ total_purchases|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if not purchases %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    No purchase transactions found for the selected period.
+</div>
+{% endif %}
+{% endblock %}

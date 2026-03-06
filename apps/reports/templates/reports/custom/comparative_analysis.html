@@ -1,0 +1,64 @@
+<!-- reports/custom/comparative_analysis.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Comparative Analysis{% endblock %}
+{% block report_title %}Comparative Analysis Report{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="period1">Period 1:</label>
+                <input type="text" id="period1" name="period1" class="form-control" placeholder="YYYY-MM">
+            </div>
+            <div class="col-md-4">
+                <label for="period2">Period 2:</label>
+                <input type="text" id="period2" name="period2" class="form-control" placeholder="YYYY-MM">
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Comparative Metrics</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Metric</th>
+            <th>Period 1</th>
+            <th>Period 2</th>
+            <th>Variance</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic data rows -->
+    </tbody>
+</table>
+<canvas id="compChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ctx = document.getElementById('compChart').getContext('2d');
+    const compChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Metric 1', 'Metric 2'],
+            datasets: [{
+                label: 'Period 1',
+                data: [/* Dynamic */],
+                backgroundColor: '#2196F3'
+            }, {
+                label: 'Period 2',
+                data: [/* Dynamic */],
+                backgroundColor: '#FFCE56'
+            }]
+        }
+    });
+</script>
+{% endblock %}

@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from apps.purchasing.views import download_po_pdf
 
 app_name = 'purchasing'
 
@@ -15,8 +16,11 @@ urlpatterns = [
     # ============================
     path('suppliers/', views.supplier_list, name='supplier_list'),
     path('suppliers/dashboard/', views.supplier_dashboard, name='supplier_dashboard'),
+    path('suppliers/create/', views.supplier_create, name='supplier_create'),
     path('suppliers/<int:supplier_id>/', views.supplier_detail, name='supplier_detail'),
-    # path('suppliers/<int:supplier_id>/performance/', views.supplier_performance, name='supplier_performance'),  # Commented out - view not yet implemented
+    path('suppliers/<int:supplier_id>/edit/', views.supplier_edit, name='supplier_edit'),
+    path('suppliers/<int:supplier_id>/delete/', views.supplier_delete, name='supplier_delete'),
+    path('suppliers/<int:supplier_id>/performance/', views.supplier_performance, name='supplier_performance'),
     path('suppliers/export/', views.export_suppliers, name='export_suppliers'),
     
     # ============================
@@ -44,9 +48,9 @@ urlpatterns = [
     path('pos/<int:po_id>/receive/', views.receive_po, name='receive_po'),
     path('pos/<int:po_id>/close/', views.po_close, name='po_close'),
     path('pos/<int:po_id>/cancel/', views.po_cancel, name='po_cancel'),
-    path('pos/<int:po_id>/approve/<int:level>/', views.approve_po, name='approve_po'),
     path('pos/<int:po_id>/print/', views.po_print, name='po_print'),
     path('pos/export/', views.export_pos, name='export_pos'),
+    path('purchasing/po/<int:po_id>/pdf/', download_po_pdf, name='po_pdf'),
     
     # ============================
     # Goods Receipt URLs
@@ -63,9 +67,9 @@ urlpatterns = [
     # ============================
     path('reports/', views.purchasing_report, name='purchasing_report'),
     path('reports/spend-analysis/', views.spend_analysis, name='spend_analysis'),
-    # path('reports/supplier-performance/', views.supplier_performance_report, name='supplier_performance_report'),  # Commented out
     path('reports/lead-time/', views.lead_time_report, name='lead_time_report'),
     path('reports/po-status/', views.po_status_report, name='po_status_report'),
+    
     
     # ============================
     # AJAX URLs (for dynamic loading)
@@ -73,4 +77,7 @@ urlpatterns = [
     path('ajax/supplier-info/<int:supplier_id>/', views.ajax_supplier_info, name='ajax_supplier_info'),
     path('ajax/po-lines/<int:po_id>/', views.ajax_po_lines, name='ajax_po_lines'),
     path('ajax/item-price/<int:item_id>/<int:supplier_id>/', views.ajax_item_price, name='ajax_item_price'),
+    path('ajax/check-po-number/', views.ajax_check_po_number, name='ajax_check_po_number'),
 ]
+
+

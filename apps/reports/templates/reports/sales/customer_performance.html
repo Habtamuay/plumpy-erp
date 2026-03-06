@@ -1,0 +1,87 @@
+<!-- reports/sales/customer_performance.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Customer Performance{% endblock %}
+{% block report_title %}Customer Performance Report{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="customer">Customer:</label>
+                <input type="text" id="customer" name="customer" class="form-control">
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Customer Metrics</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Customer</th>
+            <th>Total Orders</th>
+            <th>Total Invoiced</th>
+            <th>Outstanding</th>
+            <th>Avg Order Value</th>
+            <th>Last Order</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for customer in customers %}
+        <tr>
+            <td>{{ customer.name }}</td>
+            <td>{{ customer.total_orders }}</td>
+            <td>${{ customer.invoiced_total|floatformat:0 }}</td>
+            <td>${{ customer.outstanding|floatformat:0 }}</td>
+            <td>${{ customer.avg_order_value|floatformat:0 }}</td>
+            <td>{{ customer.last_order_date|date:"M d, Y" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<canvas id="customerChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const topCustomers = {{ top_customers|safe }};
+    const labels = topCustomers.slice(0, 10).map(c => c.name);
+    const data = topCustomers.slice(0, 10).map(c => c.invoiced_total || 0);
+
+    const ctx = document.getElementById('customerChart').getContext('2d');
+    const customerChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Invoiced',
+                data: data,
+                backgroundColor: '#36A2EB',
+                borderColor: '#2563eb',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

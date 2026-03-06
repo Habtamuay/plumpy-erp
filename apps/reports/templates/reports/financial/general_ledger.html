@@ -1,0 +1,94 @@
+<!-- reports/financial/general_ledger.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}General Ledger{% endblock %}
+{% block report_title %}General Ledger{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-3">
+                <label for="date_from">From Date:</label>
+                {{ form.date_from }}
+            </div>
+            <div class="col-md-3">
+                <label for="date_to">To Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-3 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+{% for account_data in ledger_data %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            {{ account_data.account.code }} - {{ account_data.account.name }}
+            <small class="text-muted">({{ account_data.account.account_type.name }})</small>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Narration</th>
+                        <th class="text-end">Debit</th>
+                        <th class="text-end">Credit</th>
+                        <th class="text-end">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in account_data.entries %}
+                    <tr>
+                        <td>{{ entry.date|date:"M d, Y" }}</td>
+                        <td>{{ entry.reference }}</td>
+                        <td>{{ entry.narration }}</td>
+                        <td class="text-end">${{ entry.debit|floatformat:2 }}</td>
+                        <td class="text-end">${{ entry.credit|floatformat:2 }}</td>
+                        <td class="text-end">
+                            <strong>${{ entry.balance|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-dark">
+                        <td colspan="5" class="text-end"><strong>Final Balance:</strong></td>
+                        <td class="text-end">
+                            <strong>${{ account_data.final_balance|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% empty %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    No journal entries found for the selected period.
+</div>
+{% endfor %}
+
+{% if ledger_data %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle me-2"></i>
+            <strong>General Ledger Report Generated</strong>
+            <br>
+            Report covers {{ ledger_data|length }} accounts with journal entries.
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

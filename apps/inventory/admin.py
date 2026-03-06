@@ -42,16 +42,16 @@ class WarehouseAdmin(admin.ModelAdmin):
 @admin.register(Lot)
 class LotAdmin(admin.ModelAdmin):
     list_display = ('batch_number', 'item_link', 'quantity_display', 'expiry_status', 'is_active')
-    list_filter = ('is_active', 'item__category')  # Remove 'warehouse'
+    list_filter = ('is_active', 'item__category', 'quality_status')
     search_fields = ('batch_number', 'item__code', 'item__name', 'supplier__name')
-    autocomplete_fields = ['item', 'supplier']  # Remove 'warehouse'
-    readonly_fields = ('created_at', 'updated_at', 'days_to_expire', 'age_days')
+    autocomplete_fields = ['item', 'supplier']
+    readonly_fields = ('created_at', 'updated_at', 'days_to_expire', 'age_days', 'available_quantity')
     list_per_page = 25
     date_hierarchy = 'expiry_date'
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('batch_number', 'item', 'supplier', 'warehouse', 'is_active')
+            'fields': ('batch_number', 'item', 'supplier', 'supplier_batch', 'is_active')
         }),
         ('Dates', {
             'fields': ('manufacturing_date', 'expiry_date', 'received_date')
@@ -59,8 +59,13 @@ class LotAdmin(admin.ModelAdmin):
         ('Quantities', {
             'fields': ('initial_quantity', 'current_quantity', 'allocated_quantity', 'available_quantity')
         }),
+        ('Quality', {
+            'fields': ('quality_status', 'quality_checked_by', 'quality_checked_date', 'quality_notes', 'certificate_of_analysis'),
+            'classes': ('collapse',)
+        }),
         ('Status', {
-            'fields': ('days_to_expire', 'age_days', 'quality_status', 'notes')
+            'fields': ('is_blocked', 'block_reason', 'notes'),
+            'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -75,14 +80,19 @@ class LotAdmin(admin.ModelAdmin):
     item_link.admin_order_field = 'item__code'
     
     def quantity_display(self, obj):
-        return format_html(
-            '<span style="font-weight: bold;">{}</span> / {}',
-            obj.current_quantity,
-            obj.initial_quantity
-        )
+        """Display quantity with formatting"""
+        try:
+            return format_html(
+                '<span style="font-weight: bold;">{}</span> / {}',
+                obj.current_quantity,
+                obj.initial_quantity
+            )
+        except:
+            return f"{obj.current_quantity} / {obj.initial_quantity}"
     quantity_display.short_description = 'Qty (Current/Initial)'
     
     def expiry_status(self, obj):
+        """Display expiry status with color coding"""
         days = obj.days_to_expire
         if days <= 0:
             return format_html('<span style="color: red; font-weight: bold;">⚠ Expired</span>')
@@ -96,7 +106,7 @@ class LotAdmin(admin.ModelAdmin):
     expiry_status.admin_order_field = 'expiry_date'
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('item', 'warehouse', 'supplier')
+        return super().get_queryset(request).select_related('item', 'supplier')
 
 
 @admin.register(StockTransaction)
@@ -120,7 +130,8 @@ class StockTransactionAdmin(admin.ModelAdmin):
             'fields': ('warehouse_from', 'warehouse_to')
         }),
         ('Related Documents', {
-            'fields': ('production_run', 'purchase_order', 'sales_order')
+            'fields': ('production_run', 'purchase_order', 'sales_order'),
+            'classes': ('collapse',)
         }),
         ('Additional Info', {
             'fields': ('notes', 'created_by', 'balance_after')
@@ -161,17 +172,26 @@ class StockTransactionAdmin(admin.ModelAdmin):
     lot_link.short_description = 'Lot'
     
     def quantity_colored(self, obj):
-        color = 'green' if obj.quantity > 0 else 'red'
-        return format_html(
-            '<span style="color: {}; font-weight: bold;">{}</span>',
-            color,
-            obj.quantity
-        )
+        """Display quantity with color"""
+        try:
+            color = 'green' if obj.quantity > 0 else 'red'
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{}</span>',
+                color,
+                obj.quantity
+            )
+        except:
+            return str(obj.quantity)
     quantity_colored.short_description = 'Quantity'
     quantity_colored.admin_order_field = 'quantity'
     
     def unit_value(self, obj):
-        return obj.quantity * (obj.unit_cost or 0)
+        """Calculate unit value"""
+        try:
+            value = float(obj.quantity) * float(obj.unit_cost or 0)
+            return f"{value:,.2f}"
+        except (TypeError, ValueError):
+            return "0.00"
     unit_value.short_description = 'Total Value'
     
     def get_queryset(self, request):
@@ -212,14 +232,17 @@ class CurrentStockAdmin(admin.ModelAdmin):
     lot_link.short_description = 'Lot'
     
     def quantity_display(self, obj):
+        """Display quantity with unit"""
+        unit_abbr = obj.item.unit.abbreviation if obj.item and obj.item.unit else ''
         return format_html(
             '<span style="font-weight: bold;">{}</span> {}',
             obj.quantity,
-            obj.item.unit.abbreviation if obj.item.unit else ''
+            unit_abbr
         )
     quantity_display.short_description = 'Quantity'
     
     def stock_status(self, obj):
+        """Display stock status with color coding"""
         if obj.quantity <= 0:
             return format_html('<span style="color: red;">Out of Stock</span>')
         elif obj.quantity < obj.item.minimum_stock:
@@ -231,14 +254,27 @@ class CurrentStockAdmin(admin.ModelAdmin):
     stock_status.short_description = 'Status'
     
     def value_display(self, obj):
-        value = obj.quantity * (obj.item.unit_cost or 0)
-        return format_html('<span style="font-weight: bold;">{:,.2f}</span>', value)
+        """Calculate and display stock value"""
+        try:
+            unit_cost = float(obj.item.unit_cost or 0)
+            quantity = float(obj.quantity or 0)
+            value = quantity * unit_cost
+            formatted_value = f"{value:,.2f}"
+            return format_html('<span style="font-weight: bold;">{} ETB</span>', formatted_value)
+        except (TypeError, ValueError, AttributeError):
+            return '-'
     value_display.short_description = 'Value'
     value_display.admin_order_field = 'quantity'
     
     def stock_value(self, obj):
-        value = obj.quantity * (obj.item.unit_cost or 0)
-        return f"{value:,.2f} ETB"
+        """Calculate stock value for readonly field"""
+        try:
+            unit_cost = float(obj.item.unit_cost or 0)
+            quantity = float(obj.quantity or 0)
+            value = quantity * unit_cost
+            return f"{value:,.2f} ETB"
+        except (TypeError, ValueError, AttributeError):
+            return "0.00 ETB"
     stock_value.short_description = 'Stock Value'
     
     def get_queryset(self, request):

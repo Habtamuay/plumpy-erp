@@ -1,0 +1,58 @@
+<!-- reports/production/yield.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Yield Report{% endblock %}
+{% block report_title %}Production Yield Report{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="product_line">Product Line:</label>
+                <select id="product_line" name="product_line" class="form-select">
+                    <option value="">All</option>
+                    <!-- Dynamic options -->
+                </select>
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Yield Metrics</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Run</th>
+            <th>Expected Yield</th>
+            <th>Actual Yield</th>
+            <th>Percentage</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic data rows -->
+    </tbody>
+</table>
+<canvas id="yieldChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ctx = document.getElementById('yieldChart').getContext('2d');
+    const yieldChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Good', 'Defective'],
+            datasets: [{
+                data: [/* Dynamic data */],
+                backgroundColor: ['#4CAF50', '#F44336']
+            }]
+        }
+    });
+</script>
+{% endblock %}

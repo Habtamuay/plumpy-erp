@@ -5,6 +5,10 @@ from decimal import Decimal
 from apps.core.models import Item
 from apps.production.models import ProductionRun
 
+# Signals
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
 
 class Warehouse(models.Model):
     """Warehouse/Storage location"""
@@ -421,26 +425,12 @@ class CurrentStock(models.Model):
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-@receiver(post_save, sender=StockTransaction)
-def update_current_stock(sender, instance, created, **kwargs):
-    """Update CurrentStock when a transaction is created"""
-    if created:
-        # Update or create CurrentStock for destination warehouse
-        if instance.warehouse_to:
-            current, _ = CurrentStock.objects.get_or_create(
-                item=instance.item,
-                warehouse=instance.warehouse_to,
-                lot=instance.lot,
-                defaults={'quantity': 0}
-            )
-            current.update_from_transaction(instance)
-        
-        # Update CurrentStock for source warehouse (if different)
-        if instance.warehouse_from and instance.warehouse_from != instance.warehouse_to:
-            current, _ = CurrentStock.objects.get_or_create(
-                item=instance.item,
-                warehouse=instance.warehouse_from,
-                lot=instance.lot,
-                defaults={'quantity': 0}
-            )
-            current.update_from_transaction(instance)
+@receiver(post_save, sender=CurrentStock)
+def update_item_current_stock(sender, instance, **kwargs):
+    """Update Item.current_stock when CurrentStock changes"""
+    item = instance.item
+    total_stock = CurrentStock.objects.filter(item=item).aggregate(
+        total=models.Sum('quantity')
+    )['total'] or 0
+    item.current_stock = total_stock
+    item.save(update_fields=['current_stock'])

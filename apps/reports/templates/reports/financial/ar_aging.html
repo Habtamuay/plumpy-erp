@@ -1,0 +1,204 @@
+{% extends 'reports/base_report.html' %}
+{% load humanize %}
+
+{% block report_title %}Accounts Receivable Aging Report{% endblock %}
+{% block report_heading %}Accounts Receivable Aging Report{% endblock %}
+{% block report_description %}As of {{ today|date:"F j, Y" }}{% endblock %}
+
+{% block report_content %}
+<!-- Summary Cards -->
+<div class="summary-stats">
+    <div class="stat-box">
+        <div class="stat-label">Total Outstanding</div>
+        <div class="stat-value">{{ total_outstanding|default:"0"|floatformat:0 }}</div>
+        <div class="stat-change">ETB</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Overdue Amount</div>
+        <div class="stat-value text-danger">{{ overdue_amount|default:"0"|floatformat:0 }}</div>
+        <div class="stat-change">ETB</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Overdue Count</div>
+        <div class="stat-value text-warning">{{ overdue_count|default:"0" }}</div>
+        <div class="stat-change">Invoices</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Average DSO</div>
+        <div class="stat-value">{{ avg_dso|default:"45" }}</div>
+        <div class="stat-change">Days</div>
+    </div>
+</div>
+
+<!-- Aging Buckets Chart -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-pie-chart"></i> Aging Buckets Distribution
+        </h5>
+    </div>
+    <div class="chart-container">
+        <canvas id="agingChart"></canvas>
+    </div>
+</div>
+
+<!-- Aging Summary Table -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-table"></i> Aging Summary
+        </h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table-report">
+            <thead>
+                <tr>
+                    <th>Aging Period</th>
+                    <th class="text-end">Number of Invoices</th>
+                    <th class="text-end">Amount (ETB)</th>
+                    <th class="text-end">Percentage</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Current (Not Due)</strong></td>
+                    <td class="text-end">{{ bucket_totals.current.count|default:"0" }}</td>
+                    <td class="text-end">{{ bucket_totals.current.amount|default:"0"|floatformat:2 }}</td>
+                    <td class="text-end">{{ bucket_totals.current.percentage|default:"0"|floatformat:1 }}%</td>
+                </tr>
+                <tr class="table-warning">
+                    <td><strong>1-30 Days Overdue</strong></td>
+                    <td class="text-end">{{ bucket_totals.1_30.count|default:"0" }}</td>
+                    <td class="text-end">{{ bucket_totals.1_30.amount|default:"0"|floatformat:2 }}</td>
+                    <td class="text-end">{{ bucket_totals.1_30.percentage|default:"0"|floatformat:1 }}%</td>
+                </tr>
+                <tr class="table-warning">
+                    <td><strong>31-60 Days Overdue</strong></td>
+                    <td class="text-end">{{ bucket_totals.31_60.count|default:"0" }}</td>
+                    <td class="text-end">{{ bucket_totals.31_60.amount|default:"0"|floatformat:2 }}</td>
+                    <td class="text-end">{{ bucket_totals.31_60.percentage|default:"0"|floatformat:1 }}%</td>
+                </tr>
+                <tr class="table-danger">
+                    <td><strong>61-90 Days Overdue</strong></td>
+                    <td class="text-end">{{ bucket_totals.61_90.count|default:"0" }}</td>
+                    <td class="text-end">{{ bucket_totals.61_90.amount|default:"0"|floatformat:2 }}</td>
+                    <td class="text-end">{{ bucket_totals.61_90.percentage|default:"0"|floatformat:1 }}%</td>
+                </tr>
+                <tr class="table-danger">
+                    <td><strong>90+ Days Overdue</strong></td>
+                    <td class="text-end">{{ bucket_totals.90_plus.count|default:"0" }}</td>
+                    <td class="text-end">{{ bucket_totals.90_plus.amount|default:"0"|floatformat:2 }}</td>
+                    <td class="text-end">{{ bucket_totals.90_plus.percentage|default:"0"|floatformat:1 }}%</td>
+                </tr>
+                <tr class="table-primary">
+                    <td><strong>TOTAL</strong></td>
+                    <td class="text-end"><strong>{{ total_invoices|default:"0" }}</strong></td>
+                    <td class="text-end"><strong>{{ total_outstanding|default:"0"|floatformat:2 }}</strong></td>
+                    <td class="text-end"><strong>100%</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Detailed Invoices Table -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-receipt"></i> Detailed Invoice List
+        </h5>
+        <div class="export-buttons">
+            <a href="?export=excel" class="export-btn excel">
+                <i class="bi bi-file-earmark-excel"></i> Export
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table-report">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Customer</th>
+                    <th>Invoice Date</th>
+                    <th>Due Date</th>
+                    <th>Days Overdue</th>
+                    <th class="text-end">Amount</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr class="{% if invoice.days_overdue > 60 %}table-danger{% elif invoice.days_overdue > 30 %}table-warning{% endif %}">
+                    <td><strong>{{ invoice.invoice_number }}</strong></td>
+                    <td>{{ invoice.customer.name }}</td>
+                    <td>{{ invoice.invoice_date|date:"d M Y" }}</td>
+                    <td>{{ invoice.due_date|date:"d M Y" }}</td>
+                    <td class="text-center fw-bold">{{ invoice.days_overdue }}</td>
+                    <td class="text-end">{{ invoice.total_amount|floatformat:2 }}</td>
+                    <td>
+                        {% if invoice.status == 'paid' %}
+                        <span class="badge badge-success">Paid</span>
+                        {% elif invoice.status == 'partial' %}
+                        <span class="badge badge-warning">Partial</span>
+                        {% elif invoice.status == 'overdue' %}
+                        <span class="badge badge-danger">Overdue</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ invoice.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="no-data">
+                        <i class="bi bi-receipt"></i>
+                        <p>No outstanding invoices</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_report_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Aging Chart Data
+    const ctx = document.getElementById('agingChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Current', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days'],
+            datasets: [{
+                data: [
+                    {{ bucket_totals.current.amount|default:0 }},
+                    {{ bucket_totals.1_30.amount|default:0 }},
+                    {{ bucket_totals.31_60.amount|default:0 }},
+                    {{ bucket_totals.61_90.amount|default:0 }},
+                    {{ bucket_totals.90_plus.amount|default:0 }}
+                ],
+                backgroundColor: [
+                    '#06d6a0',  // green
+                    '#ffb703',  // yellow
+                    '#fb5607',  // orange
+                    '#ef476f',  // red
+                    '#8338ec'   // purple
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.label}: ETB ${formatNumber(ctx.parsed)}`
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

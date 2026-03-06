@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Items - Plumpy ERP{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="bi bi-box me-2"></i>Items
+    </h1>
+    <div>
+        <a href="{% url 'core:item_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Add New Item
+        </a>
+        <a href="{% url 'core:export_items' %}" class="btn btn-outline-success ms-2">
+            <i class="bi bi-download me-1"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="search" class="form-label">Search</label>
+                <input type="text" class="form-control" id="search" name="q" placeholder="Code, name, peach code..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <label for="category" class="form-label">Category</label>
+                <select class="form-select" id="category" name="category">
+                    <option value="">All Categories</option>
+                    {% for cat_key, cat_value in categories %}
+                    <option value="{{ cat_key }}" {% if selected_category == cat_key %}selected{% endif %}>{{ cat_value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="product_type" class="form-label">Product Type</label>
+                <select class="form-select" id="product_type" name="product_type">
+                    <option value="">All Types</option>
+                    {% for type_key, type_value in product_types %}
+                    <option value="{{ type_key }}" {% if selected_product_type == type_key %}selected{% endif %}>{{ type_value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="stock_status" class="form-label">Stock Status</label>
+                <select class="form-select" id="stock_status" name="stock_status">
+                    <option value="">All</option>
+                    <option value="low" {% if selected_stock_status == 'low' %}selected{% endif %}>Low Stock</option>
+                    <option value="out" {% if selected_stock_status == 'out' %}selected{% endif %}>Out of Stock</option>
+                    <option value="reorder" {% if selected_stock_status == 'reorder' %}selected{% endif %}>Reorder Needed</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Items List -->
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Product Type</th>
+                        <th>Unit</th>
+                        <th>Current Stock</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in page_obj %}
+                    <tr>
+                        <td><strong>{{ item.code }}</strong></td>
+                        <td>
+                            {{ item.name }}
+                            {% if item.peach_code %}
+                            <br><small class="text-muted">{{ item.peach_code }}</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.get_category_display }}</td>
+                        <td>{{ item.get_product_type_display|default:"—" }}</td>
+                        <td>{{ item.unit.abbreviation|default:"—" }}</td>
+                        <td class="{% if item.current_stock <= item.minimum_stock %}text-danger fw-bold{% elif item.current_stock <= item.reorder_point %}text-warning fw-bold{% else %}text-success{% endif %}">
+                            {{ item.current_stock|floatformat:2 }}
+                        </td>
+                        <td>
+                            {% if item.current_stock <= 0 %}
+                                <span class="badge bg-danger">Out of Stock</span>
+                            {% elif item.current_stock <= item.minimum_stock %}
+                                <span class="badge bg-danger">Critical</span>
+                            {% elif item.current_stock <= item.reorder_point %}
+                                <span class="badge bg-warning text-dark">Reorder</span>
+                            {% else %}
+                                <span class="badge bg-success">OK</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'core:item_detail' item.id %}" class="btn btn-outline-primary" title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{% url 'core:item_edit' item.id %}" class="btn btn-outline-secondary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'admin:core_item_change' item.id %}" class="btn btn-outline-info" title="Admin Edit">
+                                    <i class="bi bi-gear"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5">
+                            <i class="bi bi-box text-muted" style="font-size: 3rem;"></i>
+                            <p class="mt-3 mb-0 text-muted">No items found</p>
+                            {% if search_query or selected_category or selected_product_type or selected_stock_status %}
+                            <p class="text-muted">Try clearing your filters</p>
+                            <a href="{% url 'core:item_list' %}" class="btn btn-outline-secondary btn-sm mt-2">
+                                <i class="bi bi-x-circle me-1"></i> Clear Filters
+                            </a>
+                            {% else %}
+                            <a href="{% url 'core:item_create' %}" class="btn btn-primary btn-sm mt-3">
+                                <i class="bi bi-plus-circle me-1"></i> Add Your First Item
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white">
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_product_type %}&product_type={{ selected_product_type }}{% endif %}{% if selected_stock_status %}&stock_status={{ selected_stock_status }}{% endif %}" aria-label="First">
+                        <span aria-hidden="true">&laquo;&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_product_type %}&product_type={{ selected_product_type }}{% endif %}{% if selected_stock_status %}&stock_status={{ selected_stock_status }}{% endif %}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_product_type %}&product_type={{ selected_product_type }}{% endif %}{% if selected_stock_status %}&stock_status={{ selected_stock_status }}{% endif %}">{{ num }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_product_type %}&product_type={{ selected_product_type }}{% endif %}{% if selected_stock_status %}&stock_status={{ selected_stock_status }}{% endif %}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_product_type %}&product_type={{ selected_product_type }}{% endif %}{% if selected_stock_status %}&stock_status={{ selected_stock_status }}{% endif %}" aria-label="Last">
+                        <span aria-hidden="true">&raquo;&raquo;</span>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        <p class="text-center text-muted small mt-2">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} items
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,114 @@
+<!-- reports/purchasing/spend_analysis.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Spend Analysis{% endblock %}
+{% block report_title %}Purchasing Spend Analysis{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="category">Category:</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="">All</option>
+                    <!-- Dynamic options -->
+                </select>
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Spend</h5>
+                <h3 class="text-danger">${{ total_spend|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Spend Breakdown</h3>
+<canvas id="spendChart" width="400" height="200"></canvas>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Spend Amount</th>
+            <th>Items Purchased</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for category in by_category %}
+        <tr>
+            <td>{{ category.lines__item__category|default:"Uncategorized" }}</td>
+            <td>${{ category.total|floatformat:0 }}</td>
+            <td>{{ category.count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4 class="mt-4">Spend by Supplier</h4>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Supplier</th>
+            <th>Total Spend</th>
+            <th>Orders</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for supplier in by_supplier %}
+        <tr>
+            <td>{{ supplier.supplier__name }}</td>
+            <td>${{ supplier.total|floatformat:0 }}</td>
+            <td>{{ supplier.count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const byCategory = {{ by_category|safe }};
+    const labels = byCategory.map(c => c.lines__item__category || 'Uncategorized');
+    const data = byCategory.map(c => c.total);
+
+    const ctx = document.getElementById('spendChart').getContext('2d');
+    const spendChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                    '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': $' + context.raw.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

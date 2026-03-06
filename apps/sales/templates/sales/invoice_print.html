@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static amount_filters %}
+    <meta charset="UTF-8">
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 20px; }
+        .invoice-box { max-width: 800px; margin: auto; border: 1px solid #eee; padding: 30px; }
+        .header-table { width: 100%; line-height: 24px; text-align: left; margin-bottom: 20px; }
+        .title { font-size: 32px; font-weight: bold; color: #444; }
+        .info-td { text-align: right; }
+        
+        .details-table { width: 100%; line-height: 20px; margin-bottom: 40px; }
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .items-table th, .items-table td { border: 1px solid #333; padding: 8px; }
+        .items-table th { background: #f8f9fa; }
+        
+        .totals-table { width: 30%; margin-left: 70%; line-height: 25px; border-collapse: collapse; }
+        .totals-table td { padding: 5px; border: 1px solid #333; }
+        .grand-total { font-weight: bold; }
+
+        @media print {
+            .no-print { display: none; }
+            .invoice-box { border: none; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+        <button onclick="window.print()" style="padding: 10px 20px; cursor: pointer;">Click to Print / Save as PDF</button>
+    </div>
+
+    <div class="invoice-box">
+        <!-- Header with company name, logo and document title -->
+        <div style="position: relative; text-align: center; margin-bottom:20px;">
+            <img src="{% static 'images/hilina_logo.png' %}" alt="Logo" style="max-height:80px; position:absolute; top:0; left:0;" />
+            <h1 style="margin:0; font-size:28px;">HILINA ENRICHED FOODS PLC</h1>
+            <p style="margin:2px 0; font-size:14px;">S/CITY OROMIA   KEBELE 01   H NO NEW   TEL 011651 9909</p>
+            <p style="margin:2px 0; font-size:14px;">TIN 0000620114&nbsp;&nbsp;&nbsp;VAT 24190</p>
+            <h2 style="margin:10px 0; font-size:22px;">SALES ATTACHMENT</h2>
+        </div>
+
+        <table class="details-table" style="margin-bottom:10px;">
+            <tr>
+                <td style="width:60%; vertical-align:top;">
+                    <strong>Customer Info</strong><br>
+                    <span><strong>Customer:</strong> {{ invoice.customer.name }}</span><br>
+                    <span><strong>Trade Name:</strong> {{ invoice.customer.trade_name|default:'' }}</span><br>
+                    <span><strong>TIN Number:</strong> {{ invoice.customer.tin|default:'' }}</span><br>
+                    <span><strong>Category:</strong> {{ invoice.customer.category|default:'' }}</span><br>
+                    <span><strong>Subcity:</strong> {{ invoice.customer.subcity|default:'' }}</span>
+                </td>
+                <td style="width:40%; vertical-align:top; text-align:right;">
+                    <strong>References</strong><br>
+                    <span><strong>Date:</strong> {{ invoice.invoice_date }}</span><br>
+                    <span><strong>FS No.:</strong> {{ invoice.fs_number|default:'' }}</span><br>
+                    <span><strong>Ref. No.:</strong> {{ invoice.reference_number|default:'' }}</span><br>
+                    <span><strong>Reference:</strong> {{ invoice.reference_description|default:'' }}</span>
+                </td>
+            </tr>
+        </table>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th>Unit</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ line.item.code }}</td>
+                    <td>{{ line.item.name }}</td>
+                    <td>{{ line.unit.abbreviation }}</td>
+                    <td>{{ line.quantity }}</td>
+                    <td>{{ line.unit_price }}</td>
+                    <td>{{ line.total_price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <table class="totals-table" style="margin-top:5px; width:40%;">
+            <tr>
+                <td>SUBTOTAL</td>
+                <td>{{ invoice.subtotal }}</td>
+            </tr>
+            <tr>
+                <td>VAT({{ invoice.tax_rate }}%)</td>
+                <td>{{ invoice.tax_amount }}</td>
+            </tr>
+            <tr class="grand-total">
+                <td><strong>GRAND TOTAL</strong></td>
+                <td><strong>{{ invoice.total_amount }}</strong></td>
+            </tr>
+        </table>
+
+        <div style="margin-top:30px; font-size:12px;">
+            <strong>Payment Method :</strong> {{ invoice.payment_method|default:'CREDIT'|title }}<br>
+            <strong>Amount In Words:</strong> {{ invoice.total_amount|amount_in_words }}<br>
+            <strong>MEMO:</strong> {{ invoice.notes|default:'-' }}
+        </div>
+    </div>
+</body>
+</html>

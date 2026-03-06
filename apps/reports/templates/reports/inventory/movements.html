@@ -1,0 +1,42 @@
+<!-- reports/inventory/movements.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Stock Movements{% endblock %}
+{% block report_title %}Inventory Movements{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="product">Product:</label>
+                <input type="text" id="product" name="product" class="form-control">
+            </div>
+            <div class="col-md-4">
+                <label for="date_range">Date Range:</label>
+                <input type="text" id="date_range" name="date_range" class="form-control" placeholder="YYYY-MM-DD to YYYY-MM-DD">
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Stock Movement History</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Quantity</th>
+            <th>Balance</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic data rows -->
+    </tbody>
+</table>
+{% endblock %}

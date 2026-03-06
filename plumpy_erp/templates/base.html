@@ -137,7 +137,7 @@
 <body>
     <!-- Navigation Bar -->
     <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
-        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="{% url 'admin:index' %}">
+        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="{% url 'reports:dashboard' %}">
             <i class="bi bi-boxes"></i> Plumpy ERP
         </a>
         <button class="navbar-toggler position-absolute d-md-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="false" aria-label="Toggle navigation">
@@ -183,8 +183,8 @@
                     <ul class="nav flex-column">
                         <!-- Dashboard -->
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'admin:index' %}active{% endif %}" href="{% url 'admin:index' %}">
-                                <i class="bi bi-speedometer2"></i> Admin Dashboard
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'reports:dashboard' %}">
+                                <i class="bi bi-speedometer2"></i> Reports Dashboard
                             </a>
                         </li>
                         
@@ -223,8 +223,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'admin:inventory_currentstock_changelist' %}">
-                                <i class="bi bi-boxes"></i> Current Stock
+                            <a class="nav-link" href="{% url 'admin:inventory_item_changelist' %}">
+                                <i class="bi bi-boxes"></i> Items
                             </a>
                         </li>
                         <li class="nav-item">
@@ -275,16 +275,6 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'admin:accounting_journalentry_changelist' %}">
                                 <i class="bi bi-journal-text"></i> Journal Entries
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'admin:accounting_salesinvoice_changelist' %}">
-                                <i class="bi bi-receipt"></i> Sales Invoices
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'admin:accounting_purchasebill_changelist' %}">
-                                <i class="bi bi-receipt-cutoff"></i> Purchase Bills
                             </a>
                         </li>
                         

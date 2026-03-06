@@ -1,0 +1,88 @@
+<!-- reports/purchasing/supplier_performance.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Supplier Performance{% endblock %}
+{% block report_title %}Supplier Performance Report{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="supplier">Supplier:</label>
+                <input type="text" id="supplier" name="supplier" class="form-control">
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Supplier Metrics</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Supplier</th>
+            <th>Total Orders</th>
+            <th>Total Spend</th>
+            <th>On-Time Delivery (%)</th>
+            <th>On-Time</th>
+            <th>Late</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for supplier in suppliers %}
+        <tr>
+            <td>{{ supplier.name }}</td>
+            <td>{{ supplier.total_orders }}</td>
+            <td>${{ supplier.total_purchase_amount|floatformat:0 }}</td>
+            <td>{{ supplier.on_time_rate|floatformat:1 }}%</td>
+            <td>{{ supplier.on_time_deliveries }}</td>
+            <td>{{ supplier.late_deliveries }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<canvas id="performanceChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const topPerformers = {{ top_performers|safe }};
+    const labels = topPerformers.map(s => s.name);
+    const onTimeData = topPerformers.map(s => s.on_time_rate);
+
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    const performanceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'On-Time Delivery Rate (%)',
+                data: onTimeData,
+                backgroundColor: '#10b981',
+                borderColor: '#059669',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

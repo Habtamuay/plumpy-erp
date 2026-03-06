@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import Company, Branch, Customer, UserProfile
+from .models import Company, Branch, Customer, UserProfile, Department
 
 
 class UserProfileInline(admin.StackedInline):
@@ -11,22 +11,22 @@ class UserProfileInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = 'Profile'
     fk_name = 'user'
-    fields = ('company', 'branch', 'employee_id', 'department', 'role', 'phone', 'is_active')
+    fields = ('company', 'branch', 'department', 'employee_id', 'role', 'phone', 'is_active')
     extra = 0
-    autocomplete_fields = ['company', 'branch']
+    autocomplete_fields = ['company', 'branch', 'department']
 
 
 class CustomUserAdmin(UserAdmin):
     """Custom User admin with UserProfile inline"""
     inlines = [UserProfileInline]
     list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'get_company', 'get_profile_status')
-    list_select_related = ('userprofile',)
+    list_select_related = ('profile',)  # Changed from 'userprofile' to 'profile'
     search_fields = ('username', 'email', 'first_name', 'last_name')
     
     def get_company(self, instance):
         """Get user's company from profile"""
         try:
-            return instance.userprofile.company.name
+            return instance.profile.company.name
         except (UserProfile.DoesNotExist, AttributeError):
             return '-'
     get_company.short_description = 'Company'
@@ -34,7 +34,7 @@ class CustomUserAdmin(UserAdmin):
     def get_profile_status(self, instance):
         """Show profile status with icon"""
         try:
-            if instance.userprofile.is_active:
+            if instance.profile.is_active:
                 return format_html('<span style="color: green;">✓ Active</span>')
             else:
                 return format_html('<span style="color: orange;">⚠ Inactive</span>')
@@ -98,6 +98,15 @@ class BranchAdmin(admin.ModelAdmin):
     city_display.short_description = 'City'
 
 
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'company', 'branch', 'manager', 'is_active')
+    list_filter = ('company', 'branch', 'is_active')
+    search_fields = ('name', 'code', 'company__name')
+    autocomplete_fields = ['company', 'branch', 'manager']
+    list_per_page = 25
+
+
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
     list_display = ('name', 'company', 'tin', 'phone', 'email', 'credit_limit', 'status_badge')
@@ -132,11 +141,11 @@ class CustomerAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user_info', 'company', 'branch', 'role', 'employee_id', 'status_badge')
-    list_filter = ('company', 'branch', 'role', 'is_active')
+    list_display = ('user_info', 'company', 'branch', 'department', 'role', 'employee_id', 'status_badge')
+    list_filter = ('company', 'branch', 'department', 'role', 'is_active')
     search_fields = ('user__username', 'user__email', 'user__first_name', 'user__last_name', 'employee_id')
     raw_id_fields = ('user',)
-    autocomplete_fields = ['company', 'branch']
+    autocomplete_fields = ['company', 'branch', 'department']
     list_per_page = 25
     readonly_fields = ('created_at', 'updated_at')
     
@@ -145,10 +154,18 @@ class UserProfileAdmin(admin.ModelAdmin):
             'fields': ('user', 'is_active')
         }),
         ('Company Assignment', {
-            'fields': ('company', 'branch')
+            'fields': ('company', 'branch', 'department')
         }),
         ('Employment Details', {
-            'fields': ('employee_id', 'department', 'role', 'phone')
+            'fields': ('employee_id', 'job_title', 'role', 'phone', 'mobile')
+        }),
+        ('Personal Information', {
+            'fields': ('date_of_birth', 'hire_date', 'emergency_contact', 'emergency_phone'),
+            'classes': ('collapse',)
+        }),
+        ('Address', {
+            'fields': ('address', 'city', 'country'),
+            'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -180,7 +197,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     status_badge.short_description = 'Status'
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'company', 'branch')
+        return super().get_queryset(request).select_related('user', 'company', 'branch', 'department')
 
 
 # Re-register User with custom UserAdmin

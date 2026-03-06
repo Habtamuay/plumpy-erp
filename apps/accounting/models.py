@@ -136,15 +136,18 @@ class Account(models.Model):
     def update_balance(self):
         """Update current balance based on journal entries"""
         from django.db.models import Sum
-        
-        debit_total = self.journalline_set.filter(
+        from .models import JournalLine  # Import here to avoid circular imports
+    
+        debit_total = JournalLine.objects.filter(
+            account=self,
             debit__gt=0
         ).aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
-        
-        credit_total = self.journalline_set.filter(
+    
+        credit_total = JournalLine.objects.filter(
+            account=self,
             credit__gt=0
         ).aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
-        
+    
         self.current_balance = self.opening_balance + debit_total - credit_total
         self.save(update_fields=['current_balance'])
     
@@ -201,7 +204,7 @@ class JournalEntry(models.Model):
 class JournalLine(models.Model):
     """Journal Entry lines"""
     journal = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name='lines')
-    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name='journal_lines')
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name='journal_lines')  # Make sure this related_name is set
     debit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     credit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     narration = models.CharField(max_length=255, blank=True)

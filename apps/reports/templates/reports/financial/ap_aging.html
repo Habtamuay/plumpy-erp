@@ -1,0 +1,53 @@
+<!-- reports/financial/ap_aging.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}AP Aging{% endblock %}
+{% block report_title %}Accounts Payable Aging{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="aging_buckets">Aging Buckets:</label>
+                <input type="text" id="aging_buckets" name="aging_buckets" class="form-control" placeholder="0-30,31-60,61-90,90+">
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>AP Aging</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Supplier</th>
+            <th>0-30 Days</th>
+            <th>31-60 Days</th>
+            <th>61+ Days</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic data rows -->
+    </tbody>
+</table>
+<canvas id="apChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ctx = document.getElementById('apChart').getContext('2d');
+    const apChart = new Chart(ctx, {
+        type: 'stackedBar',
+        data: {
+            labels: ['Supp 1', 'Supp 2'],
+            datasets: [/* Dynamic datasets */]
+        }
+    });
+</script>
+{% endblock %}

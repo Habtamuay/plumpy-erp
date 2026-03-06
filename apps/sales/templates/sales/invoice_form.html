@@ -1,0 +1,410 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if invoice %}Edit{% else %}Create{% endif %} Invoice{% endblock %}
+
+{% block extra_css %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .select2-container--bootstrap-5 .select2-selection {
+        min-height: 38px;
+    }
+    .invoice-line-row td {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0">
+                        <i class="bi bi-file-text me-2"></i>
+                        {% if invoice %}Edit{% else %}Create{% endif %} Invoice
+                    </h2>
+                    <a href="{% url 'sales:invoice_list' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Back to List
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="invoiceForm">
+        {% csrf_token %}
+        
+        <div class="row">
+            <div class="col-md-8">
+                {% if invoice %}
+                <div class="card mb-4">
+                    <div class="card-header"><h5 class="mb-0">Invoice Info</h5></div>
+                    <div class="card-body">
+                        <p><strong>Invoice #:</strong> {{ invoice.invoice_number }}</p>
+                        <p><strong>FS No.:</strong> {{ invoice.fs_number }}</p>
+                        <p><strong>Ref No.:</strong> {{ invoice.reference_number }}</p>
+                        <p><strong>Payment Method:</strong> {{ invoice.payment_method|title }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                <!-- Customer Information -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Customer Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Customer *</label>
+                                <select name="customer" class="form-select" id="customerSelect" required>
+                                    <option value="">-- Select Customer --</option>
+                                    {% for customer in customers %}
+                                    <option value="{{ customer.id }}" {% if invoice and invoice.customer.id == customer.id %}selected{% endif %}>
+                                        {{ customer.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Sales Order</label>
+                                <select name="sales_order" class="form-select" id="salesOrderSelect">
+                                    <option value="">-- Optional: Select Sales Order --</option>
+                                    {% for order in sales_orders %}
+                                    <option value="{{ order.id }}" {% if invoice and invoice.sales_order.id == order.id %}selected{% endif %}>
+                                        {{ order.order_number }} - {{ order.customer.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Payment Method</label>
+                            <select name="payment_method" class="form-select" id="paymentMethod">
+                                {% for code,label in payment_methods %}
+                                <option value="{{ code }}" {% if invoice and invoice.payment_method == code %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invoice Lines -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Invoice Lines</h5>
+                        <button type="button" class="btn btn-sm btn-primary" id="addLine">
+                            <i class="bi bi-plus-circle"></i> Add Line
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered" id="invoiceLines">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Quantity</th>
+                                        <th>Unit</th>
+                                        <th>Unit Price</th>
+                                        <th>Discount %</th>
+                                        <th>Total</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if invoice and lines %}
+                                        {% for line in lines %}
+                                        <tr class="invoice-line-row">
+                                            <td>
+                                                <select name="item" class="form-select form-select-sm item-select" required>
+                                                    <option value="">-- Select --</option>
+                                                    {% for item in items %}
+                                                    <option value="{{ item.id }}" {% if line.item.id == item.id %}selected{% endif %}>
+                                                        {{ item.code }} - {{ item.name }}
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </td>
+                                            <td><input type="number" name="quantity" class="form-control form-control-sm quantity-input" value="{{ line.quantity }}" step="0.01" required></td>
+                                            <td>
+                                                <select name="unit" class="form-select form-select-sm unit-select">
+                                                    <option value="">--</option>
+                                                    {% for unit in units %}
+                                                    <option value="{{ unit.id }}" {% if line.unit.id == unit.id %}selected{% endif %}>{{ unit.abbreviation }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </td>
+                                            <td><input type="number" name="unit_price" class="form-control form-control-sm unit-price-input" value="{{ line.unit_price }}" step="0.01" required></td>
+                                            <td><input type="number" name="discount_percent" class="form-control form-control-sm discount-input" value="{{ line.discount_percent|default:0 }}" step="0.01"></td>
+                                            <td><input type="text" class="form-control form-control-sm bg-light line-total" readonly value="{{ line.total_price|floatformat:2 }}"></td>
+                                            <td><button type="button" class="btn btn-sm btn-danger remove-line"><i class="bi bi-trash"></i></button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr id="emptyRow">
+                                            <td colspan="7" class="text-center py-4">
+                                                Click "Add Line" to add items to this invoice.
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <!-- Invoice Details -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Invoice Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Invoice Date *</label>
+                            <input type="date" name="invoice_date" class="form-control" id="invoiceDate"
+                                   value="{% if invoice %}{{ invoice.invoice_date|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Due Date</label>
+                            <input type="date" name="due_date" class="form-control" id="dueDate"
+                                   value="{% if invoice %}{{ invoice.due_date|date:'Y-m-d' }}{% endif %}">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Financial Summary -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Financial Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Tax Rate (%)</label>
+                            <input type="number" name="tax_rate" class="form-control" id="taxRate" value="{{ invoice.tax_rate|default:0 }}" step="0.01">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Discount Amount</label>
+                            <input type="number" name="discount_amount" class="form-control" id="discountAmount" value="{{ invoice.discount_amount|default:0 }}" step="0.01">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Shipping Amount</label>
+                            <input type="number" name="shipping_amount" class="form-control" id="shippingAmount" value="{{ invoice.shipping_amount|default:0 }}" step="0.01">
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Subtotal:</span>
+                            <strong id="subtotal">0.00</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Tax:</span>
+                            <strong id="tax">0.00</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Total:</span>
+                            <strong id="total">0.00</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Notes</h5>
+                    </div>
+                    <div class="card-body">
+                        <textarea name="notes" class="form-control" rows="3">{{ invoice.notes|default:'' }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-2"></i>{% if invoice %}Update{% else %}Create{% endif %} Invoice
+                    </button>
+                    {% if not invoice %}
+                    <button type="submit" name="save_and_new" class="btn btn-outline-primary">
+                        <i class="bi bi-save me-2"></i>Save & New
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Template for new line -->
+<template id="lineTemplate">
+    <tr class="invoice-line-row">
+        <td>
+            <select name="item" class="form-select form-select-sm item-select" required>
+                <option value="">-- Select --</option>
+                {% for item in items %}
+                <option value="{{ item.id }}">{{ item.code }} - {{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td><input type="number" name="quantity" class="form-control form-control-sm quantity-input" value="1" step="0.01" required></td>
+        <td>
+            <select name="unit" class="form-select form-select-sm unit-select">
+                <option value="">--</option>
+                {% for unit in units %}
+                <option value="{{ unit.id }}">{{ unit.abbreviation }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td><input type="number" name="unit_price" class="form-control form-control-sm unit-price-input" value="0" step="0.01" required></td>
+        <td><input type="number" name="discount_percent" class="form-control form-control-sm discount-input" value="0" step="0.01"></td>
+        <td><input type="text" class="form-control form-control-sm bg-light line-total" readonly value="0.00"></td>
+        <td><button type="button" class="btn btn-sm btn-danger remove-line"><i class="bi bi-trash"></i></button></td>
+    </tr>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        // Initialize Select2
+        $('#customerSelect, #salesOrderSelect').select2({
+            theme: 'bootstrap-5',
+            width: '100%'
+        });
+        
+        // Function to calculate line total
+        function calculateLineTotal(row) {
+            var qty = parseFloat(row.find('.quantity-input').val()) || 0;
+            var price = parseFloat(row.find('.unit-price-input').val()) || 0;
+            var discount = parseFloat(row.find('.discount-input').val()) || 0;
+            
+            var subtotal = qty * price;
+            var discountAmount = subtotal * (discount / 100);
+            var total = subtotal - discountAmount;
+            
+            row.find('.line-total').val(total.toFixed(2));
+        }
+        
+        // Function to calculate grand totals
+        function calculateTotals() {
+            var subtotal = 0;
+            
+            $('.invoice-line-row').each(function() {
+                var qty = parseFloat($(this).find('.quantity-input').val()) || 0;
+                var price = parseFloat($(this).find('.unit-price-input').val()) || 0;
+                subtotal += qty * price;
+            });
+            
+            var discount = parseFloat($('#discountAmount').val()) || 0;
+            var shipping = parseFloat($('#shippingAmount').val()) || 0;
+            var taxRate = parseFloat($('#taxRate').val()) || 0;
+            
+            var afterDiscount = subtotal - discount;
+            var tax = afterDiscount * (taxRate / 100);
+            var total = afterDiscount + tax + shipping;
+            
+            $('#subtotal').text(subtotal.toFixed(2));
+            $('#tax').text(tax.toFixed(2));
+            $('#total').text(total.toFixed(2));
+        }
+        
+        // Add line
+        $('#addLine').click(function() {
+            var template = document.getElementById('lineTemplate');
+            var clone = template.content.cloneNode(true);
+            
+            // Remove empty row if it exists
+            var emptyRow = document.getElementById('emptyRow');
+            if (emptyRow) {
+                emptyRow.remove();
+            }
+            
+            document.querySelector('#invoiceLines tbody').appendChild(clone);
+            
+            // Initialize Select2 for the new row's item select
+            var newRow = $('#invoiceLines tbody tr:last');
+            newRow.find('.item-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%'
+            });
+            
+            calculateTotals();
+        });
+        
+        // Remove line
+        $(document).on('click', '.remove-line', function() {
+            if ($('.invoice-line-row').length > 1) {
+                $(this).closest('tr').remove();
+                calculateTotals();
+            } else {
+                alert('You must keep at least one line.');
+            }
+        });
+        
+        // Calculate line total on input change
+        $(document).on('input', '.quantity-input, .unit-price-input, .discount-input', function() {
+            var row = $(this).closest('tr');
+            calculateLineTotal(row);
+            calculateTotals();
+        });
+        
+        // Recalculate on discount, shipping, tax changes
+        $('#discountAmount, #shippingAmount, #taxRate').on('input', function() {
+            calculateTotals();
+        });
+        
+        // Auto-load sales order details
+        $('#salesOrderSelect').on('change', function() {
+            var orderId = $(this).val();
+            if (orderId) {
+                $.ajax({
+                    url: '{% url "sales:get_sales_order_details" %}',
+                    data: { order_id: orderId },
+                    dataType: 'json',
+                    success: function(data) {
+                        if (data.success) {
+                            // Set customer
+                            $('#customerSelect').val(data.customer_id).trigger('change');
+                            
+                            // Clear existing lines
+                            $('#invoiceLines tbody').empty();
+                            
+                            // Add lines from order
+                            if (data.lines && data.lines.length > 0) {
+                                data.lines.forEach(function(line) {
+                                    $('#addLine').click();
+                                    var row = $('#invoiceLines tbody tr:last');
+                                    
+                                    row.find('.item-select').val(line.item_id).trigger('change');
+                                    row.find('.quantity-input').val(line.quantity);
+                                    if (line.unit_id) {
+                                        row.find('.unit-select').val(line.unit_id).trigger('change');
+                                    }
+                                    row.find('.unit-price-input').val(line.unit_price);
+                                    row.find('.discount-input').val(line.discount_percent || 0);
+                                    calculateLineTotal(row);
+                                });
+                            }
+                            
+                            calculateTotals();
+                        } else {
+                            alert('Error loading order details: ' + (data.error || 'Unknown error'));
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('AJAX Error: ' + error);
+                        console.error('AJAX Error:', xhr.responseText);
+                    }
+                });
+            }
+        });
+        
+        // Initial calculation
+        calculateTotals();
+    });
+</script>
+{% endblock %}

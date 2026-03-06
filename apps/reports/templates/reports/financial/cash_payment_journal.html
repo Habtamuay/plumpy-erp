@@ -1,0 +1,98 @@
+<!-- reports/financial/cash_payment_journal.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Cash Payment Journal{% endblock %}
+{% block report_title %}Cash Payment Journal{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-3">
+                <label for="date_from">From Date:</label>
+                {{ form.date_from }}
+            </div>
+            <div class="col-md-3">
+                <label for="date_to">To Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-3 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Payments</h5>
+                <h3 class="text-danger">${{ total_payments|floatformat:2 }}</h3>
+                <small class="text-muted">{{ payments|length }} transactions</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Period</h5>
+                <h6 class="text-primary">{{ date_from|date:"M d, Y" }} - {{ date_to|date:"M d, Y" }}</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Cash Payment Transactions</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Narration</th>
+                        <th>Paid To</th>
+                        <th>Account Code</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.date|date:"M d, Y" }}</td>
+                        <td>{{ payment.reference }}</td>
+                        <td>{{ payment.narration }}</td>
+                        <td>{{ payment.paid_to }}</td>
+                        <td>{{ payment.account_code }}</td>
+                        <td class="text-end">
+                            <strong class="text-danger">${{ payment.amount|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-dark">
+                        <td colspan="5" class="text-end"><strong>Total Payments:</strong></td>
+                        <td class="text-end">
+                            <strong class="text-danger">${{ total_payments|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if not payments %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    No cash payment transactions found for the selected period.
+</div>
+{% endif %}
+{% endblock %}

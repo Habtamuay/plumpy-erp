@@ -1,0 +1,97 @@
+<!-- reports/financial/balance_sheet.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Balance Sheet{% endblock %}
+{% block report_title %}Balance Sheet{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="date_to">As of Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Balance Sheet as of {{ today }}</h3>
+
+<div class="row">
+    <div class="col-md-6">
+        <h4>Assets</h4>
+        <table class="table table-striped">
+            {% for category, accounts in assets_by_category.items %}
+            <thead>
+                <tr>
+                    <th colspan="2">{{ category }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in accounts %}
+                <tr>
+                    <td>{{ account.name }}</td>
+                    <td class="text-end">${{ account.balance|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% endfor %}
+            <tfoot>
+                <tr class="table-dark">
+                    <th>Total Assets</th>
+                    <th class="text-end">${{ total_assets|floatformat:2 }}</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    
+    <div class="col-md-6">
+        <h4>Liabilities & Equity</h4>
+        <table class="table table-striped">
+            {% for category, accounts in liabilities_by_category.items %}
+            <thead>
+                <tr>
+                    <th colspan="2">{{ category }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in accounts %}
+                <tr>
+                    <td>{{ account.name }}</td>
+                    <td class="text-end">${{ account.balance|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% endfor %}
+            
+            <thead>
+                <tr>
+                    <th colspan="2">Equity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in equity %}
+                <tr>
+                    <td>{{ account.name }}</td>
+                    <td class="text-end">${{ account.balance|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            
+            <tfoot>
+                <tr class="table-dark">
+                    <th>Total Liabilities & Equity</th>
+                    <th class="text-end">${{ total_liabilities|floatformat:2|intcomma }} + ${{ total_equity|floatformat:2|intcomma }} = ${{ (total_liabilities + total_equity)|floatformat:2|intcomma }}</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

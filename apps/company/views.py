@@ -10,12 +10,22 @@ import csv
 from .models import Company, Branch, Department, Customer, UserProfile
 from apps.accounting.models import PurchaseBill, Payment
 from apps.purchasing.models import Supplier, PurchaseOrder
-from apps.sales.models import SalesOrder, SalesInvoice  # Change this import
+from apps.sales.models import SalesOrder, SalesInvoice
 
 
 # ============================
 # Company Views
 # ============================
+
+@login_required
+def company_list(request):
+    """List all companies"""
+    companies = Company.objects.filter(is_active=True).annotate(
+        branch_count=Count('branches')
+    ).order_by('name')
+    
+    return render(request, 'company/company_list.html', {'companies': companies})
+
 
 @login_required
 def company_detail(request, company_id):
@@ -37,13 +47,6 @@ def company_detail(request, company_id):
         'today': timezone.now().date(),
     }
     return render(request, 'company/company_detail.html', context)
-
-
-@login_required
-def company_list(request):
-    """List all companies"""
-    companies = Company.objects.filter(is_active=True).order_by('name')
-    return render(request, 'company/company_list.html', {'companies': companies})
 
 
 # ============================
@@ -126,6 +129,10 @@ def customer_detail(request, pk):
     # Get recent invoices from sales app
     recent_invoices = SalesInvoice.objects.filter(customer=customer).order_by('-invoice_date')[:10]
     
+    # Calculate remaining amount for each invoice
+    for invoice in recent_invoices:
+        invoice.remaining = invoice.total_amount - invoice.paid_amount
+    
     # Get recent payments from accounting app
     recent_payments = Payment.objects.filter(customer=customer).order_by('-date')[:10]
     
@@ -135,10 +142,15 @@ def customer_detail(request, pk):
         status__in=['posted', 'paid']
     ).aggregate(total=Sum('total_amount'))['total'] or 0
     
-    outstanding = SalesInvoice.objects.filter(
+    # Calculate outstanding amount
+    outstanding_invoices = SalesInvoice.objects.filter(
         customer=customer,
         status__in=['posted', 'partial', 'overdue']
-    ).aggregate(total=Sum('remaining_amount'))['total'] or 0
+    )
+    
+    outstanding = 0
+    for inv in outstanding_invoices:
+        outstanding += inv.total_amount - inv.paid_amount
     
     context = {
         'customer': customer,
@@ -172,6 +184,10 @@ def customer_ledger(request, customer_id):
         customer=customer,
         invoice_date__range=[from_date, to_date]
     ).order_by('-invoice_date')
+    
+    # Calculate remaining for each invoice
+    for invoice in invoices:
+        invoice.remaining = invoice.total_amount - invoice.paid_amount
     
     # Get orders from sales app
     orders = SalesOrder.objects.filter(
@@ -354,9 +370,6 @@ def company_dashboard(request):
 @login_required
 def export_customers(request):
     """Export customers to CSV"""
-    import csv
-    from django.http import HttpResponse
-    
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="customers_{timezone.now().strftime("%Y%m%d")}.csv"'
     

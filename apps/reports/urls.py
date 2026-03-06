@@ -50,6 +50,12 @@ urlpatterns = [
     path('financial/trial-balance/', views.trial_balance_report, name='trial_balance'),
     path('financial/accounts-receivable/', views.accounts_receivable_report, name='ar_report'),
     path('financial/accounts-payable/', views.accounts_payable_report, name='ap_report'),
+    path('financial/general-ledger/', views.general_ledger_report, name='general_ledger'),
+    path('financial/cash-payment-journal/', views.cash_payment_journal, name='cash_payment_journal'),
+    path('financial/sales-journal/', views.sales_journal, name='sales_journal'),
+    path('financial/receipt-journal/', views.receipt_journal, name='receipt_journal'),
+    path('financial/purchase-journal/', views.purchase_journal, name='purchase_journal'),
+    path('financial/inventory-journal/', views.inventory_journal, name='inventory_journal'),
     
     # ============================
     # Custom Reports

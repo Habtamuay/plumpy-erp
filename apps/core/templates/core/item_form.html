@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{% if item %}Edit{% else %}Create{% endif %} Item - Plumpy ERP{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">
+            <i class="bi bi-box me-2"></i>{% if item %}Edit{% else %}Create{% endif %} Item
+        </h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'core:item_list' %}">Items</a></li>
+                <li class="breadcrumb-item active">{% if item %}Edit{% else %}Create{% endif %}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post" class="needs-validation" novalidate>
+            {% csrf_token %}
+            
+            <div class="row g-3">
+                <!-- Basic Information -->
+                <div class="col-md-6">
+                    <label for="code" class="form-label">Code *</label>
+                    <input type="text" class="form-control" id="code" name="code" value="{{ item.code|default:'' }}" required>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Name *</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ item.name|default:'' }}" required>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="peach_code" class="form-label">Peach Code</label>
+                    <input type="text" class="form-control" id="peach_code" name="peach_code" value="{{ item.peach_code|default:'' }}">
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="category" class="form-label">Category *</label>
+                    <select class="form-select" id="category" name="category" required>
+                        <option value="">Select Category</option>
+                        {% for cat_key, cat_value in categories %}
+                        <option value="{{ cat_key }}" {% if item.category == cat_key %}selected{% endif %}>{{ cat_value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="product_type" class="form-label">Product Type</label>
+                    <select class="form-select" id="product_type" name="product_type">
+                        <option value="">Select Type</option>
+                        {% for type_key, type_value in product_types %}
+                        <option value="{{ type_key }}" {% if item.product_type == type_key %}selected{% endif %}>{{ type_value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="unit" class="form-label">Unit *</label>
+                    <select class="form-select" id="unit" name="unit" required>
+                        <option value="">Select Unit</option>
+                        {% for unit in units %}
+                        <option value="{{ unit.id }}" {% if item.unit.id == unit.id %}selected{% endif %}>{{ unit.name }} ({{ unit.abbreviation }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Stock Information -->
+                <div class="col-12">
+                    <hr>
+                    <h5 class="mb-3">Stock Information</h5>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="current_stock" class="form-label">Current Stock</label>
+                    <input type="number" step="0.0001" class="form-control" id="current_stock" name="current_stock" value="{{ item.current_stock|default:'0' }}">
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="minimum_stock" class="form-label">Minimum Stock</label>
+                    <input type="number" step="0.0001" class="form-control" id="minimum_stock" name="minimum_stock" value="{{ item.minimum_stock|default:'0' }}">
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="reorder_point" class="form-label">Reorder Point</label>
+                    <input type="number" step="0.0001" class="form-control" id="reorder_point" name="reorder_point" value="{{ item.reorder_point|default:'0' }}">
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="reorder_quantity" class="form-label">Reorder Quantity</label>
+                    <input type="number" step="0.0001" class="form-control" id="reorder_quantity" name="reorder_quantity" value="{{ item.reorder_quantity|default:'0' }}">
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="unit_cost" class="form-label">Unit Cost (ETB)</label>
+                    <input type="number" step="0.0001" class="form-control" id="unit_cost" name="unit_cost" value="{{ item.unit_cost|default:'0' }}">
+                </div>
+                
+                <!-- RUTF Specific -->
+                <div class="col-12">
+                    <hr>
+                    <h5 class="mb-3">RUTF Specific Information</h5>
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="shelf_life_days" class="form-label">Shelf Life (days)</label>
+                    <input type="number" class="form-control" id="shelf_life_days" name="shelf_life_days" value="{{ item.shelf_life_days|default:'' }}">
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="pack_size_kg" class="form-label">Pack Size (kg)</label>
+                    <input type="number" step="0.0001" class="form-control" id="pack_size_kg" name="pack_size_kg" value="{{ item.pack_size_kg|default:'' }}">
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="allergen_peanut" name="allergen_peanut" {% if item.allergen_peanut %}checked{% endif %}>
+                        <label class="form-check-label" for="allergen_peanut">
+                            Contains Peanut Allergen
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3">{{ item.description|default:'' }}</textarea>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {% if item.is_active or not item %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            Active
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save me-1"></i> {% if item %}Update{% else %}Create{% endif %} Item
+                </button>
+                <a href="{% url 'core:item_list' %}" class="btn btn-outline-secondary ms-2">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

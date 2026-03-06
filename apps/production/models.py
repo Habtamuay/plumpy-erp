@@ -1,116 +1,327 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from django.core.validators import MinValueValidator
-from django.utils.html import format_html
+from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
-from apps.core.models import Item
+
+from apps.core.models import Item, Unit
 
 
 class BOM(models.Model):
-    """Bill of Materials - defined per 1 kg of finished product"""
+    """
+    Bill of Materials
+    Defined per base quantity (normally 1000kg = 1 Metric Ton)
+    """
+
+    BOM_TYPE_CHOICES = [
+        ("formula", "Formula / Recipe"),
+        ("packing", "Packing Materials"),
+    ]
+
     product = models.ForeignKey(
         Item,
         on_delete=models.PROTECT,
-        limit_choices_to={'category': 'finished'},
-        related_name='boms'
+        limit_choices_to={"category": "finished"},
+        related_name="boms",
     )
+
+    bom_type = models.CharField(
+        max_length=20,
+        choices=BOM_TYPE_CHOICES,
+        default="formula",
+    )
+
     version = models.PositiveIntegerField(default=1)
+
     is_active = models.BooleanField(default=True)
+
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Default BOM for this product type",
+    )
+
     effective_from = models.DateField(default=timezone.now)
-    notes = models.TextField(blank=True, help_text="e.g. WHO compliant recipe v2.3 - March 2026")
+
+    effective_to = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Leave blank if currently active",
+    )
+
+    notes = models.TextField(
+        blank=True,
+        help_text="Example: WHO compliant recipe v2.3",
+    )
 
     base_quantity = models.DecimalField(
         max_digits=10,
         decimal_places=4,
-        default=1.0000,
-        help_text="BOM is defined per this many kg of product (usually 1)"
+        default=1000.0000,
+        help_text="Base quantity (usually 1000kg)",
+    )
+
+    base_uom = models.ForeignKey(
+        Unit,
+        on_delete=models.PROTECT,
+        related_name="bom_base_units",
+    )
+
+    yield_percent = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=100.00,
+        validators=[
+            MinValueValidator(0),
+            MaxValueValidator(100),
+        ],
+        help_text="Expected yield %",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_boms",
+    )
+
+    class Meta:
+        unique_together = [["product", "bom_type", "version"]]
+
+        ordering = ["product", "bom_type", "-version"]
+
+        indexes = [
+            models.Index(fields=["product", "bom_type", "is_active"]),
+            models.Index(fields=["effective_from", "effective_to"]),
+        ]
+
+        verbose_name = "Bill of Materials"
+        verbose_name_plural = "Bills of Materials"
+
+    def __str__(self):
+        return f"{self.product.code} - {self.get_bom_type_display()} v{self.version}"
+
+    def clean(self):
+        """BOM validation"""
+
+        if self.effective_to and self.effective_from > self.effective_to:
+            raise ValidationError("Effective from date cannot be after effective to date.")
+
+        if self.is_default:
+
+            qs = BOM.objects.filter(
+                product=self.product,
+                bom_type=self.bom_type,
+                is_default=True,
+            )
+
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+
+            if qs.exists():
+                raise ValidationError(
+                    f"A default {self.get_bom_type_display()} BOM already exists for this product."
+                )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_current(self):
+
+        today = timezone.now().date()
+
+        valid_from = self.effective_from <= today
+        not_expired = not self.effective_to or self.effective_to >= today
+
+        return self.is_active and valid_from and not_expired
+
+    @property
+    def components_count(self):
+        return self.lines.count()
+
+    @property
+    def total_material_cost_per_base(self):
+
+        total = Decimal("0")
+
+        lines = self.lines.select_related("component")
+
+        for line in lines:
+
+            cost = line.quantity_per_base * (
+                line.component.unit_cost or Decimal("0")
+            )
+
+            total += cost
+
+        return total
+
+    @property
+    def total_material_cost_per_kg(self):
+
+        if self.base_quantity > 0:
+            return self.total_material_cost_per_base / self.base_quantity
+
+        return Decimal("0")
+
+    @property
+    def total_weight_per_base(self):
+
+        total = Decimal("0")
+
+        for line in self.lines.filter(component__category="raw"):
+
+            total += line.quantity_per_base
+
+        return total
+
+    def get_component_by_type(self, category):
+
+        return self.lines.filter(component__category=category)
+
+
+class BOMLine(models.Model):
+    """
+    BOM Component Line
+    """
+
+    bom = models.ForeignKey(
+        BOM,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+
+    component = models.ForeignKey(
+        Item,
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__in": ["raw", "packing"]},
+        related_name="bom_lines",
+    )
+
+    quantity_per_base = models.DecimalField(
+        max_digits=15,
+        decimal_places=6,
+        validators=[MinValueValidator(0.000001)],
+    )
+
+    unit = models.ForeignKey(
+        Unit,
+        on_delete=models.PROTECT,
+        related_name="bom_line_units",
+    )
+
+    wastage_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[
+            MinValueValidator(0),
+            MaxValueValidator(100),
+        ],
+    )
+
+    sequence = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="10,20,30 order",
+    )
+
+    is_critical = models.BooleanField(default=False)
+
+    notes = models.CharField(
+        max_length=250,
+        blank=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [['product', 'version']]
-        ordering = ['-version']
-        verbose_name = "Bill of Materials"
-        verbose_name_plural = "Bills of Materials"
+        ordering = ["bom", "sequence", "id"]
+
+        unique_together = [["bom", "component"]]
+
         indexes = [
-            models.Index(fields=['product', 'is_active']),
-            models.Index(fields=['effective_from']),
+            models.Index(fields=["bom", "component"]),
         ]
 
-    def __str__(self):
-        return f"{self.product.code} v{self.version} (per {self.base_quantity} kg)"
-
-    @property
-    def is_current(self):
-        """Check if BOM is current (active and effective from <= today)"""
-        return self.is_active and self.effective_from <= timezone.now().date()
-
-    @property
-    def total_material_cost_per_base(self):
-        """Calculate total material cost per base quantity (usually 1 kg)"""
-        total = Decimal('0.00')
-        for line in self.lines.all():
-            cost = line.quantity_per_kg * (line.component.unit_cost or Decimal('0.00'))
-            total += cost
-        return total
-
-    @property
-    def components_count(self):
-        """Get number of components in this BOM"""
-        return self.lines.count()
-
-
-class BOMLine(models.Model):
-    """One component (ingredient or packing) per BOM"""
-    bom = models.ForeignKey(BOM, on_delete=models.CASCADE, related_name='lines')
-
-    component = models.ForeignKey(
-        Item,
-        on_delete=models.PROTECT,
-        limit_choices_to={'category__in': ['raw', 'packing']}
-    )
-
-    quantity_per_kg = models.DecimalField(
-        max_digits=12,
-        decimal_places=6,
-        validators=[MinValueValidator(0.000001)],
-        help_text="Kg / Meters / Pcs per 1 kg of finished product"
-    )
-
-    unit = models.ForeignKey('core.Unit', on_delete=models.PROTECT)
-
-    wastage_percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0.00,
-        help_text="Standard wastage % from your BOM table"
-    )
-
-    sequence = models.PositiveSmallIntegerField(default=10)
-    notes = models.CharField(max_length=250, blank=True)
-
-    class Meta:
-        ordering = ['sequence', 'id']
-        unique_together = [['bom', 'component']]
         verbose_name = "BOM Line"
         verbose_name_plural = "BOM Lines"
 
     def __str__(self):
-        return f"{self.component.code} → {self.quantity_per_kg} {self.unit} (w{self.wastage_percentage}%)"
+        return f"{self.bom.product.code} → {self.component.code}"
+
+    def clean(self):
+        """Validate BOM line"""
+
+        if not self.bom or not self.component:
+            return
+
+        category = self.component.category
+
+        if self.bom.bom_type == "formula" and category != "raw":
+            raise ValidationError(
+                f"Formula BOM can only contain RAW materials. '{self.component.name}' is {category}."
+            )
+
+        if self.bom.bom_type == "packing" and category != "packing":
+            raise ValidationError(
+                f"Packing BOM can only contain PACKING materials. '{self.component.name}' is {category}."
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def quantity_per_kg(self):
+
+        if self.bom.base_quantity > 0:
+            return self.quantity_per_base / self.bom.base_quantity
+
+        return Decimal("0")
 
     @property
     def quantity_with_wastage(self):
-        """Calculate quantity including wastage percentage"""
-        return self.quantity_per_kg * (1 + self.wastage_percentage / 100)
+
+        return self.quantity_per_base * (
+            Decimal("1") + self.wastage_percentage / Decimal("100")
+        )
+
+    @property
+    def cost_per_base(self):
+
+        unit_cost = self.component.unit_cost or Decimal("0")
+
+        return self.quantity_per_base * unit_cost
 
     @property
     def cost_per_kg(self):
-        """Calculate cost contribution per kg of finished product"""
-        return self.quantity_per_kg * (self.component.unit_cost or Decimal('0.00'))
 
+        if self.bom.base_quantity > 0:
+            return self.cost_per_base / self.bom.base_quantity
+
+        return Decimal("0")
+
+    @property
+    def display_quantity(self):
+
+        qty = self.quantity_per_base
+
+        if qty >= 1000:
+            return f"{qty/1000:.3f} T"
+
+        if qty >= 1:
+            return f"{qty:.3f} kg"
+
+        if qty >= 0.001:
+            return f"{qty*1000:.1f} g"
+
+        return f"{qty:.6f} kg"
 
 class InventoryMovement(models.Model):
     """Stock Movement Log - tracks all inventory movements"""
@@ -248,12 +459,17 @@ class ProductionRun(models.Model):
         related_name='production_runs',
         verbose_name="Bill of Materials"
     )
+    
+    # Note: product is derived from bom.product, but we keep this field
+    # for database queries and backward compatibility
     product = models.ForeignKey(
         Item,
         on_delete=models.PROTECT,
         related_name='produced_runs',
         limit_choices_to={'category': 'finished'},
-        verbose_name="Finished Product"
+        verbose_name="Finished Product",
+        null=True,  # Allow null temporarily for migration
+        blank=True
     )
     
     # Quantities
@@ -384,18 +600,23 @@ class ProductionRun(models.Model):
         verbose_name_plural = "Production Runs"
         indexes = [
             models.Index(fields=['status', 'start_date']),
-            models.Index(fields=['product', 'status']),
+            # Temporarily remove the product index to fix the startup error
+            # We'll add it back in a separate migration after the model is ready
+            # models.Index(fields=['product', 'status']),
         ]
 
     def __str__(self):
-        return f"Run #{self.id} — {self.product.code} × {self.planned_quantity}kg ({self.get_status_display()})"
+        product_code = self.product.code if self.product and hasattr(self, 'product') and self.product_id else "No Product"
+        return f"Run #{self.id} — {product_code} × {self.planned_quantity}kg ({self.get_status_display()})"
 
     def clean(self):
         """Validate the production run"""
-        if self.product != self.bom.product:
-            raise ValidationError({
-                'product': "Product must match the BOM's finished product"
-            })
+        # Only validate if both bom and product exist
+        if self.bom and hasattr(self.bom, 'product') and self.bom.product:
+            if self.product and self.product_id and self.product != self.bom.product:
+                raise ValidationError({
+                    'product': "Product must match the BOM's finished product"
+                })
 
         if self.actual_quantity is not None and self.actual_quantity < 0:
             raise ValidationError({
@@ -409,19 +630,54 @@ class ProductionRun(models.Model):
 
     def save(self, *args, **kwargs):
         """Auto-set fields on save"""
-        if self.pk is None:
-            # New run: auto-set product from BOM
-            self.product = self.bom.product
+        is_new = self.pk is None
+        
+        if is_new and self.bom and hasattr(self.bom, 'product') and self.bom.product:
+            # New run: auto-set product from BOM if not already set
+            if not self.product_id:
+                self.product = self.bom.product
 
             # Snapshot estimated cost
             if hasattr(self.bom, 'total_material_cost_per_base'):
                 self.estimated_material_cost = self.bom.total_material_cost_per_base * self.planned_quantity
+        
+        # For existing records, ensure product is set from bom if missing
+        if not is_new and not self.product_id and self.bom and hasattr(self.bom, 'product') and self.bom.product:
+            self.product = self.bom.product
 
         # Calculate yield if both quantities are present
-        if self.actual_quantity and self.planned_quantity:
+        if self.actual_quantity and self.planned_quantity and self.planned_quantity > 0:
             self.yield_percentage = (self.actual_quantity / self.planned_quantity) * 100
 
         super().save(*args, **kwargs)
+
+    # ────────────────────────────────────────────────
+    # Property to safely access product (fixes the RelatedObjectDoesNotExist error)
+    # ────────────────────────────────────────────────
+    
+    @property
+    def get_product(self):
+        """
+        Safely get the product from either direct field or via BOM
+        This prevents RelatedObjectDoesNotExist errors
+        """
+        if self.product_id and self.product:
+            return self.product
+        elif self.bom and hasattr(self.bom, 'product') and self.bom.product:
+            return self.bom.product
+        return None
+    
+    @property
+    def product_name(self):
+        """Get product name safely"""
+        product = self.get_product
+        return product.name if product else "Unknown Product"
+    
+    @property
+    def product_code(self):
+        """Get product code safely"""
+        product = self.get_product
+        return product.code if product else "N/A"
 
     # ────────────────────────────────────────────────
     # Business methods
@@ -477,7 +733,12 @@ class ProductionRun(models.Model):
     def complete(self, actual_qty=None, waste_qty=0):
         """
         Complete the run: deduct components, add finished goods, log movements
+        With proper stock checking and preventing double completion
         """
+        # Prevent double completion
+        if self.status == 'completed':
+            raise ValidationError(f"Run #{self.id} is already completed")
+    
         if not self.can_complete():
             raise ValidationError("Only 'in progress' runs can be completed")
 
@@ -486,84 +747,132 @@ class ProductionRun(models.Model):
         if actual_qty <= 0:
             raise ValidationError("Actual quantity must be positive")
 
-        # Check stock availability first
-        self.check_component_stock(actual_qty)
+        # Refresh from database to get latest stock values
+        self.refresh_from_db()
+    
+        # Check if there are any existing consumption movements for this run
+        existing_consumption = self.movements.filter(movement_type='out_production').exists()
+        if existing_consumption:
+            raise ValidationError(
+                f"Run #{self.id} already has consumption movements recorded. "
+                "Cannot complete again."
+            )
 
-        # Calculate standard costs
-        self.standard_material_cost = self.bom.total_material_cost_per_base * actual_qty
-        self.standard_total_cost = self.standard_material_cost + (self.labor_cost or 0) + (self.overhead_cost or 0)
-
-        # Calculate actual material cost from real consumption
-        actual_material = Decimal('0.00')
-
-        # ── Deduct components & log movements ──
-        for line in self.bom.lines.all().select_related('component', 'unit'):
+        # Check stock availability with current database values
+        insufficient = []
+        for line in self.bom.lines.all().select_related('component'):
+            # Refresh component stock from database
+            component = line.component
+            component.refresh_from_db()
+        
             required = line.quantity_per_kg * actual_qty
             required_with_wastage = required * (1 + line.wastage_percentage / 100)
 
-            # Calculate cost
-            line_cost = required_with_wastage * (line.component.unit_cost or Decimal('0.00'))
-            actual_material += line_cost
+            current_stock = component.current_stock or Decimal('0.00')
+        
+            if current_stock < required_with_wastage:
+                insufficient.append({
+                    'code': component.code,
+                    'name': component.name,
+                    'required': required_with_wastage,
+                    'available': current_stock,
+                    'unit': line.unit.abbreviation
+                })
 
-            # Update stock
-            line.component.current_stock -= required_with_wastage
-            line.component.save(update_fields=['current_stock'])
+        if insufficient:
+            error_msg = "Insufficient stock for the following components:\n"
+            for item in insufficient:
+                error_msg += f"  • {item['code']}: need {item['required']:.2f} {item['unit']}, "
+                error_msg += f"have {item['available']:.2f} {item['unit']}\n"
+            raise ValidationError(error_msg)
 
-            # Log consumption
+        # Use a transaction to ensure data consistency
+        from django.db import transaction
+    
+        with transaction.atomic():
+            # Calculate standard costs
+            self.standard_material_cost = self.bom.total_material_cost_per_base * actual_qty
+            standard_total_cost = self.standard_material_cost + (self.labor_cost or 0) + (self.overhead_cost or 0)
+
+            # Calculate actual material cost from real consumption
+            actual_material = Decimal('0.00')
+
+            # ── Deduct components & log movements ──
+            for line in self.bom.lines.all().select_related('component', 'unit'):
+                component = line.component
+                component.refresh_from_db()  # Get latest stock
+            
+                required = line.quantity_per_kg * actual_qty
+                required_with_wastage = required * (1 + line.wastage_percentage / 100)
+
+                # Calculate cost
+                line_cost = required_with_wastage * (component.unit_cost or Decimal('0.00'))
+                actual_material += line_cost
+
+                # Update stock
+                component.current_stock -= required_with_wastage
+                component.save(update_fields=['current_stock', 'updated_at'])
+
+                # Log consumption
+                InventoryMovement.objects.create(
+                    item=component,
+                    quantity=-required_with_wastage,
+                    movement_type='out_production',
+                    reference=f"Run #{self.id}",
+                    notes=f"Consumed for {actual_qty} kg of {self.product_name}",
+                    production_run=self,
+                    created_by=self.created_by
+                )
+
+            # ── Add finished product & log movement ──
+            product = self.get_product
+            if not product:
+                raise ValidationError("Cannot complete run: No product associated")
+            
+            product.refresh_from_db()
+            produced = actual_qty * self.bom.base_quantity
+            product.current_stock += produced
+            product.save(update_fields=['current_stock', 'updated_at'])
+
             InventoryMovement.objects.create(
-                item=line.component,
-                quantity=-required_with_wastage,
-                movement_type='out_production',
+                item=product,
+                quantity=produced,
+                movement_type='in_production',
                 reference=f"Run #{self.id}",
-                notes=f"Consumed for {actual_qty} kg of {self.product.name}",
+                notes=f"Produced {produced} {product.unit} from run",
                 production_run=self,
                 created_by=self.created_by
             )
 
-        # ── Add finished product & log movement ──
-        produced = actual_qty * self.bom.base_quantity
-        self.product.current_stock += produced
-        self.product.save(update_fields=['current_stock'])
+            # Update costs
+            self.actual_material_cost = actual_material
+            actual_total_cost = actual_material + (self.labor_cost or 0) + (self.overhead_cost or 0)
 
-        InventoryMovement.objects.create(
-            item=self.product,
-            quantity=produced,
-            movement_type='in_production',
-            reference=f"Run #{self.id}",
-            notes=f"Produced {produced} {self.product.unit} from run",
-            production_run=self,
-            created_by=self.created_by
-        )
+            # Calculate variances
+            self.material_variance = self.actual_material_cost - self.standard_material_cost
+            self.total_variance = actual_total_cost - standard_total_cost
 
-        # Update costs
-        self.actual_material_cost = actual_material
-        self.actual_total_cost = actual_material + (self.labor_cost or 0) + (self.overhead_cost or 0)
+            # Record waste if any
+            if waste_qty > 0:
+                self.waste_quantity = waste_qty
+                InventoryMovement.objects.create(
+                    item=product,
+                    quantity=-waste_qty,
+                    movement_type='scrap',
+                    reference=f"Run #{self.id}",
+                    notes=f"Waste/Scrap from production run",
+                    production_run=self,
+                    created_by=self.created_by
+                )
 
-        # Calculate variances
-        self.material_variance = self.actual_material_cost - self.standard_material_cost
-        self.total_variance = self.actual_total_cost - self.standard_total_cost
+            # Finalize run
+            self.actual_quantity = actual_qty
+            self.status = 'completed'
+            self.end_date = timezone.now()
+            self.save()
 
-        # Record waste if any
-        if waste_qty > 0:
-            self.waste_quantity = waste_qty
-            InventoryMovement.objects.create(
-                item=self.product,
-                quantity=-waste_qty,
-                movement_type='scrap',
-                reference=f"Run #{self.id}",
-                notes=f"Waste/Scrap from production run",
-                production_run=self,
-                created_by=self.created_by
-            )
-
-        # Finalize run
-        self.actual_quantity = actual_qty
-        self.status = 'completed'
-        self.end_date = timezone.now()
-        self.save()
-
-        # Create cost variance record
-        ProductionCostVariance.objects.create_from_run(self)
+            # Create cost variance record
+            ProductionCostVariance.create_from_run(self)
 
         return True
 
@@ -623,7 +932,7 @@ class ProductionRun(models.Model):
     @property
     def yield_value(self):
         """Calculate yield percentage"""
-        if self.actual_quantity and self.planned_quantity:
+        if self.actual_quantity and self.planned_quantity and self.planned_quantity > 0:
             return (self.actual_quantity / self.planned_quantity) * 100
         return None
 

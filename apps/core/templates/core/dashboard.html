@@ -1,85 +1,917 @@
 {% extends 'base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}Dashboard - Plumpy ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: none;
+        border-radius: 10px;
+        overflow: hidden;
+        height: 100%;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .card-header-module {
+        padding: 15px 20px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        border-bottom: none;
+    }
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.7;
+        margin-right: 15px;
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        line-height: 1.2;
+    }
+    .stat-label {
+        font-size: 0.85rem;
+        opacity: 0.8;
+    }
+    .quick-action-btn {
+        border-radius: 8px;
+        padding: 10px;
+        transition: all 0.2s;
+        text-align: center;
+        color: #495057;
+        text-decoration: none;
+        display: block;
+    }
+    .quick-action-btn:hover {
+        background-color: #f8f9fa;
+        transform: translateY(-2px);
+        text-decoration: none;
+        color: #0d6efd;
+    }
+    .quick-action-icon {
+        font-size: 1.5rem;
+        margin-bottom: 5px;
+    }
+    .progress-sm {
+        height: 6px;
+        border-radius: 3px;
+    }
+    .alert-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        font-size: 0.7rem;
+    }
+    .module-section {
+        margin-bottom: 30px;
+    }
+    .welcome-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+    }
+    .date-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+    }
+    .activity-item {
+        padding: 12px 15px;
+        border-left: 3px solid transparent;
+        transition: all 0.2s;
+    }
+    .activity-item:hover {
+        background-color: #f8f9fa;
+        border-left-color: #0d6efd;
+    }
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    .badge-low-stock {
+        background-color: #fef3c7;
+        color: #92400e;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+    }
+    .badge-critical {
+        background-color: #fee2e2;
+        color: #991b1b;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+    }
+    .badge-good {
+        background-color: #d1fae5;
+        color: #065f46;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+    }
+    
+    /* New styles for the left menu */
+    .dashboard-wrapper {
+        display: flex;
+        gap: 20px;
+    }
+    
+    .left-menu {
+        width: 260px;
+        flex-shrink: 0;
+        background: white;
+        border-radius: 12px;
+        padding: 20px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        height: fit-content;
+    }
+    
+    .menu-section {
+        margin-bottom: 20px;
+    }
+    
+    .menu-section-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        padding: 10px 20px 5px;
+        font-weight: 600;
+    }
+    
+    .menu-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 20px;
+        color: #495057;
+        text-decoration: none;
+        transition: all 0.2s;
+        border-left: 3px solid transparent;
+    }
+    
+    .menu-item:hover {
+        background-color: #f8f9fa;
+        border-left-color: #0d6efd;
+        color: #0d6efd;
+    }
+    
+    .menu-item.active {
+        background-color: #e7f1ff;
+        border-left-color: #0d6efd;
+        color: #0d6efd;
+        font-weight: 500;
+    }
+    
+    .menu-item i {
+        width: 24px;
+        margin-right: 12px;
+        font-size: 1.1rem;
+    }
+    
+    .menu-badge {
+        margin-left: auto;
+        background-color: #e9ecef;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        color: #495057;
+    }
+    
+    .main-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    @media (max-width: 992px) {
+        .dashboard-wrapper {
+            flex-direction: column;
+        }
+        .left-menu {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1 class="mb-4">Plumpy ERP Dashboard</h1>
-    
-    <div class="row">
-        <div class="col-md-3 mb-3">
-            <div class="card text-white bg-primary">
-                <div class="card-body">
-                    <h5 class="card-title">Total Items</h5>
-                    <p class="card-text display-6">{{ total_items }}</p>
-                    <a href="{% url 'core:item_list' %}" class="text-white">View Items →</a>
+
+<!-- Welcome Banner -->
+<div class="welcome-banner d-flex justify-content-between align-items-center">
+    <div>
+        <h2 class="mb-2">Welcome back, {{ request.user.get_full_name|default:request.user.username }}!</h2>
+        <p class="mb-0 opacity-75">Here's what's happening with your business today</p>
+    </div>
+    <div class="date-badge">
+        <i class="bi bi-calendar3 me-2"></i>{{ today|date:"l, F j, Y" }}
+    </div>
+</div>
+
+<!-- Key Metrics Row -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="dashboard-card card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon">
+                        <i class="bi bi-boxes"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ total_items|intcomma }}</div>
+                        <div class="stat-label">Total Items</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3 mb-3">
-            <div class="card text-white bg-success">
-                <div class="card-body">
-                    <h5 class="card-title">Stock Value</h5>
-                    <p class="card-text display-6">{{ total_stock_value|floatformat:0 }} ETB</p>
-                    <a href="{% url 'inventory:current_stock' %}" class="text-white">View Stock →</a>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3 mb-3">
-            <div class="card text-white bg-warning">
-                <div class="card-body">
-                    <h5 class="card-title">Low Stock Items</h5>
-                    <p class="card-text display-6">{{ low_stock_items }}</p>
-                    <a href="{% url 'inventory:low_stock_alerts' %}" class="text-white">View Alerts →</a>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3 mb-3">
-            <div class="card text-white bg-info">
-                <div class="card-body">
-                    <h5 class="card-title">Active Production</h5>
-                    <p class="card-text display-6">{{ active_production_runs }}</p>
-                    <a href="{% url 'production:production_run_list' %}" class="text-white">View Runs →</a>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <small class="opacity-75">Active inventory items</small>
+                    <span class="badge bg-light text-dark">{{ items_by_category|length }} categories</span>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Recent Items</h5>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="dashboard-card card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon">
+                        <i class="bi bi-cash-stack"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ total_stock_value|floatformat:0|intcomma }}</div>
+                        <div class="stat-label">Stock Value (ETB)</div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    {% if recent_items %}
-                    <ul class="list-group">
-                        {% for item in recent_items %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ item.code }} - {{ item.name }}
-                            <span class="badge bg-primary rounded-pill">{{ item.current_stock }} {{ item.unit.abbreviation }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <p>No recent items.</p>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <small class="opacity-75">Current inventory value</small>
+                    <span class="badge bg-light text-dark">{{ warehouse_count }} warehouses</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="dashboard-card card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ low_stock_items }}</div>
+                        <div class="stat-label">Low Stock Alerts</div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <small class="opacity-75">Items below reorder point</small>
+                    <span class="badge bg-danger text-white">{{ near_expiry_count }} near expiry</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="dashboard-card card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon">
+                        <i class="bi bi-gear-wide-connected"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ active_production_runs }}</div>
+                        <div class="stat-label">Active Production</div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <small class="opacity-75">Runs in progress</small>
+                    <span class="badge bg-light text-dark">{{ planned_runs }} planned</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dashboard Wrapper with Left Menu -->
+<div class="dashboard-wrapper">
+<!-- Left Menu - Modules Navigation -->
+<div class="left-menu">
+    <div class="menu-section">
+        <div class="menu-section-title">Overview</div>
+        <a href="{% url 'core:dashboard' %}" class="menu-item active">
+            <i class="bi bi-speedometer2"></i>
+            <span>Dashboard</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Core</div>
+        <a href="{% url 'core:item_list' %}" class="menu-item">
+            <i class="bi bi-box"></i>
+            <span>Items</span>
+        </a>
+        <a href="{% url 'core:unit_list' %}" class="menu-item">
+            <i class="bi bi-rulers"></i>
+            <span>Units</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Company</div>
+        <a href="{% url 'company:company_list' %}" class="menu-item">
+            <i class="bi bi-building"></i>
+            <span>Companies</span>
+        </a>
+        <a href="{% url 'company:branch_list' %}" class="menu-item">
+            <i class="bi bi-diagram-3"></i>
+            <span>Branches</span>
+        </a>
+        <!-- Check if customer_list exists before using it -->
+        {% url 'company:customer_list' as customer_list_url %}
+        {% if customer_list_url %}
+        <a href="{{ customer_list_url }}" class="menu-item">
+            <i class="bi bi-people"></i>
+            <span>Customers</span>
+            {% if new_customers > 0 %}<span class="menu-badge">+{{ new_customers }}</span>{% endif %}
+        </a>
+        {% else %}
+        <a href="{% url 'admin:company_customer_changelist' %}" class="menu-item">
+            <i class="bi bi-people"></i>
+            <span>Customers</span>
+            {% if new_customers > 0 %}<span class="menu-badge">+{{ new_customers }}</span>{% endif %}
+        </a>
+        {% endif %}
+        
+        <a href="{% url 'company:user_list' %}" class="menu-item">
+            <i class="bi bi-person-badge"></i>
+            <span>Users</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Inventory</div>
+        <a href="{% url 'inventory:dashboard' %}" class="menu-item">
+            <i class="bi bi-boxes"></i>
+            <span>Dashboard</span>
+            {% if low_stock_items > 0 %}<span class="menu-badge bg-warning text-dark">{{ low_stock_items }}</span>{% endif %}
+        </a>
+        <a href="{% url 'inventory:current_stock' %}" class="menu-item">
+            <i class="bi bi-box-seam"></i>
+            <span>Current Stock</span>
+        </a>
+        <a href="{% url 'inventory:warehouse_list' %}" class="menu-item">
+            <i class="bi bi-building"></i>
+            <span>Warehouses</span>
+        </a>
+        <a href="{% url 'inventory:lot_list' %}" class="menu-item">
+            <i class="bi bi-upc-scan"></i>
+            <span>Lots/Batches</span>
+        </a>
+        <a href="{% url 'inventory:stock_summary' %}" class="menu-item">
+            <i class="bi bi-pie-chart"></i>
+            <span>Stock Summary</span>
+        </a>
+        <a href="{% url 'inventory:low_stock_alerts' %}" class="menu-item">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span>Low Stock Alerts</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Production</div>
+        <a href="{% url 'production:dashboard' %}" class="menu-item">
+            <i class="bi bi-gear-wide-connected"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'production:production_run_list' %}" class="menu-item">
+            <i class="bi bi-list-check"></i>
+            <span>Production Runs</span>
+            {% if in_progress_runs > 0 %}<span class="menu-badge">{{ in_progress_runs }}</span>{% endif %}
+        </a>
+        <a href="{% url 'production:bom_list' %}" class="menu-item">
+            <i class="bi bi-file-text"></i>
+            <span>BOMs</span>
+        </a>
+        <a href="{% url 'production:start_run' %}" class="menu-item">
+            <i class="bi bi-play-circle"></i>
+            <span>Start Production</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Purchasing</div>
+        <a href="{% url 'purchasing:dashboard' %}" class="menu-item">
+            <i class="bi bi-cart"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'purchasing:po_list' %}" class="menu-item">
+            <i class="bi bi-receipt"></i>
+            <span>Purchase Orders</span>
+            {% if pending_pos > 0 %}<span class="menu-badge">{{ pending_pos }}</span>{% endif %}
+        </a>
+        <a href="{% url 'purchasing:supplier_list' %}" class="menu-item">
+            <i class="bi bi-truck"></i>
+            <span>Suppliers</span>
+        </a>
+        <a href="{% url 'purchasing:requisition_list' %}" class="menu-item">
+            <i class="bi bi-file-earmark-text"></i>
+            <span>Requisitions</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Sales</div>
+        <a href="{% url 'sales:dashboard' %}" class="menu-item">
+            <i class="bi bi-graph-up"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'sales:order_list' %}" class="menu-item">
+            <i class="bi bi-bag"></i>
+            <span>Sales Orders</span>
+            {% if pending_orders > 0 %}<span class="menu-badge">{{ pending_orders }}</span>{% endif %}
+        </a>
+        <a href="{% url 'sales:invoice_list' %}" class="menu-item">
+            <i class="bi bi-receipt-cutoff"></i>
+            <span>Invoices</span>
+            {% if overdue_invoices > 0 %}<span class="menu-badge bg-danger">{{ overdue_invoices }}</span>{% endif %}
+        </a>
+        <!-- Check if customer_list exists before using it -->
+        {% url 'sales:customer_list' as sales_customer_list_url %}
+        {% if sales_customer_list_url %}
+        <a href="{{ sales_customer_list_url }}" class="menu-item">
+            <i class="bi bi-people"></i>
+            <span>Customers</span>
+        </a>
+        {% else %}
+        <a href="{% url 'admin:company_customer_changelist' %}" class="menu-item">
+            <i class="bi bi-people"></i>
+            <span>Customers</span>
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Accounting</div>
+        <a href="{% url 'accounting:dashboard' %}" class="menu-item">
+            <i class="bi bi-pie-chart"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'accounting:chart_of_accounts' %}" class="menu-item">
+            <i class="bi bi-journal-bookmark-fill"></i>
+            <span>Chart of Accounts</span>
+        </a>
+        <a href="{% url 'accounting:ar_aging' %}" class="menu-item">
+            <i class="bi bi-clock-history"></i>
+            <span>AR Aging</span>
+            {% if overdue_invoices > 0 %}<span class="menu-badge bg-danger">{{ overdue_invoices }}</span>{% endif %}
+        </a>
+        <a href="{% url 'accounting:ap_aging' %}" class="menu-item">
+            <i class="bi bi-clock-history"></i>
+            <span>AP Aging</span>
+            {% if overdue_deliveries > 0 %}<span class="menu-badge bg-danger">{{ overdue_deliveries }}</span>{% endif %}
+        </a>
+        <a href="{% url 'accounting:payment_entry' %}" class="menu-item">
+            <i class="bi bi-cash"></i>
+            <span>Record Payment</span>
+        </a>
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">Reports</div>
+        <a href="{% url 'reports:dashboard' %}" class="menu-item">
+            <i class="bi bi-file-earmark-bar-graph"></i>
+            <span>Reports Dashboard</span>
+        </a>
+        {% url 'reports:scheduled_reports' as scheduled_reports_url %}
+        {% if scheduled_reports_url %}
+        <a href="{{ scheduled_reports_url }}" class="menu-item">
+            <i class="bi bi-clock"></i>
+            <span>Scheduled Reports</span>
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="menu-section">
+        <div class="menu-section-title">System</div>
+        <a href="{% url 'admin:index' %}" class="menu-item">
+            <i class="bi bi-gear"></i>
+            <span>Admin Panel</span>
+        </a>
+    </div>
+</div>
+        
+       
+    <!-- Main Content Area (unchanged) -->
+    <div class="main-content">
+        <!-- Inventory Module -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-boxes text-primary me-2"></i>Inventory Overview
+                </h5>
+                <a href="{% url 'inventory:dashboard' %}" class="btn btn-sm btn-outline-primary">
+                    Full Inventory <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="fw-bold text-primary">{{ warehouse_count|default:"0" }}</h3>
+                            <p class="text-muted mb-0">Warehouses</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="fw-bold text-success">{{ active_lots|default:"0" }}</h3>
+                            <p class="text-muted mb-0">Active Lots</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="fw-bold text-warning">{{ near_expiry_count|default:"0" }}</h3>
+                            <p class="text-muted mb-0">Near Expiry</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Stock Movements -->
+                <div class="mt-4">
+                    <h6 class="text-muted mb-3">Recent Stock Movements</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Item</th>
+                                    <th>Type</th>
+                                    <th>Qty</th>
+                                    <th>Reference</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in recent_transactions %}
+                                <tr>
+                                    <td>{{ transaction.transaction_date|date:"d M H:i" }}</td>
+                                    <td>{{ transaction.item.code }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if transaction.transaction_type == 'receipt' %}bg-success
+                                            {% elif transaction.transaction_type == 'issue' %}bg-warning text-dark
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ transaction.get_transaction_type_display }}
+                                        </span>
+                                    </td>
+                                    <td class="fw-bold {% if transaction.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ transaction.quantity|floatformat:2 }}
+                                    </td>
+                                    <td>{{ transaction.reference|default:"-" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-3 text-muted">
+                                        No recent transactions
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Production Module -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-gear-wide-connected text-success me-2"></i>Production Status
+                </h5>
+                <a href="{% url 'production:dashboard' %}" class="btn btn-sm btn-outline-success">
+                    Full Production <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-3 col-6">
+                        <div class="text-center">
+                            <div class="text-warning fw-bold fs-4">{{ planned_runs|default:"0" }}</div>
+                            <small class="text-muted">Planned</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="text-center">
+                            <div class="text-primary fw-bold fs-4">{{ in_progress_runs|default:"0" }}</div>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="text-center">
+                            <div class="text-success fw-bold fs-4">{{ completed_runs|default:"0" }}</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="text-center">
+                            <div class="text-info fw-bold fs-4">{{ active_boms|default:"0" }}</div>
+                            <small class="text-muted">Active BOMs</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Production Runs -->
+                <div class="mt-4">
+                    <h6 class="text-muted mb-3">Current Production Runs</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Run #</th>
+                                    <th>Product</th>
+                                    <th>Planned</th>
+                                    <th>Progress</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for run in active_runs %}
+                                <tr>
+                                    <td>#{{ run.id }}</td>
+                                    <td>{{ run.product.name|truncatechars:20 }}</td>
+                                    <td>{{ run.planned_quantity|floatformat:0 }} kg</td>
+                                    <td style="width: 200px;">
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                                <div class="progress-bar bg-success" style="width: {{ run.progress_percentage|floatformat:0 }}%"></div>
+                                            </div>
+                                            <small class="text-muted">{{ run.progress_percentage|floatformat:0 }}%</small>
+                                        </div>
+                                        <small class="text-muted">{{ run.actual_quantity|default:"0"|floatformat:0 }}/{{ run.planned_quantity|floatformat:0 }} kg</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if run.status == 'in_progress' %}bg-primary
+                                            {% elif run.status == 'planned' %}bg-warning text-dark
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ run.get_status_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-3 text-muted">
+                                        No active production runs
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Purchasing Module -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-cart text-warning me-2"></i>Purchasing Overview
+                </h5>
+                <a href="{% url 'purchasing:dashboard' %}" class="btn btn-sm btn-outline-warning">
+                    Full Purchasing <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-warning">{{ pending_pos|default:"0" }}</h4>
+                            <p class="text-muted mb-0">Pending POs</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-success">{{ received_pos|default:"0" }}</h4>
+                            <p class="text-muted mb-0">Received</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-danger">{{ overdue_deliveries|default:"0" }}</h4>
+                            <p class="text-muted mb-0">Overdue</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Module -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up text-info me-2"></i>Sales Overview
+                </h5>
+                <a href="{% url 'sales:dashboard' %}" class="btn btn-sm btn-outline-info">
+                    Full Sales <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-info">{{ monthly_sales|floatformat:0|intcomma }}</h4>
+                            <p class="text-muted mb-0">Monthly Sales (ETB)</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-success">{{ pending_orders|default:"0" }}</h4>
+                            <p class="text-muted mb-0">Pending Orders</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="fw-bold text-danger">{{ overdue_invoices|default:"0" }}</h4>
+                            <p class="text-muted mb-0">Overdue Invoices</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column - Quick Actions & Alerts (unchanged) -->
+    <div class="col-lg-4">
+        <!-- Quick Actions -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-lightning-charge text-warning me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <a href="{% url 'production:start_run' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-success">
+                                <i class="bi bi-play-circle"></i>
+                            </div>
+                            <small>Start Production</small>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{% url 'inventory:current_stock' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-primary">
+                                <i class="bi bi-box-seam"></i>
+                            </div>
+                            <small>Check Stock</small>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{% url 'purchasing:po_create' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-warning">
+                                <i class="bi bi-cart-plus"></i>
+                            </div>
+                            <small>New Purchase</small>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{% url 'sales:order_create' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-info">
+                                <i class="bi bi-bag-plus"></i>
+                            </div>
+                            <small>New Sale</small>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{% url 'accounting:payment_entry' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-success">
+                                <i class="bi bi-cash"></i>
+                            </div>
+                            <small>Record Payment</small>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{% url 'reports:dashboard' %}" class="quick-action-btn">
+                            <div class="quick-action-icon text-secondary">
+                                <i class="bi bi-file-earmark-bar-graph"></i>
+                            </div>
+                            <small>Reports</small>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts & Notifications -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-bell text-danger me-2"></i>Alerts</h5>
+                {% if total_alerts > 0 %}
+                <span class="badge bg-danger rounded-pill">{{ total_alerts }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% if low_stock_items > 0 %}
+                    <a href="{% url 'inventory:low_stock_alerts' %}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                        <div class="bg-warning bg-opacity-10 p-2 rounded-circle me-3">
+                            <i class="bi bi-exclamation-triangle text-warning"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Low Stock Alert</h6>
+                            <small class="text-muted">{{ low_stock_items }} items below reorder point</small>
+                        </div>
+                        <span class="badge bg-warning text-dark ms-auto">{{ low_stock_items }}</span>
+                    </a>
+                    {% endif %}
+                    
+                    {% if near_expiry_count > 0 %}
+                    <a href="{% url 'inventory:stock_summary' %}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                        <div class="bg-danger bg-opacity-10 p-2 rounded-circle me-3">
+                            <i class="bi bi-calendar-exclamation text-danger"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Near Expiry Items</h6>
+                            <small class="text-muted">{{ near_expiry_count }} lots expiring soon</small>
+                        </div>
+                        <span class="badge bg-danger ms-auto">{{ near_expiry_count }}</span>
+                    </a>
+                    {% endif %}
+                    
+                    {% if overdue_deliveries > 0 %}
+                    <a href="{% url 'purchasing:po_list' %}?status=overdue" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                        <div class="bg-danger bg-opacity-10 p-2 rounded-circle me-3">
+                            <i class="bi bi-truck text-danger"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Overdue Deliveries</h6>
+                            <small class="text-muted">{{ overdue_deliveries }} purchase orders overdue</small>
+                        </div>
+                        <span class="badge bg-danger ms-auto">{{ overdue_deliveries }}</span>
+                    </a>
+                    {% endif %}
+                    
+                    {% if overdue_invoices > 0 %}
+                    <a href="{% url 'accounting:ar_aging' %}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                        <div class="bg-danger bg-opacity-10 p-2 rounded-circle me-3">
+                            <i class="bi bi-receipt text-danger"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Overdue Invoices</h6>
+                            <small class="text-muted">{{ overdue_invoices }} customer invoices overdue</small>
+                        </div>
+                        <span class="badge bg-danger ms-auto">{{ overdue_invoices }}</span>
+                    </a>
+                    {% endif %}
+                    
+                    {% if total_alerts == 0 %}
+                    <div class="list-group-item text-center py-4">
+                        <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                        <p class="mt-2 mb-0 text-muted">All systems normal. No alerts!</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Quick Actions</h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'admin:index' %}" class="btn btn-primary">Go to Admin</a>
-                        <a href="{% url 'inventory:dashboard' %}" class="btn btn-info">Inventory Dashboard</a>
-                        <a href="{% url 'production:dashboard' %}" class="btn btn-success">Production Dashboard</a>
-                        <a href="{% url 'reports:dashboard' %}" class="btn btn-warning">Reports</a>
+
+        <!-- Recent Activity -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2 text-info"></i>Recent Activity</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for activity in recent_activities %}
+                    <div class="list-group-item p-3 activity-item">
+                        <div class="d-flex">
+                            <div class="flex-shrink-0 me-3">
+                                <div class="activity-icon bg-{{ activity.icon|default:'primary' }} bg-opacity-10">
+                                    <i class="bi bi-{{ activity.icon }} text-{{ activity.icon|default:'primary' }}"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ activity.description }}</h6>
+                                    <small class="text-muted">{{ activity.time_display }}</small>
+                                </div>
+                                <small class="text-muted">{{ activity.details }}</small>
+                            </div>
+                        </div>
                     </div>
+                    {% empty %}
+                    <div class="list-group-item text-center py-4">
+                        <i class="bi bi-inbox text-muted fs-1"></i>
+                        <p class="mt-2 mb-0 text-muted">No recent activity</p>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>

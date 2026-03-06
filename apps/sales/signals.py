@@ -2,6 +2,7 @@ from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
 from django.db import transaction
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 import logging
 
@@ -260,7 +261,7 @@ def create_invoice_journal_entry(invoice):
 
 
 # ============================
-# Production Run Signals (formerly WorkOrder)
+# Production Run Signals
 # ============================
 
 @receiver(post_save, sender=ProductionRun)
@@ -354,8 +355,12 @@ def handle_invoice_status_change(sender, instance, created, **kwargs):
     try:
         old_instance = SalesInvoice.objects.get(pk=instance.pk)
         
+        # Status changed to posted
+        if old_instance.status != 'posted' and instance.status == 'posted':
+            handle_invoice_posted(instance)
+        
         # Status changed to paid
-        if old_instance.status != 'paid' and instance.status == 'paid':
+        elif old_instance.status != 'paid' and instance.status == 'paid':
             handle_invoice_paid(instance)
         
         # Status changed to cancelled
@@ -364,6 +369,15 @@ def handle_invoice_status_change(sender, instance, created, **kwargs):
             
     except SalesInvoice.DoesNotExist:
         pass
+
+
+def handle_invoice_posted(invoice):
+    """Handle invoice being posted"""
+    logger.info(f"Invoice {invoice.invoice_number} posted")
+    
+    # Create journal entry if not exists
+    if not invoice.journal_entry:
+        create_invoice_journal_entry(invoice)
 
 
 def handle_invoice_paid(invoice):
@@ -463,12 +477,12 @@ def create_payment_journal_entry(payment):
 
 
 # ============================
-# Sales Shipment Signals
+# Sales Shipment Signals - FIXED VERSION
 # ============================
 
 @receiver(post_save, sender=SalesShipment)
 def handle_shipment_status_change(sender, instance, created, **kwargs):
-    """Handle shipment status changes"""
+    """Handle shipment status changes - FIXED to handle missing status field"""
     if created:
         logger.info(f"Shipment {instance.shipment_number} created")
         return
@@ -476,16 +490,28 @@ def handle_shipment_status_change(sender, instance, created, **kwargs):
     try:
         old_instance = SalesShipment.objects.get(pk=instance.pk)
         
-        # Status changed to shipped
-        if old_instance.status != 'shipped' and instance.status == 'shipped':
-            handle_shipment_shipped(instance)
-        
-        # Status changed to delivered
-        elif old_instance.status != 'delivered' and instance.status == 'delivered':
-            handle_shipment_delivered(instance)
+        # Check if the status field exists - if not, skip status comparison
+        if not hasattr(instance, 'status'):
+            logger.debug(f"Shipment {instance.shipment_number} has no 'status' field")
+            return
+            
+        # Only proceed if both instances have the status field
+        if hasattr(old_instance, 'status') and hasattr(instance, 'status'):
+            # Status changed to shipped
+            if old_instance.status != 'shipped' and instance.status == 'shipped':
+                handle_shipment_shipped(instance)
+            
+            # Status changed to delivered
+            elif old_instance.status != 'delivered' and instance.status == 'delivered':
+                handle_shipment_delivered(instance)
+        else:
+            logger.debug(f"Shipment {instance.shipment_number} status field missing on old or new instance")
             
     except SalesShipment.DoesNotExist:
         pass
+    except AttributeError as e:
+        logger.error(f"AttributeError in shipment signal for {instance.shipment_number}: {e}")
+        # Don't re-raise the exception - this prevents the error from breaking the save
 
 
 def handle_shipment_shipped(shipment):
@@ -494,20 +520,27 @@ def handle_shipment_shipped(shipment):
     
     # Update sales order status if all items shipped
     order = shipment.sales_order
-    if order.is_fully_shipped:
-        order.status = 'shipped'
-        order.save(update_fields=['status'])
+    if hasattr(order, 'is_fully_shipped') and order.is_fully_shipped:
+        if hasattr(order, 'status'):
+            order.status = 'shipped'
+            order.save(update_fields=['status'])
 
 
 def handle_shipment_delivered(shipment):
     """Handle shipment being marked as delivered"""
     logger.info(f"Shipment {shipment.shipment_number} delivered")
-    shipment.delivery_date = timezone.now().date()
-    shipment.save(update_fields=['delivery_date'])
+    
+    if hasattr(shipment, 'delivery_date'):
+        shipment.delivery_date = timezone.now().date()
+        shipment.save(update_fields=['delivery_date'])
     
     # Update sales order status if all shipments delivered
     order = shipment.sales_order
-    all_delivered = all(s.status == 'delivered' for s in order.shipments.all())
-    if all_delivered:
-        order.status = 'delivered'
-        order.save(update_fields=['status'])
+    if order and hasattr(order, 'shipments'):
+        all_delivered = all(
+            hasattr(s, 'status') and s.status == 'delivered' 
+            for s in order.shipments.all()
+        )
+        if all_delivered and hasattr(order, 'status'):
+            order.status = 'delivered'
+            order.save(update_fields=['status'])

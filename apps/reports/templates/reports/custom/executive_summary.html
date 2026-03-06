@@ -1,0 +1,417 @@
+{% extends "reports/base_report.html" %}
+
+{% block title %}Executive Summary{% endblock %}
+{% block report_title %}Executive Summary Dashboard{% endblock %}
+
+{% block filters %}
+<div class="col-md-3">
+    <label class="form-label">Reporting Period</label>
+    <select class="form-select" id="period" onchange="updatePeriod()">
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month" selected>This Month</option>
+        <option value="quarter">This Quarter</option>
+        <option value="year">Year to Date</option>
+        <option value="custom">Custom Range</option>
+    </select>
+</div>
+<div class="col-md-3" id="customDateRange" style="display: none;">
+    <label class="form-label">Date Range</label>
+    <input type="text" class="form-control" id="dateRange">
+</div>
+<div class="col-md-2">
+    <label class="form-label">Currency</label>
+    <select class="form-select" id="currency">
+        <option value="USD" selected>USD ($)</option>
+        <option value="EUR">EUR (€)</option>
+        <option value="GBP">GBP (£)</option>
+        <option value="JPY">JPY (¥)</option>
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">Comparison</label>
+    <select class="form-select" id="comparison">
+        <option value="none">No Comparison</option>
+        <option value="previous" selected>vs Previous Period</option>
+        <option value="last_year">vs Last Year</option>
+        <option value="budget">vs Budget</option>
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">&nbsp;</label>
+    <button class="btn btn-primary w-100" onclick="refreshSummary()">
+        <i class="fas fa-sync-alt me-2"></i>Refresh
+    </button>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<!-- Welcome Message -->
+<div class="alert alert-info no-print">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Executive Summary</strong> - Last updated: <span id="lastUpdate">{{ now|date:"F j, Y H:i:s" }}</span>
+</div>
+
+<!-- Key Metrics Row -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="chart-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <span class="badge bg-primary mb-2">REVENUE</span>
+                    <div class="h2 mb-0">$1.23M</div>
+                    <div class="small">
+                        <span class="text-success"><i class="fas fa-arrow-up"></i> +12.5%</span>
+                        <span class="text-secondary ms-2">vs last month</span>
+                    </div>
+                </div>
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-chart-line text-primary fa-2x"></i>
+                </div>
+            </div>
+            <div class="mt-3 small text-secondary">
+                Target: $1.35M | 91% achieved
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="chart-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <span class="badge bg-success mb-2">PROFIT</span>
+                    <div class="h2 mb-0">$289K</div>
+                    <div class="small">
+                        <span class="text-success"><i class="fas fa-arrow-up"></i> +8.3%</span>
+                        <span class="text-secondary ms-2">vs last month</span>
+                    </div>
+                </div>
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-coins text-success fa-2x"></i>
+                </div>
+            </div>
+            <div class="mt-3 small text-secondary">
+                Margin: 23.5% | +1.2% vs target
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="chart-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <span class="badge bg-warning mb-2">CASH FLOW</span>
+                    <div class="h2 mb-0">$156K</div>
+                    <div class="small">
+                        <span class="text-success"><i class="fas fa-arrow-up"></i> +5.2%</span>
+                        <span class="text-secondary ms-2">vs last month</span>
+                    </div>
+                </div>
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-money-bill-wave text-warning fa-2x"></i>
+                </div>
+            </div>
+            <div class="mt-3 small text-secondary">
+                Operating CF: $234K | Investing: -$78K
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="chart-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <span class="badge bg-info mb-2">BURN RATE</span>
+                    <div class="h2 mb-0">45 Days</div>
+                    <div class="small">
+                        <span class="text-danger"><i class="fas fa-arrow-down"></i> -3 days</span>
+                        <span class="text-secondary ms-2">improvement</span>
+                    </div>
+                </div>
+                <div class="bg-info bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-fire text-info fa-2x"></i>
+                </div>
+            </div>
+            <div class="mt-3 small text-secondary">
+                Runway: 18 months at current rate
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Gauges -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <h6 class="mb-3">Revenue Target</h6>
+            <canvas id="revenueGauge" style="height: 150px;"></canvas>
+            <div class="mt-2 fw-bold">$1.23M / $1.35M</div>
+            <div class="small text-success">On Track</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <h6 class="mb-3">Profit Margin</h6>
+            <canvas id="profitGauge" style="height: 150px;"></canvas>
+            <div class="mt-2 fw-bold">23.5% / 22%</div>
+            <div class="small text-success">Exceeding</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <h6 class="mb-3">Customer Satisfaction</h6>
+            <canvas id="csatGauge" style="height: 150px;"></canvas>
+            <div class="mt-2 fw-bold">4.8 / 5.0</div>
+            <div class="small text-success">Excellent</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <h6 class="mb-3">Employee Satisfaction</h6>
+            <canvas id="employeeGauge" style="height: 150px;"></canvas>
+            <div class="mt-2 fw-bold">4.2 / 5.0</div>
+            <div class="small text-warning">Needs Attention</div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="chart-card">
+            <h5 class="mb-3">Financial Performance Overview</h5>
+            <canvas id="financialOverviewChart" style="height: 300px;"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-card">
+            <h5 class="mb-3">Revenue by Department</h5>
+            <canvas id="departmentChart" style="height: 300px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards Row -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="chart-card">
+            <h5 class="mb-3">Top 5 KPIs - Green</h5>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>KPI</th>
+                        <th>Current</th>
+                        <th>Target</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Revenue Growth</td>
+                        <td>12.5%</td>
+                        <td>10%</td>
+                        <td><span class="badge-success">+2.5%</span></td>
+                    </tr>
+                    <tr>
+                        <td>Gross Margin</td>
+                        <td>36.1%</td>
+                        <td>35%</td>
+                        <td><span class="badge-success">+1.1%</span></td>
+                    </tr>
+                    <tr>
+                        <td>Customer Retention</td>
+                        <td>94%</td>
+                        <td>90%</td>
+                        <td><span class="badge-success">+4%</span></td>
+                    </tr>
+                    <tr>
+                        <td>Inventory Turnover</td>
+                        <td>8.4x</td>
+                        <td>8x</td>
+                        <td><span class="badge-success">+0.4x</span></td>
+                    </tr>
+                    <tr>
+                        <td>On-Time Delivery</td>
+                        <td>97%</td>
+                        <td>95%</td>
+                        <td><span class="badge-success">+2%</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="chart-card">
+            <h5 class="mb-3">Top 5 KPIs - Red/Yellow</h5>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>KPI</th>
+                        <th>Current</th>
+                        <th>Target</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Employee Turnover</td>
+                        <td>15%</td>
+                        <td>10%</td>
+                        <td><span class="badge-danger">-5%</span></td>
+                    </tr>
+                    <tr>
+                        <td>R&D Efficiency</td>
+                        <td>78%</td>
+                        <td>85%</td>
+                        <td><span class="badge-warning">-7%</span></td>
+                    </tr>
+                    <tr>
+                        <td>AR Days</td>
+                        <td>45</td>
+                        <td>30</td>
+                        <td><span class="badge-danger">+15</span></td>
+                    </tr>
+                    <tr>
+                        <td>Production Downtime</td>
+                        <td>8%</td>
+                        <td>5%</td>
+                        <td><span class="badge-danger">-3%</span></td>
+                    </tr>
+                    <tr>
+                        <td>Marketing ROI</td>
+                        <td>320%</td>
+                        <td>350%</td>
+                        <td><span class="badge-warning">-30%</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Alerts -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="chart-card">
+            <h5 class="mb-3">Executive Alerts</h5>
+            <div class="list-group">
+                <div class="list-group-item list-group-item-warning d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                        <strong>Low Stock Alert:</strong> 5 items below reorder level
+                    </div>
+                    <a href="/reports/inventory/low_stock/" class="btn btn-sm btn-outline-warning">Review</a>
+                </div>
+                <div class="list-group-item list-group-item-danger d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-clock text-danger me-2"></i>
+                        <strong>Overdue Receivables:</strong> $45,678 from 3 customers
+                    </div>
+                    <a href="/reports/financial/ar_aging/" class="btn btn-sm btn-outline-danger">Review</a>
+                </div>
+                <div class="list-group-item list-group-item-success d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Milestone Achieved:</strong> Q3 revenue target exceeded
+                    </div>
+                    <span class="badge-success">+8%</span>
+                </div>
+                <div class="list-group-item list-group-item-info d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-calendar text-info me-2"></i>
+                        <strong>Upcoming:</strong> Board meeting in 3 days
+                    </div>
+                    <button class="btn btn-sm btn-outline-info">Prepare Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Gauge Charts
+    function createGauge(ctx, value, maxValue, color) {
+        return new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [value, maxValue - value],
+                    backgroundColor: [color, '#e5e7eb'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                cutout: '70%',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: { enabled: false },
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+
+    // Initialize gauges
+    createGauge(document.getElementById('revenueGauge').getContext('2d'), 91, 100, '#2563eb');
+    createGauge(document.getElementById('profitGauge').getContext('2d'), 107, 100, '#10b981');
+    createGauge(document.getElementById('csatGauge').getContext('2d'), 96, 100, '#8b5cf6');
+    createGauge(document.getElementById('employeeGauge').getContext('2d'), 84, 100, '#f59e0b');
+
+    // Financial Overview Chart
+    const ctx1 = document.getElementById('financialOverviewChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'bar',
+        data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+                label: 'Revenue',
+                data: [98000, 105000, 112000, 108000, 115000, 121000],
+                backgroundColor: '#2563eb'
+            }, {
+                label: 'Expenses',
+                data: [72000, 78000, 82000, 80000, 85000, 89000],
+                backgroundColor: '#ef4444'
+            }, {
+                label: 'Profit',
+                data: [26000, 27000, 30000, 28000, 30000, 32000],
+                backgroundColor: '#10b981'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Department Revenue Chart
+    const ctx2 = document.getElementById('departmentChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'polarArea',
+        data: {
+            labels: ['Sales', 'Services', 'Products', 'R&D', 'Consulting'],
+            datasets: [{
+                data: [45, 25, 15, 10, 5],
+                backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    function updatePeriod() {
+        const period = document.getElementById('period').value;
+        const customDateDiv = document.getElementById('customDateRange');
+        customDateDiv.style.display = period === 'custom' ? 'block' : 'none';
+    }
+
+    function refreshSummary() {
+        alert('Refreshing executive summary data...');
+        // Implement actual refresh logic here
+    }
+</script>
+{% endblock %}

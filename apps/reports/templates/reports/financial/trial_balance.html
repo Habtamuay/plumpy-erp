@@ -1,0 +1,88 @@
+<!-- reports/financial/trial_balance.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Trial Balance{% endblock %}
+{% block report_title %}Trial Balance{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="date_to">As of Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Debits</h5>
+                <h3 class="text-primary">${{ total_debits|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Credits</h5>
+                <h3 class="text-success">${{ total_credits|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Difference</h5>
+                <h3 class="{% if is_balanced %}text-success{% else %}text-danger{% endif %}">
+                    ${{ difference|floatformat:0 }}
+                </h3>
+                {% if is_balanced %}
+                    <small class="text-success">✓ Balanced</small>
+                {% else %}
+                    <small class="text-danger">✗ Out of Balance</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Trial Balance</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Account Code</th>
+            <th>Account Name</th>
+            <th>Type</th>
+            <th class="text-end">Debit</th>
+            <th class="text-end">Credit</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for account in accounts %}
+        <tr>
+            <td>{{ account.code }}</td>
+            <td>{{ account.name }}</td>
+            <td>{{ account.type }}</td>
+            <td class="text-end">{{ account.debits|floatformat:0 }}</td>
+            <td class="text-end">{{ account.credits|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot class="table-dark">
+        <tr>
+            <th colspan="3">TOTALS</th>
+            <th class="text-end">${{ total_debits|floatformat:0 }}</th>
+            <th class="text-end">${{ total_credits|floatformat:0 }}</th>
+        </tr>
+    </tfoot>
+</table>
+{% endblock %}

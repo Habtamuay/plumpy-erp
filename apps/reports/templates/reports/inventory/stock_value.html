@@ -1,0 +1,118 @@
+<!-- reports/inventory/stock_value.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Stock Value{% endblock %}
+{% block report_title %}Inventory Stock Value{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="valuation_method">Valuation Method:</label>
+                <select id="valuation_method" name="valuation_method" class="form-select">
+                    <option value="fifo">FIFO</option>
+                    <option value="lifo">LIFO</option>
+                    <option value="average">Average</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="date">As of Date:</label>
+                <input type="date" id="date" name="date" class="form-control">
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Stock Value</h5>
+                <h3 class="text-success">${{ current_value|floatformat:0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Stock Valuation by Category</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Total Quantity</th>
+            <th>Total Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for category in by_category %}
+        <tr>
+            <td>{{ category.item__category|default:"Uncategorized" }}</td>
+            <td>{{ category.total_qty }}</td>
+            <td>${{ category.total_value|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4 class="mt-4">Top 10 Items by Value</h4>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in top_items %}
+        <tr>
+            <td>{{ item.item__code }} - {{ item.item__name }}</td>
+            <td>${{ item.total_value|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<canvas id="valueChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const byCategory = {{ by_category|safe }};
+    const labels = byCategory.map(c => c.item__category || 'Uncategorized');
+    const data = byCategory.map(c => c.total_value);
+
+    const ctx = document.getElementById('valueChart').getContext('2d');
+    const valueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Stock Value by Category',
+                data: data,
+                backgroundColor: '#8b5cf6',
+                borderColor: '#7c3aed',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+<!-- reports/production/cost_variance.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Cost Variance{% endblock %}
+{% block report_title %}Production Cost Variance{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="period">Period:</label>
+                <select id="period" name="period" class="form-select">
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                </select>
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Cost Variance Analysis</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Product</th>
+            <th>Standard Cost</th>
+            <th>Actual Cost</th>
+            <th>Variance</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic data rows -->
+    </tbody>
+</table>
+<canvas id="varianceChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ctx = document.getElementById('varianceChart').getContext('2d');
+    const varianceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Month 1', 'Month 2'],
+            datasets: [{
+                label: 'Variance',
+                data: [/* Dynamic data */]
+            }]
+        }
+    });
+</script>
+{% endblock %}

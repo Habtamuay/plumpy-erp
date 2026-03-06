@@ -1,0 +1,59 @@
+<!-- reports/base_report.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ERP Report{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.0.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="/static/js/report_exports.js" defer></script>  <!-- New separate JS file -->
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .report-header { text-align: center; margin-bottom: 20px; }
+        .filter-form { margin-bottom: 20px; }
+        .export-buttons { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="report-header">
+            <h1>{% block report_title %}Report Title{% endblock %}</h1>
+            <p>Generated on: {{ current_date }}</p>
+        </div>
+        
+        {% block filters %}
+        <div class="filter-form">
+            <form method="GET">
+                <!-- Placeholder for filters -->
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            </form>
+        </div>
+        {% endblock %}
+        
+        {% block content %}
+        <!-- Report-specific content -->
+        {% endblock %}
+        
+        <div class="export-buttons mt-4 mb-4">
+            <button class="btn btn-success me-2" onclick="ExportUtils.toCSV()">
+                <i class="bi bi-filetype-csv"></i> CSV
+            </button>
+            <button class="btn btn-primary me-2" onclick="ExportUtils.toExcel()">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </button>
+            <button class="btn btn-danger" onclick="ExportUtils.toPDF()">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>
+        </div>
+    </div>
+    
+    {% block scripts %}
+    <!-- Report-specific scripts -->
+    {% endblock %}
+</body>
+</html>

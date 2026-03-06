@@ -1,0 +1,558 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Shipment {{ shipment.shipment_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: inline-block;
+    }
+    .status-pending { background-color: #6c757d; color: white; }
+    .status-picking { background-color: #17a2b8; color: white; }
+    .status-packed { background-color: #ffc107; color: black; }
+    .status-shipped { background-color: #28a745; color: white; }
+    .status-delivered { background-color: #20c997; color: white; }
+    .status-cancelled { background-color: #dc3545; color: white; }
+    
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    .timeline-item {
+        padding: 10px 0;
+        border-left: 2px solid #dee2e6;
+        padding-left: 20px;
+        margin-left: 10px;
+        position: relative;
+    }
+    .timeline-item:before {
+        content: '';
+        width: 12px;
+        height: 12px;
+        background: #fff;
+        border: 2px solid #0d6efd;
+        border-radius: 50%;
+        position: absolute;
+        left: -7px;
+        top: 15px;
+    }
+    .timeline-item.completed:before {
+        background: #28a745;
+        border-color: #28a745;
+    }
+    .timeline-item.active:before {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+    }
+    .timeline-item .date {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    .tracking-card {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-truck me-2 text-primary"></i>Shipment {{ shipment.shipment_number }}
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-calendar me-2"></i>Created: {{ shipment.created_at|date:"F j, Y H:i" }}
+                            {% if shipment.created_by %} by {{ shipment.created_by.get_full_name|default:shipment.created_by.username }}{% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="status-badge 
+                            {% if shipment.status == 'pending' %}status-pending
+                            {% elif shipment.status == 'picking' %}status-picking
+                            {% elif shipment.status == 'packed' %}status-packed
+                            {% elif shipment.status == 'shipped' %}status-shipped
+                            {% elif shipment.status == 'delivered' %}status-delivered
+                            {% elif shipment.status == 'cancelled' %}status-cancelled
+                            {% endif %} fs-6 me-2">
+                            {{ shipment.get_status_display }}
+                        </span>
+                        <a href="{% url 'sales:shipment_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="btn-group" role="group">
+                        {% if shipment.status == 'pending' %}
+                        <form method="post" action="{% url 'sales:shipment_ship' shipment.id %}" class="d-inline me-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="picking">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-arrow-right me-2"></i>Start Picking
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'picking' %}
+                        <form method="post" action="{% url 'sales:shipment_ship' shipment.id %}" class="d-inline me-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="packed">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-box-seam me-2"></i>Mark Packed
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'packed' %}
+                        <form method="post" action="{% url 'sales:shipment_ship' shipment.id %}" class="d-inline me-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="shipped">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-truck me-2"></i>Mark Shipped
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'shipped' %}
+                        <form method="post" action="{% url 'sales:shipment_deliver' shipment.id %}" class="d-inline me-2">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle me-2"></i>Mark Delivered
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'pending' %}
+                        <form method="post" action="{% url 'sales:shipment_ship' shipment.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="cancelled">
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('Cancel this shipment?')">
+                                <i class="bi bi-x-circle me-2"></i>Cancel
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                            <i class="bi bi-printer me-2"></i>Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Content - Left Column -->
+        <div class="col-md-8">
+            <!-- Shipment Information -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Shipment Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th style="width: 40%;">Sales Order:</th>
+                                    <td>
+                                        <a href="{% url 'sales:order_detail' shipment.sales_order.id %}" class="fw-bold">
+                                            {{ shipment.sales_order.order_number }}
+                                        </a>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Customer:</th>
+                                    <td>{{ shipment.sales_order.customer.name }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Shipment Date:</th>
+                                    <td>{{ shipment.shipment_date|date:"Y-m-d" }}</td>
+                                </tr>
+                                {% if shipment.delivery_date %}
+                                <tr>
+                                    <th>Delivery Date:</th>
+                                    <td>{{ shipment.delivery_date|date:"Y-m-d" }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr>
+                                    <th>Warehouse:</th>
+                                    <td>{{ shipment.warehouse.name|default:"Not specified" }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th style="width: 40%;">Carrier:</th>
+                                    <td>{{ shipment.carrier|default:"Not specified" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Tracking Number:</th>
+                                    <td>
+                                        {% if shipment.tracking_number %}
+                                        <span class="fw-bold">{{ shipment.tracking_number }}</span>
+                                        {% if shipment.carrier == 'DHL' %}
+                                        <a href="https://www.dhl.com/en/express/tracking.html?AWB={{ shipment.tracking_number }}" target="_blank" class="ms-2">
+                                            <i class="bi bi-box-arrow-up-right"></i> Track
+                                        </a>
+                                        {% elif shipment.carrier == 'FedEx' %}
+                                        <a href="https://www.fedex.com/fedextrack/?trknbr={{ shipment.tracking_number }}" target="_blank" class="ms-2">
+                                            <i class="bi bi-box-arrow-up-right"></i> Track
+                                        </a>
+                                        {% elif shipment.carrier == 'UPS' %}
+                                        <a href="https://www.ups.com/track?tracknum={{ shipment.tracking_number }}" target="_blank" class="ms-2">
+                                            <i class="bi bi-box-arrow-up-right"></i> Track
+                                        </a>
+                                        {% endif %}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Shipping Cost:</th>
+                                    <td>{{ shipment.shipping_cost|floatformat:2 }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Total Items:</th>
+                                    <td>{{ lines|length }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Total Quantity:</th>
+                                    <td>{% with total=0 %}{% for line in lines %}{% with total=total|add:line.quantity %}{% endfor %}{{ total }}{% endwith %}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shipping Address -->
+            {% if shipment.shipping_address %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i>Shipping Address</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">
+                        {{ shipment.shipping_address }}<br>
+                        {{ shipment.shipping_city }}
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Shipment Lines -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Shipment Items</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th class="text-end">Ordered</th>
+                                    <th class="text-end">Shipped</th>
+                                    <th>Unit</th>
+                                    <th>Lot/Batch</th>
+                                    <th>Expiry Date</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for line in lines %}
+                                <tr>
+                                    <td>{{ line.sales_order_line.item.code }}</td>
+                                    <td>{{ line.sales_order_line.item.name }}</td>
+                                    <td class="text-end">{{ line.sales_order_line.quantity|floatformat:2 }}</td>
+                                    <td class="text-end">{{ line.quantity|floatformat:2 }}</td>
+                                    <td>{{ line.sales_order_line.unit.abbreviation|default:'-' }}</td>
+                                    <td>
+                                        {% if line.lot %}
+                                            <span class="fw-bold">{{ line.lot.batch_number }}</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if line.lot and line.lot.expiry_date %}
+                                            {{ line.lot.expiry_date|date:"Y-m-d" }}
+                                            {% if line.lot.expiry_date < today %}
+                                                <span class="badge bg-danger ms-1">Expired</span>
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ line.notes|default:'-' }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <p class="text-muted">No items in this shipment</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            {% if shipment.notes %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-sticky-note me-2"></i>Notes</h5>
+                </div>
+                <div class="card-body">
+                    {{ shipment.notes|linebreaks }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-md-4">
+            <!-- Shipment Timeline -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Shipment Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item {% if shipment.status != 'cancelled' %}completed{% endif %}">
+                            <div class="date">{{ shipment.created_at|date:"M d, Y H:i" }}</div>
+                            <div class="fw-bold">Shipment Created</div>
+                            <div class="small text-muted">by {{ shipment.created_by.get_full_name|default:shipment.created_by.username }}</div>
+                        </div>
+                        
+                        {% if shipment.status != 'pending' and shipment.status != 'cancelled' %}
+                        <div class="timeline-item {% if shipment.status in 'picking,packed,shipped,delivered' %}completed{% endif %}">
+                            <div class="date">{{ shipment.shipment_date|date:"M d, Y" }}</div>
+                            <div class="fw-bold">Picking Started</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.status in 'packed,shipped,delivered' %}
+                        <div class="timeline-item {% if shipment.status in 'packed,shipped,delivered' %}completed{% endif %}">
+                            <div class="date">{{ shipment.updated_at|date:"M d, Y H:i" }}</div>
+                            <div class="fw-bold">Packing Completed</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.status in 'shipped,delivered' %}
+                        <div class="timeline-item {% if shipment.status in 'shipped,delivered' %}completed{% endif %}">
+                            <div class="date">{{ shipment.updated_at|date:"M d, Y H:i" }}</div>
+                            <div class="fw-bold">Shipped</div>
+                            {% if shipment.carrier %}
+                            <div class="small text-muted">via {{ shipment.carrier }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'delivered' %}
+                        <div class="timeline-item completed">
+                            <div class="date">{{ shipment.delivery_date|date:"M d, Y" }}</div>
+                            <div class="fw-bold text-success">Delivered</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.status == 'cancelled' %}
+                        <div class="timeline-item active">
+                            <div class="date">{{ shipment.updated_at|date:"M d, Y H:i" }}</div>
+                            <div class="fw-bold text-danger">Cancelled</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tracking Information -->
+            {% if shipment.tracking_number %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-upc-scan me-2"></i>Tracking Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="tracking-card">
+                        <div class="mb-2">
+                            <span class="text-muted">Carrier:</span>
+                            <span class="fw-bold float-end">{{ shipment.carrier|default:"N/A" }}</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted">Tracking #:</span>
+                            <span class="fw-bold float-end">{{ shipment.tracking_number }}</span>
+                        </div>
+                        {% if shipment.shipping_cost %}
+                        <div class="mb-2">
+                            <span class="text-muted">Shipping Cost:</span>
+                            <span class="fw-bold float-end">{{ shipment.shipping_cost|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
+                        <hr>
+                        <div class="d-grid">
+                            {% if shipment.carrier == 'DHL' %}
+                            <a href="https://www.dhl.com/en/express/tracking.html?AWB={{ shipment.tracking_number }}" target="_blank" class="btn btn-outline-primary">
+                                <i class="bi bi-truck me-2"></i>Track with DHL
+                            </a>
+                            {% elif shipment.carrier == 'FedEx' %}
+                            <a href="https://www.fedex.com/fedextrack/?trknbr={{ shipment.tracking_number }}" target="_blank" class="btn btn-outline-primary">
+                                <i class="bi bi-truck me-2"></i>Track with FedEx
+                            </a>
+                            {% elif shipment.carrier == 'UPS' %}
+                            <a href="https://www.ups.com/track?tracknum={{ shipment.tracking_number }}" target="_blank" class="btn btn-outline-primary">
+                                <i class="bi bi-truck me-2"></i>Track with UPS
+                            </a>
+                            {% else %}
+                            <a href="#" class="btn btn-outline-secondary disabled">
+                                <i class="bi bi-truck me-2"></i>Tracking Unavailable
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Order Summary -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-cart me-2"></i>Order Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted">Order #:</span>
+                        <span class="float-end">
+                            <a href="{% url 'sales:order_detail' shipment.sales_order.id %}">
+                                {{ shipment.sales_order.order_number }}
+                            </a>
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Order Date:</span>
+                        <span class="float-end">{{ shipment.sales_order.order_date|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Order Status:</span>
+                        <span class="float-end">
+                            <span class="badge 
+                                {% if shipment.sales_order.status == 'draft' %}bg-secondary
+                                {% elif shipment.sales_order.status == 'confirmed' %}bg-primary
+                                {% elif shipment.sales_order.status == 'processing' %}bg-info
+                                {% elif shipment.sales_order.status == 'shipped' %}bg-success
+                                {% elif shipment.sales_order.status == 'delivered' %}bg-success
+                                {% elif shipment.sales_order.status == 'cancelled' %}bg-danger
+                                {% endif %}">
+                                {{ shipment.sales_order.get_status_display }}
+                            </span>
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Total Amount:</span>
+                        <span class="float-end fw-bold">{{ shipment.sales_order.total_amount|floatformat:2 }}</span>
+                    </div>
+                    <hr>
+                    <div class="mb-2">
+                        <span class="text-muted">Items in Shipment:</span>
+                        <span class="float-end fw-bold">{{ lines|length }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Total Shipped:</span>
+                        <span class="float-end fw-bold">
+                            {% with total=0 %}
+                                {% for line in lines %}
+                                    {% with total=total|add:line.quantity %}
+                                {% endfor %}
+                                {{ total }}
+                            {% endwith %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timestamps -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Timestamps</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted">Created:</span>
+                        <span class="float-end">{{ shipment.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Last Updated:</span>
+                        <span class="float-end">{{ shipment.updated_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Styles (hidden when not printing) -->
+<style media="print">
+    .btn-group, .btn, .navbar, footer, .action-buttons {
+        display: none !important;
+    }
+    .card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+    .status-badge {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh for real-time updates (optional)
+    function refreshPage() {
+        location.reload();
+    }
+    
+    // Set auto-refresh every 5 minutes (300000 ms) for pending shipments
+    {% if shipment.status == 'pending' or shipment.status == 'picking' or shipment.status == 'packed' %}
+    // setTimeout(refreshPage, 300000);
+    {% endif %}
+    
+    // Print functionality
+    document.querySelector('button[onclick="window.print()"]')?.addEventListener('click', function() {
+        window.print();
+    });
+</script>
+{% endblock %}

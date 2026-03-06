@@ -1,0 +1,285 @@
+{% extends "reports/base_report.html" %}
+
+{% block title %}Scheduled Reports{% endblock %}
+{% block report_title %}Scheduled Reports Management{% endblock %}
+
+{% block filters %}
+<div class="col-md-3">
+    <label class="form-label">Status</label>
+    <select class="form-select" id="status">
+        <option value="all">All Status</option>
+        <option value="active">Active</option>
+        <option value="paused">Paused</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+    </select>
+</div>
+<div class="col-md-3">
+    <label class="form-label">Frequency</label>
+    <select class="form-select" id="frequency">
+        <option value="all">All Frequencies</option>
+        <option value="hourly">Hourly</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+        <option value="quarterly">Quarterly</option>
+    </select>
+</div>
+<div class="col-md-3">
+    <label class="form-label">Report Type</label>
+    <select class="form-select" id="report_type">
+        <option value="all">All Types</option>
+        <option value="inventory">Inventory</option>
+        <option value="sales">Sales</option>
+        <option value="financial">Financial</option>
+        <option value="production">Production</option>
+    </select>
+</div>
+<div class="col-md-3">
+    <label class="form-label">&nbsp;</label>
+    <button class="btn btn-primary w-100" onclick="filterSchedules()">
+        <i class="fas fa-filter me-2"></i>Filter
+    </button>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<!-- Action Buttons -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <button class="btn btn-success me-2" onclick="createNewSchedule()">
+            <i class="fas fa-plus me-2"></i>New Scheduled Report
+        </button>
+        <button class="btn btn-outline-secondary me-2" onclick="exportScheduleList()">
+            <i class="fas fa-download me-2"></i>Export List
+        </button>
+        <button class="btn btn-outline-info" onclick="viewScheduleLogs()">
+            <i class="fas fa-history me-2"></i>View Logs
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <div class="text-secondary small">Total Schedules</div>
+            <div class="h2 mb-0">24</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <div class="text-secondary small">Active</div>
+            <div class="h2 mb-0 text-success">18</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <div class="text-secondary small">Paused/Failed</div>
+            <div class="h2 mb-0 text-danger">6</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="chart-card text-center">
+            <div class="text-secondary small">Executions Today</div>
+            <div class="h2 mb-0">47</div>
+        </div>
+    </div>
+</div>
+
+<!-- Scheduled Reports Table -->
+<div class="table-container">
+    <table class="table table-hover datatable">
+        <thead>
+            <tr>
+                <th>Schedule Name</th>
+                <th>Report Type</th>
+                <th>Frequency</th>
+                <th>Recipients</th>
+                <th>Format</th>
+                <th>Last Run</th>
+                <th>Next Run</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Daily Stock Summary</td>
+                <td><span class="badge bg-info">Inventory</span></td>
+                <td><i class="fas fa-calendar-day me-1"></i> Daily (08:00)</td>
+                <td>warehouse@company.com</td>
+                <td>PDF, Excel</td>
+                <td>2024-01-15 08:00 <span class="badge-success">Success</span></td>
+                <td>2024-01-16 08:00</td>
+                <td><span class="badge-success">Active</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editSchedule(1)"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule(1)"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="runNow(1)"><i class="fas fa-play"></i></button>
+                </td>
+            </tr>
+            <tr>
+                <td>Weekly Sales Report</td>
+                <td><span class="badge bg-success">Sales</span></td>
+                <td><i class="fas fa-calendar-week me-1"></i> Weekly (Mon 09:00)</td>
+                <td>sales@company.com, managers@company.com</td>
+                <td>Excel, CSV</td>
+                <td>2024-01-15 09:00 <span class="badge-success">Success</span></td>
+                <td>2024-01-22 09:00</td>
+                <td><span class="badge-success">Active</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-play"></i></button>
+                </td>
+            </tr>
+            <tr>
+                <td>Monthly P&L Statement</td>
+                <td><span class="badge bg-warning">Financial</span></td>
+                <td><i class="fas fa-calendar-alt me-1"></i> Monthly (1st 10:00)</td>
+                <td>finance@company.com, executives@company.com</td>
+                <td>PDF</td>
+                <td>2024-01-01 10:00 <span class="badge-success">Success</span></td>
+                <td>2024-02-01 10:00</td>
+                <td><span class="badge-success">Active</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-play"></i></button>
+                </td>
+            </tr>
+            <tr>
+                <td>Production Efficiency</td>
+                <td><span class="badge bg-primary">Production</span></td>
+                <td><i class="fas fa-clock me-1"></i> Hourly</td>
+                <td>production@company.com</td>
+                <td>Dashboard</td>
+                <td>2024-01-15 15:00 <span class="badge-success">Success</span></td>
+                <td>2024-01-15 16:00</td>
+                <td><span class="badge-success">Active</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-play"></i></button>
+                </td>
+            </tr>
+            <tr>
+                <td>AR Aging Report</td>
+                <td><span class="badge bg-warning">Financial</span></td>
+                <td><i class="fas fa-calendar-week me-1"></i> Weekly (Wed 14:00)</td>
+                <td>collections@company.com</td>
+                <td>Excel, PDF</td>
+                <td>2024-01-10 14:00 <span class="badge-success">Success</span></td>
+                <td>2024-01-17 14:00</td>
+                <td><span class="badge-warning">Paused</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-success" onclick="resumeSchedule(5)"><i class="fas fa-play"></i></button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Recent Executions -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="chart-card">
+            <h5 class="mb-3">Recent Executions</h5>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                        <th>Output</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>2024-01-15 15:00</td>
+                        <td>Production Efficiency</td>
+                        <td><span class="badge-success">Success</span></td>
+                        <td>2.3s</td>
+                        <td><a href="#">Download</a></td>
+                    </tr>
+                    <tr>
+                        <td>2024-01-15 14:00</td>
+                        <td>Weekly Sales Report</td>
+                        <td><span class="badge-success">Success</span></td>
+                        <td>5.7s</td>
+                        <td><a href="#">Download</a></td>
+                    </tr>
+                    <tr>
+                        <td>2024-01-15 13:00</td>
+                        <td>Inventory Summary</td>
+                        <td><span class="badge-danger">Failed</span></td>
+                        <td>0.5s</td>
+                        <td><a href="#">View Error</a></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function createNewSchedule() {
+        window.location.href = '/reports/scheduled/form/';
+    }
+    
+    function editSchedule(id) {
+        window.location.href = '/reports/scheduled/form/' + id;
+    }
+    
+    function deleteSchedule(id) {
+        if (confirm('Are you sure you want to delete this scheduled report?')) {
+            window.location.href = '/reports/scheduled/delete/' + id;
+        }
+    }
+    
+    function runNow(id) {
+        if (confirm('Run this report now?')) {
+            alert('Executing report #' + id);
+            // Implement run now logic
+        }
+    }
+    
+    function resumeSchedule(id) {
+        if (confirm('Resume this schedule?')) {
+            alert('Resuming schedule #' + id);
+            // Implement resume logic
+        }
+    }
+    
+    function pauseSchedule(id) {
+        if (confirm('Pause this schedule?')) {
+            alert('Pausing schedule #' + id);
+            // Implement pause logic
+        }
+    }
+    
+    function filterSchedules() {
+        const status = document.getElementById('status').value;
+        const frequency = document.getElementById('frequency').value;
+        const reportType = document.getElementById('report_type').value;
+        
+        // Implement filter logic
+        alert('Filtering by: ' + status + ', ' + frequency + ', ' + reportType);
+    }
+    
+    function exportScheduleList() {
+        alert('Exporting schedule list...');
+        // Implement export logic
+    }
+    
+    function viewScheduleLogs() {
+        window.location.href = '/reports/scheduled/logs/';
+    }
+</script>
+{% endblock %}

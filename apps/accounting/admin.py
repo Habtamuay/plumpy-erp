@@ -232,17 +232,28 @@ class PurchaseBillAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">{}</a>', url, obj.supplier.name)
     supplier_link.short_description = 'Supplier'
     supplier_link.admin_order_field = 'supplier__name'
-    
+
     def total_amount_display(self, obj):
-        return format_html('<span style="font-weight: bold;">{:,.2f}</span>', obj.total_amount)
+        """Display total amount - FIXED"""
+        try:
+            amount = float(obj.total_amount)
+            formatted_amount = f"{amount:,.2f}"
+            return format_html('<span style="font-weight: bold;">{}</span>', formatted_amount)
+        except (TypeError, ValueError):
+            return str(obj.total_amount)
     total_amount_display.short_description = 'Total'
     total_amount_display.admin_order_field = 'total_amount'
     
     def remaining_amount_display(self, obj):
-        remaining = obj.remaining_amount
-        if remaining > 0:
-            return format_html('<span style="color: orange; font-weight: bold;">{:,.2f}</span>', remaining)
-        return format_html('<span style="color: green; font-weight: bold;">{:,.2f}</span>', remaining)
+        """Display remaining amount - FIXED"""
+        try:
+            remaining = float(obj.remaining_amount)
+            formatted_remaining = f"{remaining:,.2f}"
+            if remaining > 0:
+                return format_html('<span style="color: orange; font-weight: bold;">{}</span>', formatted_remaining)
+            return format_html('<span style="color: green; font-weight: bold;">{}</span>', formatted_remaining)
+        except (TypeError, ValueError):
+            return str(obj.remaining_amount)
     remaining_amount_display.short_description = 'Remaining'
     
     def status_badge(self, obj):
@@ -308,12 +319,20 @@ class PaymentAdmin(admin.ModelAdmin):
     party_display.short_description = 'Party'
     
     def amount_display(self, obj):
-        color = 'green' if obj.payment_type == 'customer' else 'red'
-        return format_html(
-            '<span style="color: {}; font-weight: bold;">{:,.2f}</span>',
-            color,
-            obj.amount
-        )
+        """Display amount with color coding - FIXED"""
+        try:
+            # Convert to float first, then format
+            amount = float(obj.amount)
+            color = 'green' if obj.payment_type == 'customer' else 'red'
+            # Format the number first, then pass to format_html
+            formatted_amount = f"{amount:,.2f}"
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{}</span>',
+                color,
+                formatted_amount
+            )
+        except (TypeError, ValueError):
+            return str(obj.amount)
     amount_display.short_description = 'Amount'
     
     def reconciled_badge(self, obj):

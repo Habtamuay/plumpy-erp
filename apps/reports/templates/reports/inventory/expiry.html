@@ -1,0 +1,143 @@
+<!-- reports/inventory/expiry.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Expiry Report{% endblock %}
+{% block report_title %}Inventory Expiry Report{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="days_to_expiry">Days to Expiry:</label>
+                <input type="number" id="days_to_expiry" name="days_to_expiry" class="form-control" value="30">
+            </div>
+            <div class="col-md-6 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Expired Items</h5>
+                <h3 class="text-danger">{{ expired_count }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Expiring Soon</h5>
+                <h3 class="text-warning">{{ near_count }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">30 Days</h5>
+                <h3 class="text-info">{{ buckets.30_days }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">60 Days</h5>
+                <h3 class="text-secondary">{{ buckets.60_days }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Expired Items</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Product</th>
+            <th>Batch</th>
+            <th>Warehouse</th>
+            <th>Quantity</th>
+            <th>Expiry Date</th>
+            <th>Days Past Expiry</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lot in expired %}
+        <tr>
+            <td>{{ lot.item.name }}</td>
+            <td>{{ lot.lot_number }}</td>
+            <td>{{ lot.warehouse.name }}</td>
+            <td>{{ lot.quantity }}</td>
+            <td>{{ lot.expiry_date|date:"M d, Y" }}</td>
+            <td class="text-danger">{{ lot.expiry_date|timesince:today|slice:":5" }} ago</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4 class="mt-4">Expiring Soon (Next 90 Days)</h4>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Product</th>
+            <th>Batch</th>
+            <th>Warehouse</th>
+            <th>Quantity</th>
+            <th>Expiry Date</th>
+            <th>Days Remaining</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lot in near_expiry %}
+        <tr>
+            <td>{{ lot.item.name }}</td>
+            <td>{{ lot.lot_number }}</td>
+            <td>{{ lot.warehouse.name }}</td>
+            <td>{{ lot.quantity }}</td>
+            <td>{{ lot.expiry_date|date:"M d, Y" }}</td>
+            <td class="text-warning">{{ lot.expiry_date|timeuntil:today|slice:":5" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<canvas id="expiryChart" width="400" height="200"></canvas>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const buckets = {{ buckets|safe }};
+    const labels = ['30 Days', '60 Days', '90 Days'];
+    const data = [buckets['30_days'], buckets['60_days'], buckets['90_days']];
+
+    const ctx = document.getElementById('expiryChart').getContext('2d');
+    const expiryChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Items Expiring',
+                data: data,
+                backgroundColor: ['#ef4444', '#f59e0b', '#eab308'],
+                borderColor: ['#dc2626', '#d97706', '#ca8a04'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

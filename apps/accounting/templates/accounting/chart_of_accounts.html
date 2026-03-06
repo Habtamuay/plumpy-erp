@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chart of Accounts{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
+<style>
+    .account-level-1 { padding-left: 20px; font-weight: bold; background-color: #f8f9fa; }
+    .account-level-2 { padding-left: 40px; }
+    .account-level-3 { padding-left: 60px; font-style: italic; }
+    .account-level-4 { padding-left: 80px; }
+    .badge-asset { background-color: #28a745; color: white; }
+    .badge-liability { background-color: #dc3545; color: white; }
+    .badge-equity { background-color: #6f42c1; color: white; }
+    .badge-revenue { background-color: #007bff; color: white; }
+    .badge-expense { background-color: #fd7e14; color: white; }
+    .summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-journal-bookmark-fill me-2 text-primary"></i>Chart of Accounts
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Complete list of all accounts in the general ledger
+                        </p>
+                    </div>
+                    <div>
+                        <a href="{% url 'accounting:dashboard' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5>Total Accounts</h5>
+                    <h2>{{ total_accounts }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5>Asset Accounts</h5>
+                    <h2>{{ asset_count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5>Liability Accounts</h5>
+                    <h2>{{ liability_count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5>Equity Accounts</h5>
+                    <h2>{{ equity_count }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Account Type</label>
+                            <select name="type" class="form-select">
+                                <option value="">All Types</option>
+                                {% for type in account_types %}
+                                <option value="{{ type.id }}" {% if request.GET.type == type.id|stringformat:"i" %}selected{% endif %}>
+                                    {{ type.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select">
+                                <option value="">All Categories</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}" {% if request.GET.category == category.id|stringformat:"i" %}selected{% endif %}>
+                                    {{ category.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Search</label>
+                            <input type="text" name="search" class="form-control" value="{{ request.GET.search }}" placeholder="Account code or name...">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search"></i> Filter
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="accountsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Account Name</th>
+                                    <th>Type</th>
+                                    <th>Category</th>
+                                    <th>Balance</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in accounts %}
+                                <tr class="account-level-{{ account.level|default:1 }}">
+                                    <td>{{ account.code }}</td>
+                                    <td>
+                                        {% if account.level == 1 %}
+                                        <strong>{{ account.name }}</strong>
+                                        {% else %}
+                                        {{ account.name }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if account.account_type %}
+                                        <span class="badge 
+                                            {% if account.account_type.category.name == 'Assets' %}bg-success
+                                            {% elif account.account_type.category.name == 'Liabilities' %}bg-danger
+                                            {% elif account.account_type.category.name == 'Equity' %}bg-primary
+                                            {% elif account.account_type.category.name == 'Revenue' %}bg-info
+                                            {% elif account.account_type.category.name == 'Expenses' %}bg-warning
+                                            {% endif %}">
+                                            {{ account.account_type.name }}
+                                        </span>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ account.account_category.name|default:'-' }}</td>
+                                    <td class="{% if account.current_balance > 0 %}text-success{% elif account.current_balance < 0 %}text-danger{% endif %}">
+                                        {{ account.current_balance|floatformat:2 }}
+                                    </td>
+                                    <td>
+                                        {% if account.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'accounting:account_detail' account.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <h5 class="text-muted">No accounts found</h5>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#accountsTable').DataTable({
+            paging: true,
+            searching: true,
+            ordering: true,
+            pageLength: 25,
+            order: [[0, 'asc']]
+        });
+    });
+</script>
+{% endblock %}

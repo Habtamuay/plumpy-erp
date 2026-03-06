@@ -1,5 +1,6 @@
 from django import forms
 from django.utils import timezone
+from django.db import models
 from .models import ReportTemplate, ScheduledReport, DashboardWidget, ReportCategory
 
 
@@ -68,8 +69,12 @@ class ProductionReportFilterForm(ReportFilterForm):
         from apps.core.models import Item
         from apps.production.models import ProductionRun
         
-        products = Item.objects.filter(category='finished', is_active=True)
-        self.fields['product'].choices = [('', 'All Products')] + [(p.id, p.name) for p in products]
+        # include finished items plus any product referenced by a run (even if category differs)
+        prod_ids = ProductionRun.objects.values_list('product_id', flat=True).distinct()
+        products = Item.objects.filter(is_active=True).filter(
+            models.Q(category='finished') | models.Q(id__in=prod_ids)
+        )
+        self.fields['product'].choices = [('', 'All Products')] + [(p.id, p.name) for p in products.distinct()]
         
         self.fields['status'].choices = [('', 'All Status')] + list(ProductionRun.STATUS_CHOICES)
 

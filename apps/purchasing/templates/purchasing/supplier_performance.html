@@ -1,0 +1,117 @@
+{% extends 'reports/base_report.html' %}
+
+{% block title %}Supplier Performance{% endblock %}
+{% block report_title %}Supplier Performance Report{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Supplier Scorecard</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Supplier</th>
+                                <th>Total Orders</th>
+                                <th>On-Time</th>
+                                <th>Late</th>
+                                <th>On-Time %</th>
+                                <th>Quality Rating</th>
+                                <th>Avg. Lead Time</th>
+                                <th>Spend</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>ABC Supplies Ltd</strong></td>
+                                <td>45</td>
+                                <td>44</td>
+                                <td>1</td>
+                                <td>98%</td>
+                                <td>4.8/5</td>
+                                <td>7.2 days</td>
+                                <td>$234,567</td>
+                                <td><span class="badge bg-success">A+</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Global Materials Inc</strong></td>
+                                <td>32</td>
+                                <td>30</td>
+                                <td>2</td>
+                                <td>94%</td>
+                                <td>4.5/5</td>
+                                <td>9.8 days</td>
+                                <td>$189,432</td>
+                                <td><span class="badge bg-success">A-</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>TechParts Co</strong></td>
+                                <td>28</td>
+                                <td>24</td>
+                                <td>4</td>
+                                <td>86%</td>
+                                <td>4.2/5</td>
+                                <td>12.5 days</td>
+                                <td>$145,789</td>
+                                <td><span class="badge bg-warning">B</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Supplier Quality Rating</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="qualityChart" style="height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Lead Time Comparison</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="leadTimeChart" style="height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Quality Chart
+    const ctx1 = document.getElementById('qualityChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'bar',
+        data: {
+            labels: ['ABC Supplies', 'Global Materials', 'TechParts', 'Raw Direct', 'Packaging Sol'],
+            datasets: [{
+                label: 'Quality Rating',
+                data: [4.8, 4.5, 4.2, 4.9, 4.0],
+                backgroundColor: '#4e73df'
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    max: 5,
+                    min: 0
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

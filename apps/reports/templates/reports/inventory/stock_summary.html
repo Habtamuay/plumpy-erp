@@ -1,0 +1,270 @@
+{% extends 'reports/base_report.html' %}
+{% load humanize %}
+
+{% block report_title %}Stock Summary Report{% endblock %}
+{% block report_heading %}Stock Summary Report{% endblock %}
+{% block report_description %}Current stock levels by item and warehouse as of {{ today|date:"F j, Y" }}{% endblock %}
+
+{% block report_content %}
+<!-- Filter Section -->
+<div class="filter-card">
+    <form method="get" class="row g-3">
+        <div class="col-md-2">
+            <label for="date_from" class="form-label">From Date</label>
+            <input type="date" name="date_from" id="date_from" class="form-control" value="{{ request.GET.date_from }}">
+        </div>
+        <div class="col-md-2">
+            <label for="date_to" class="form-label">To Date</label>
+            <input type="date" name="date_to" id="date_to" class="form-control" value="{{ request.GET.date_to }}">
+        </div>
+        <div class="col-md-2">
+            <label for="warehouse" class="form-label">Warehouse</label>
+            <select name="warehouse" id="warehouse" class="form-select">
+                <option value="">All Warehouses</option>
+                {% for wh in warehouses %}
+                <option value="{{ wh.id }}" {% if request.GET.warehouse == wh.id|stringformat:"s" %}selected{% endif %}>
+                    {{ wh.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="category" class="form-label">Category</label>
+            <select name="category" id="category" class="form-select">
+                <option value="">All Categories</option>
+                {% for cat_key, cat_value in categories %}
+                <option value="{{ cat_key }}" {% if request.GET.category == cat_key %}selected{% endif %}>
+                    {{ cat_value }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="status" class="form-label">Stock Status</label>
+            <select name="status" id="status" class="form-select">
+                <option value="">All</option>
+                <option value="low" {% if request.GET.status == 'low' %}selected{% endif %}>Low Stock</option>
+                <option value="out" {% if request.GET.status == 'out' %}selected{% endif %}>Out of Stock</option>
+                <option value="normal" {% if request.GET.status == 'normal' %}selected{% endif %}>Normal</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-funnel"></i> Apply Filters
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Summary Statistics -->
+<div class="summary-stats">
+    <div class="stat-box">
+        <div class="stat-label">Total Items</div>
+        <div class="stat-value">{{ total_items|default:"0" }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Total Quantity</div>
+        <div class="stat-value">{{ total_quantity|default:"0"|floatformat:0 }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Total Value</div>
+        <div class="stat-value">{{ total_value|default:"0"|floatformat:0 }}</div>
+        <div class="stat-change">ETB</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Low Stock Items</div>
+        <div class="stat-value text-warning">{{ low_stock_count|default:"0" }}</div>
+    </div>
+</div>
+
+<!-- Stock by Category Chart -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-pie-chart"></i> Stock Distribution by Category
+        </h5>
+    </div>
+    <div class="chart-container">
+        <canvas id="categoryChart"></canvas>
+    </div>
+</div>
+
+<!-- Stock by Warehouse Chart -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-bar-chart"></i> Stock Value by Warehouse
+        </h5>
+    </div>
+    <div class="chart-container">
+        <canvas id="warehouseChart"></canvas>
+    </div>
+</div>
+
+<!-- Detailed Stock Table -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-table"></i> Detailed Stock List
+        </h5>
+        <div class="export-buttons">
+            <a href="?export=excel" class="export-btn excel">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table-report">
+            <thead>
+                <tr>
+                    <th>Item Code</th>
+                    <th>Item Name</th>
+                    <th>Category</th>
+                    <th>Warehouse</th>
+                    <th>Lot/Batch</th>
+                    <th>Quantity</th>
+                    <th>Unit</th>
+                    <th>Unit Cost</th>
+                    <th>Total Value</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in stock_items %}
+                <tr>
+                    <td><strong>{{ stock.item.code }}</strong></td>
+                    <td>{{ stock.item.name }}</td>
+                    <td>{{ stock.item.get_category_display }}</td>
+                    <td>{{ stock.warehouse.name }}</td>
+                    <td>
+                        {% if stock.lot %}
+                        <span class="badge badge-info">{{ stock.lot.batch_number }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-end">{{ stock.quantity|floatformat:2 }}</td>
+                    <td>{{ stock.item.unit.abbreviation }}</td>
+                    <td class="text-end">{{ stock.item.unit_cost|floatformat:2 }}</td>
+                    <td class="text-end fw-bold">{{ stock.stock_value|floatformat:2 }}</td>
+                    <td>
+                        {% if stock.quantity <= 0 %}
+                        <span class="badge badge-danger">Out of Stock</span>
+                        {% elif stock.quantity < stock.item.minimum_stock %}
+                        <span class="badge badge-warning">Low Stock</span>
+                        {% elif stock.quantity < stock.item.reorder_point %}
+                        <span class="badge badge-warning">Reorder</span>
+                        {% else %}
+                        <span class="badge badge-success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="no-data">
+                        <i class="bi bi-inbox"></i>
+                        <p>No stock data available</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Expiry Summary -->
+<div class="report-card">
+    <div class="report-card-header">
+        <h5 class="report-card-title">
+            <i class="bi bi-calendar-exclamation"></i> Expiry Summary
+        </h5>
+    </div>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <h3>{{ expired_count|default:"0" }}</h3>
+                    <p class="mb-0">Expired Lots</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h3>{{ near_expiry_count|default:"0" }}</h3>
+                    <p class="mb-0">Near Expiry (≤90 days)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h3>{{ good_expiry_count|default:"0" }}</h3>
+                    <p class="mb-0">Good (90+ days)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_report_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Category Chart Data
+    const categoryLabels = [{% for cat in stock_by_category %}"{{ cat.item__category|title }}",{% endfor %}];
+    const categoryValues = [{% for cat in stock_by_category %}{{ cat.total_value }},{% endfor %}];
+    
+    new Chart(document.getElementById('categoryChart'), {
+        type: 'pie',
+        data: {
+            labels: categoryLabels,
+            datasets: [{
+                data: categoryValues,
+                backgroundColor: [
+                    '#4361ee', '#06d6a0', '#ffb703', '#ef476f', 
+                    '#8338ec', '#3a86ff', '#fb5607', '#ff006e'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.label}: ETB ${formatNumber(ctx.parsed)}`
+                    }
+                }
+            }
+        }
+    });
+
+    // Warehouse Chart Data
+    const warehouseLabels = [{% for wh in stock_by_warehouse %}"{{ wh.warehouse__name }}",{% endfor %}];
+    const warehouseValues = [{% for wh in stock_by_warehouse %}{{ wh.total_value }},{% endfor %}];
+    
+    new Chart(document.getElementById('warehouseChart'), {
+        type: 'bar',
+        data: {
+            labels: warehouseLabels,
+            datasets: [{
+                label: 'Stock Value (ETB)',
+                data: warehouseValues,
+                backgroundColor: '#4361ee'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => 'ETB ' + formatNumber(v) }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block report_title %}Reports - Plumpy ERP{% endblock %}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Font Awesome (optional, as backup) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Chart.js Zoom Plugin (for interactive charts) -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+    <!-- jsPDF & html2canvas for PDF exports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body {
+            font-size: .875rem;
+            background-color: #f8f9fa;
+        }
+
+        /* Sidebar styling */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            background-color: #343a40;
+            color: white;
+        }
+
+        .sidebar .nav-link {
+            font-weight: 500;
+            color: rgba(255, 255, 255, .75);
+            padding: 0.5rem 1rem;
+        }
+
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, .1);
+        }
+
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: #007bff;
+        }
+
+        .sidebar .nav-link i {
+            margin-right: 8px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .main-content {
+            margin-left: 240px;
+            padding: 20px;
+        }
+
+        /* Navbar */
+        .navbar-brand {
+            padding-top: .75rem;
+            padding-bottom: .75rem;
+            background-color: rgba(0, 0, 0, .25);
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .25);
+        }
+
+        /* Cards */
+        .stat-card {
+            border-left: 4px solid;
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Tables */
+        .table-active {
+            background-color: #fff3cd !important;
+            font-weight: bold;
+        }
+
+        /* Badges for status */
+        .badge-success { background-color: #28a745; }
+        .badge-warning { background-color: #ffc107; color: #212529; }
+        .badge-danger { background-color: #dc3545; }
+        .badge-info { background-color: #17a2b8; }
+        .badge-secondary { background-color: #6c757d; }
+
+        /* Variance colors */
+        .text-variance-positive { color: #dc3545; font-weight: bold; }
+        .text-variance-negative { color: #28a745; font-weight: bold; }
+
+        /* Print styles */
+        @media print {
+            .sidebar, .navbar, .btn, .no-print {
+                display: none !important;
+            }
+            .main-content {
+                margin-left: 0 !important;
+                padding: 0 !important;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: static;
+                height: auto;
+                padding-top: 0;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
+        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="{% url 'admin:index' %}">
+            <i class="bi bi-boxes"></i> Plumpy ERP
+        </a>
+        <button class="navbar-toggler position-absolute d-md-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="w-100"></div>
+
+        <div class="navbar-nav">
+            <div class="nav-item text-nowrap">
+                <span class="nav-link px-3 text-white">
+                    <i class="bi bi-person-circle"></i>
+                    {% if user.is_authenticated %}
+                        {{ user.username }} ({{ user.userprofile.role|default:"User" }})
+                    {% else %}
+                        Guest
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="navbar-nav">
+            <div class="nav-item text-nowrap">
+                {% if user.is_authenticated %}
+                    <a class="nav-link px-3" href="{% url 'admin:logout' %}">
+                        <i class="bi bi-box-arrow-right"></i> Sign out
+                    </a>
+                {% else %}
+                    <a class="nav-link px-3" href="{% url 'admin:login' %}">
+                        <i class="bi bi-box-arrow-in-right"></i> Sign in
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar & Main Content Container -->
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <!-- Dashboard -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'admin:index' %}active{% endif %}" href="{% url 'admin:index' %}">
+                                <i class="bi bi-speedometer2"></i> Admin Dashboard
+                            </a>
+                        </li>
+
+                        <!-- Core / Company -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Company</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:company_company_changelist' %}">
+                                <i class="bi bi-building"></i> Companies
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:company_branch_changelist' %}">
+                                <i class="bi bi-diagram-3"></i> Branches
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:company_customer_changelist' %}">
+                                <i class="bi bi-people"></i> Customers
+                            </a>
+                        </li>
+
+                        <!-- Inventory -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Inventory</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:inventory_warehouse_changelist' %}">
+                                <i class="bi bi-house-door"></i> Warehouses
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:inventory_lot_changelist' %}">
+                                <i class="bi bi-upc-scan"></i> Lots/Batches
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:inventory_currentstock_changelist' %}">
+                                <i class="bi bi-boxes"></i> Current Stock
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:inventory_stocktransaction_changelist' %}">
+                                <i class="bi bi-arrow-left-right"></i> Transactions
+                            </a>
+                        </li>
+
+                        <!-- Production -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Production</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:production_bom_changelist' %}">
+                                <i class="bi bi-file-text"></i> BOMs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:production_productionrun_changelist' %}">
+                                <i class="bi bi-gear-wide-connected"></i> Production Runs
+                            </a>
+                        </li>
+
+                        <!-- Purchasing -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Purchasing</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:purchasing_supplier_changelist' %}">
+                                <i class="bi bi-truck"></i> Suppliers
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:purchasing_purchaseorder_changelist' %}">
+                                <i class="bi bi-cart"></i> Purchase Orders
+                            </a>
+                        </li>
+
+                        <!-- Accounting -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Accounting</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:accounting_account_changelist' %}">
+                                <i class="bi bi-journal-bookmark-fill"></i> Chart of Accounts
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:accounting_journalentry_changelist' %}">
+                                <i class="bi bi-journal-text"></i> Journal Entries
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:sales_salesinvoice_changelist' %}">
+                                <i class="bi bi-receipt"></i> Sales Invoices
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'admin:accounting_purchasebill_changelist' %}">
+                                <i class="bi bi-receipt-cutoff"></i> Purchase Bills
+                            </a>
+                        </li>
+
+                        <!-- Reports -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Reports</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'inventory:stock_summary' %}">
+                                <i class="bi bi-pie-chart"></i> Stock Summary
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'inventory:consumption_vs_bom' %}">
+                                <i class="bi bi-bar-chart"></i> Consumption vs BOM
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'inventory:inventory_analytics' %}">
+                                <i class="bi bi-graph-up"></i> Analytics
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'inventory:inventory_trends' %}">
+                                <i class="bi bi-graph-up-arrow"></i> Trends
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'production:cost_variance_report' %}">
+                                <i class="bi bi-calculator"></i> Cost Variance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'accounting:ar_aging' %}">
+                                <i class="bi bi-clock-history"></i> AR Aging
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'accounting:ap_aging' %}">
+                                <i class="bi bi-clock-history"></i> AP Aging
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- Company Info Footer in Sidebar -->
+                    <div class="position-absolute bottom-0 w-100 p-3 text-secondary small">
+                        <i class="bi bi-building"></i> Hilina Enriched Foods PLC<br>
+                        <i class="bi bi-geo-alt"></i> Addis Ababa, Ethiopia<br>
+                        <i class="bi bi-calendar"></i> {% now "F j, Y" %}
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main Content Area -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- Messages / Alerts -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show mt-3" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <!-- Page Content -->
+                <div class="container-fluid mt-4">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h1>{% block report_heading %}Reports{% endblock %}</h1>
+                            <p class="text-muted">{% block report_description %}Access various reports{% endblock %}</p>
+                        </div>
+                    </div>
+
+                    {% block report_content %}
+                    <!-- Default content if block not overridden -->
+                    <div class="alert alert-info">
+                        <h4>No Content</h4>
+                        <p>This report has no content defined.</p>
+                    </div>
+                    {% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- jQuery (optional, for some plugins) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Custom JavaScript -->
+    <script>
+        // Auto-hide alerts after 5 seconds
+        setTimeout(function() {
+            document.querySelectorAll('.alert').forEach(function(alert) {
+                alert.style.transition = 'opacity 0.5s';
+                alert.style.opacity = '0';
+                setTimeout(function() { alert.remove(); }, 500);
+            });
+        }, 5000);
+
+        // Activate current page in sidebar
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            document.querySelectorAll('.sidebar .nav-link').forEach(function(link) {
+                if (link.getAttribute('href') === currentPath) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // Generic export to CSV function (can be used by child templates)
+        window.exportToCSV = function(tableId, filename) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const rows = table.querySelectorAll('tr');
+            const csv = [];
+
+            rows.forEach(row => {
+                const rowData = [];
+                row.querySelectorAll('td, th').forEach(cell => {
+                    let text = cell.textContent.trim().replace(/\s+/g, ' ').replace(/,/g, ';');
+                    rowData.push('"' + text + '"');
+                });
+                csv.push(rowData.join(','));
+            });
+
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename || 'export.csv';
+            a.click();
+            window.URL.revokeObjectURL(url);
+        };
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

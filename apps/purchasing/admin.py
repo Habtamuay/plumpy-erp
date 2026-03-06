@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.contrib import messages
+from django.shortcuts import redirect
 from django.utils import timezone
 from .models import (
     Supplier, PurchaseRequisition, PurchaseRequisitionLine,
@@ -16,11 +17,12 @@ class PurchaseRequisitionLineInline(admin.TabularInline):
     extra = 1
     fields = ('item', 'quantity', 'unit', 'unit_price_estimate', 'total_estimate', 'notes')
     readonly_fields = ('total_estimate',)
-    autocomplete_fields = ['item', 'unit']
+    # Remove autocomplete_fields temporarily
     
     def total_estimate(self, obj):
         if obj.quantity and obj.unit_price_estimate:
-            return format_html('{:,.2f}', obj.quantity * obj.unit_price_estimate)
+            total = float(obj.quantity) * float(obj.unit_price_estimate)
+            return f"{total:.2f}"
         return '-'
     total_estimate.short_description = 'Est. Total'
 
@@ -29,14 +31,14 @@ class PurchaseOrderLineInline(admin.TabularInline):
     """Inline for purchase order lines"""
     model = PurchaseOrderLine
     extra = 1
-    fields = ('item', 'quantity_ordered', 'unit', 'unit_price', 'total_price', 'quantity_received', 'remaining', 'notes')
+    fields = ('item', 'quantity_ordered', 'unit', 'unit_price', 'tax_rate', 'total_price', 'quantity_received', 'remaining', 'notes')
     readonly_fields = ('total_price', 'remaining')
-    autocomplete_fields = ['item', 'unit']
+    # Remove autocomplete_fields temporarily
     
     def remaining(self, obj):
         remaining = obj.remaining
         if remaining > 0:
-            return format_html('<span style="color: #856404;">{}</span>', remaining)
+            return format_html('<span style="color: #856404;">{}</span>', str(remaining))
         return format_html('<span style="color: green;">0</span>')
     remaining.short_description = 'Remaining'
 
@@ -46,7 +48,8 @@ class GoodsReceiptLineInline(admin.TabularInline):
     model = GoodsReceiptLine
     extra = 1
     fields = ('po_line', 'quantity_received', 'lot', 'notes')
-    autocomplete_fields = ['po_line', 'lot']
+    # Remove autocomplete_fields to fix the error
+    # autocomplete_fields = ['po_line']
 
 
 @admin.register(Supplier)
@@ -54,7 +57,6 @@ class SupplierAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'company', 'phone', 'email', 'payment_terms_days', 'performance_rating_display', 'status_badge')
     list_filter = ('company', 'is_active', 'is_preferred', 'country')
     search_fields = ('name', 'code', 'tin', 'tax_id', 'email', 'phone', 'contact_person')
-    autocomplete_fields = ['company']
     readonly_fields = ('created_at', 'updated_at', 'total_purchase_orders', 'total_spend')
     list_editable = ('payment_terms_days',)
     list_per_page = 25
@@ -133,8 +135,8 @@ class PurchaseRequisitionAdmin(admin.ModelAdmin):
     list_filter = ('status', 'company', 'requested_date', 'required_date')
     search_fields = ('requisition_number', 'notes', 'requested_by__username')
     date_hierarchy = 'requested_date'
-    readonly_fields = ('requisition_number', 'created_at', 'updated_at', 'item_count')
-    autocomplete_fields = ['company', 'branch', 'requested_by']
+    readonly_fields = ('requisition_number', 'created_at', 'updated_at', 'item_count', 'total_estimate_display')
+    raw_id_fields = ['requested_by']
     inlines = [PurchaseRequisitionLineInline]
     list_per_page = 25
     save_on_top = True
@@ -147,7 +149,7 @@ class PurchaseRequisitionAdmin(admin.ModelAdmin):
             'fields': ('requested_date', 'required_date')
         }),
         ('Summary', {
-            'fields': ('item_count', 'total_estimate')
+            'fields': ('item_count', 'total_estimate_display')
         }),
         ('Additional Info', {
             'fields': ('requested_by', 'notes')
@@ -163,8 +165,8 @@ class PurchaseRequisitionAdmin(admin.ModelAdmin):
     item_count.short_description = 'Items'
     
     def total_estimate_display(self, obj):
-        total = sum(line.quantity * (line.unit_price_estimate or 0) for line in obj.lines.all())
-        return format_html('<span style="font-weight: bold;">{:,.2f}</span>', total)
+        total = sum(float(line.quantity or 0) * float(line.unit_price_estimate or 0) for line in obj.lines.all())
+        return f"{total:.2f}"
     total_estimate_display.short_description = 'Est. Total'
     
     def status_badge(self, obj):
@@ -199,7 +201,6 @@ class PurchaseRequisitionAdmin(admin.ModelAdmin):
         if queryset.count() != 1:
             self.message_user(request, 'Please select exactly one requisition to convert.', level=messages.ERROR)
             return
-        # Redirect to PO creation with pre-filled data
         req = queryset.first()
         return redirect(f'/admin/purchasing/purchaseorder/add/?requisition={req.id}')
     convert_to_po.short_description = "Convert to Purchase Order"
@@ -208,11 +209,11 @@ class PurchaseRequisitionAdmin(admin.ModelAdmin):
 @admin.register(PurchaseOrder)
 class PurchaseOrderAdmin(admin.ModelAdmin):
     list_display = ('po_number', 'supplier_link', 'order_date', 'expected_delivery_date', 'total_amount_display', 'receipt_status', 'status_badge')
-    list_filter = ('status', 'company', 'order_date', 'supplier__country')
+    list_filter = ('status', 'company', 'order_date')
     search_fields = ('po_number', 'supplier__name', 'supplier__code', 'notes')
     date_hierarchy = 'order_date'
     readonly_fields = ('po_number', 'total_amount', 'created_at', 'updated_at', 'total_amount_display', 'receipt_progress')
-    autocomplete_fields = ['company', 'branch', 'supplier', 'requisition', 'approved_by', 'created_by']
+    raw_id_fields = ['supplier', 'requisition', 'approved_by', 'created_by']
     inlines = [PurchaseOrderLineInline]
     list_per_page = 25
     save_on_top = True
@@ -240,6 +241,29 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         }),
     )
     
+    def save_model(self, request, obj, form, change):
+        if not change:  # If creating new object
+            # Auto-generate PO number if not provided
+            if not obj.po_number:
+                last_po = PurchaseOrder.objects.order_by('-id').first()
+                if last_po and last_po.po_number and last_po.po_number.startswith('PO-'):
+                    try:
+                        last_num = int(last_po.po_number.split('-')[-1])
+                        new_num = last_num + 1
+                    except:
+                        new_num = 1
+                else:
+                    new_num = 1
+                
+                today = timezone.now().strftime('%Y%m%d')
+                obj.po_number = f"PO-{today}-{new_num:03d}"
+            
+            # Set created_by to current user
+            if not obj.created_by:
+                obj.created_by = request.user
+        
+        super().save_model(request, obj, form, change)
+    
     def supplier_link(self, obj):
         url = reverse('admin:purchasing_supplier_change', args=[obj.supplier.id])
         return format_html('<a href="{}">{}</a>', url, obj.supplier.name)
@@ -247,15 +271,22 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     supplier_link.admin_order_field = 'supplier__name'
     
     def total_amount_display(self, obj):
-        return format_html('<span style="font-weight: bold;">{:,.2f}</span>', obj.total_amount)
+        return f"{float(obj.total_amount or 0):.2f}"
     total_amount_display.short_description = 'Total Amount'
     
     def receipt_status(self, obj):
-        total_qty = sum(line.quantity_ordered for line in obj.lines.all())
-        received_qty = sum(line.quantity_received for line in obj.lines.all())
+        lines = obj.lines.all()
+        if not lines:
+            return '-'
+        
+        total_qty = sum(float(line.quantity_ordered or 0) for line in lines)
+        received_qty = sum(float(line.quantity_received or 0) for line in lines)
+        
         if total_qty == 0:
             return '-'
-        percentage = (received_qty / total_qty) * 100
+        
+        percentage = (received_qty / total_qty) * 100 if total_qty > 0 else 0
+        
         if percentage >= 100:
             return format_html('<span style="color: green;">✓ Fully Received</span>')
         elif percentage > 0:
@@ -268,21 +299,27 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         if not lines:
             return "No lines"
         
-        html = ['<table style="width:100%">']
+        html = []
+        html.append('<table style="width:100%">')
+        html.append('<thead><tr><th>Item</th><th>Progress</th><th>Status</th></tr></thead>')
+        html.append('<tbody>')
+        
         for line in lines:
-            percentage = (line.quantity_received / line.quantity_ordered * 100) if line.quantity_ordered else 0
-            color = 'green' if percentage >= 100 else 'orange' if percentage > 0 else 'gray'
-            html.append(f'''
-                <tr>
-                    <td>{line.item.code}</td>
-                    <td>{line.quantity_received} / {line.quantity_ordered}</td>
-                    <td>
-                        <div style="background-color: #e9ecef; width:100px; height:10px; border-radius:5px;">
-                            <div style="background-color: {color}; width:{percentage}%; height:10px; border-radius:5px;"></div>
-                        </div>
-                    </td>
-                </tr>
-            ''')
+            if line.quantity_ordered > 0:
+                percentage = (float(line.quantity_received or 0) / float(line.quantity_ordered or 1)) * 100
+                color = 'green' if percentage >= 100 else 'orange' if percentage > 0 else 'gray'
+                
+                html.append('<tr>')
+                html.append(f'<td>{line.item}</td>')
+                html.append(f'<td>{line.quantity_received} / {line.quantity_ordered}</td>')
+                html.append('<td>')
+                html.append('<div style="background-color: #e9ecef; width:100px; height:10px; border-radius:5px;">')
+                html.append(f'<div style="background-color: {color}; width:{percentage:.0f}%; height:10px; border-radius:5px;"></div>')
+                html.append('</div>')
+                html.append('</td>')
+                html.append('</tr>')
+        
+        html.append('</tbody>')
         html.append('</table>')
         return format_html(''.join(html))
     receipt_progress.short_description = 'Receipt Progress'
@@ -311,7 +348,6 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     send_to_supplier.short_description = "Mark as sent to supplier"
     
     def mark_received(self, request, queryset):
-        from django.shortcuts import redirect
         if queryset.count() != 1:
             self.message_user(request, 'Please select exactly one PO to receive.', level=messages.ERROR)
             return
@@ -330,12 +366,12 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     cancel_orders.short_description = "Cancel orders"
 
 
+# Register PurchaseOrderLineAdmin to fix the autocomplete error
 @admin.register(PurchaseOrderLine)
 class PurchaseOrderLineAdmin(admin.ModelAdmin):
     list_display = ('po_link', 'item', 'quantity_ordered', 'unit_price', 'total_price', 'quantity_received', 'remaining', 'status_indicator')
-    list_filter = ('po__supplier', 'po__status', 'item__category')
-    search_fields = ('item__code', 'item__name', 'po__po_number')
-    autocomplete_fields = ['item', 'unit', 'po']
+    list_filter = ('po__supplier', 'po__status')
+    search_fields = ('item', 'po__po_number')
     readonly_fields = ('total_price', 'remaining')
     list_per_page = 25
     
@@ -343,6 +379,14 @@ class PurchaseOrderLineAdmin(admin.ModelAdmin):
         url = reverse('admin:purchasing_purchaseorder_change', args=[obj.po.id])
         return format_html('<a href="{}">{}</a>', url, obj.po.po_number)
     po_link.short_description = 'PO'
+    
+    def total_price(self, obj):
+        return f"{float(obj.total_price or 0):.2f}"
+    total_price.short_description = 'Total Price'
+    
+    def remaining(self, obj):
+        return f"{float(obj.remaining or 0):.2f}"
+    remaining.short_description = 'Remaining'
     
     def status_indicator(self, obj):
         if obj.remaining <= 0:
@@ -353,15 +397,15 @@ class PurchaseOrderLineAdmin(admin.ModelAdmin):
     status_indicator.short_description = 'Status'
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('po', 'item', 'unit')
+        return super().get_queryset(request).select_related('po')
 
 
 @admin.register(PurchaseOrderApproval)
 class PurchaseOrderApprovalAdmin(admin.ModelAdmin):
     list_display = ('po', 'level', 'approver', 'status_badge', 'approved_at', 'response_time')
-    list_filter = ('status', 'level', 'po__supplier')
+    list_filter = ('status', 'level')
     search_fields = ('po__po_number', 'approver__username', 'comment')
-    autocomplete_fields = ['po', 'approver']
+    raw_id_fields = ['po', 'approver']
     readonly_fields = ('approved_at', 'created_at', 'response_time')
     list_per_page = 25
     
@@ -386,17 +430,16 @@ class PurchaseOrderApprovalAdmin(admin.ModelAdmin):
             hours = delta.total_seconds() / 3600
             return f'{hours:.1f} hours'
         return '-'
-    response_time.short_description = 'Response Time'
 
 
 @admin.register(GoodsReceipt)
 class GoodsReceiptAdmin(admin.ModelAdmin):
     list_display = ('receipt_number', 'po_link', 'receipt_date', 'warehouse', 'items_count', 'total_value', 'received_by')
-    list_filter = ('receipt_date', 'warehouse', 'received_by')
+    list_filter = ('receipt_date', 'warehouse')
     search_fields = ('receipt_number', 'po__po_number', 'notes')
     date_hierarchy = 'receipt_date'
     readonly_fields = ('receipt_number', 'created_at', 'items_count', 'total_value')
-    autocomplete_fields = ['po', 'warehouse', 'received_by']
+    raw_id_fields = ['po', 'received_by']
     inlines = [GoodsReceiptLineInline]
     list_per_page = 25
     
@@ -426,48 +469,46 @@ class GoodsReceiptAdmin(admin.ModelAdmin):
     items_count.short_description = 'Items'
     
     def total_value(self, obj):
-        total = sum(line.quantity_received * line.po_line.unit_price for line in obj.lines.all())
-        return format_html('{:,.2f}', total)
+        total = sum(float(line.quantity_received or 0) * float(line.po_line.unit_price or 0) for line in obj.lines.all())
+        return f"{total:.2f}"
     total_value.short_description = 'Total Value'
 
 
 @admin.register(GoodsReceiptLine)
 class GoodsReceiptLineAdmin(admin.ModelAdmin):
     list_display = ('receipt', 'po_line', 'item_info', 'quantity_received', 'unit_price', 'line_total', 'lot_link')
-    list_filter = ('receipt__receipt_date', 'po_line__item__category')
-    search_fields = ('receipt__receipt_number', 'po_line__po__po_number', 'lot__batch_number')
-    autocomplete_fields = ['receipt', 'po_line', 'lot']
+    list_filter = ('receipt__receipt_date',)
+    search_fields = ('receipt__receipt_number', 'po_line__po__po_number', 'lot')
+    raw_id_fields = ['receipt', 'po_line']
     readonly_fields = ('line_total',)
     list_per_page = 25
     
     def item_info(self, obj):
-        item = obj.po_line.item
-        return format_html('{}<br><small>{}</small>', item.code, item.name)
+        return obj.po_line.item
     item_info.short_description = 'Item'
     
     def unit_price(self, obj):
-        return format_html('{:,.2f}', obj.po_line.unit_price)
+        return f"{float(obj.po_line.unit_price or 0):.2f}"
     unit_price.short_description = 'Unit Price'
     
     def line_total(self, obj):
-        total = obj.quantity_received * obj.po_line.unit_price
-        return format_html('{:,.2f}', total)
+        total = float(obj.quantity_received or 0) * float(obj.po_line.unit_price or 0)
+        return f"{total:.2f}"
     line_total.short_description = 'Total'
     
     def lot_link(self, obj):
         if obj.lot:
-            url = reverse('admin:inventory_lot_change', args=[obj.lot.id])
-            return format_html('<a href="{}">{}</a>', url, obj.lot.batch_number)
+            return obj.lot
         return '-'
 
 
 @admin.register(VendorPerformance)
 class VendorPerformanceAdmin(admin.ModelAdmin):
     list_display = ('supplier', 'period_start', 'period_end', 'orders_count', 'on_time_rate', 'quality_score')
-    list_filter = ('supplier__company', 'period_start')
+    list_filter = ('period_start',)
     search_fields = ('supplier__name', 'notes')
     readonly_fields = ('on_time_rate', 'created_at')
-    autocomplete_fields = ['supplier']
+    raw_id_fields = ['supplier']
     list_per_page = 25
     
     fieldsets = (
@@ -486,5 +527,6 @@ class VendorPerformanceAdmin(admin.ModelAdmin):
     )
     
     def on_time_rate(self, obj):
-        return format_html('{:.1f}%', obj.on_time_rate)
+        rate = obj.on_time_rate
+        return f"{rate:.1f}%"
     on_time_rate.short_description = 'On-Time Rate'

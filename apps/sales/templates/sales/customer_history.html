@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Customer History: {{ customer.name }}</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6>Total Invoiced</h6>
+                    <h3>${{ total_invoiced }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6>Total Paid</h6>
+                    <h3>${{ total_paid }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6>Outstanding Balance</h6>
+                    <h3>${{ balance_due }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs" id="historyTab" role="tablist">
+        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#invoices">Invoices</a></li>
+        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#orders">Sales Orders</a></li>
+    </ul>
+
+    <div class="tab-content border-left border-right border-bottom p-3">
+        <div class="tab-pane fade show active" id="invoices">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Invoice #</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Amount</th>
+                        <th>Paid</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inv in invoices %}
+                    <tr>
+                        <td>{{ inv.invoice_number }}</td>
+                        <td>{{ inv.invoice_date }}</td>
+                        <td><span class="badge badge-info">{{ inv.status }}</span></td>
+                        <td>{{ inv.total_amount }}</td>
+                        <td>{{ inv.paid_amount }}</td>
+                        <td><a href="{% url 'sales:invoice_detail' inv.id %}" class="btn btn-sm btn-outline-primary">View</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6">No invoices found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="tab-pane fade" id="orders">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Total</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>{{ order.order_number }}</td>
+                        <td>{{ order.order_date }}</td>
+                        <td>{{ order.status }}</td>
+                        <td>{{ order.total_amount }}</td>
+                        <td><a href="{% url 'sales:order_detail' order.id %}" class="btn btn-sm btn-outline-primary">View</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

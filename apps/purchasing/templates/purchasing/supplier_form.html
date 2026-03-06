@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if supplier %}Edit{% else %}Create{% endif %} Supplier - Plumpy ERP{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">
+            <i class="bi bi-truck me-2"></i>{% if supplier %}Edit{% else %}Create{% endif %} Supplier
+        </h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'purchasing:supplier_list' %}">Suppliers</a></li>
+                <li class="breadcrumb-item active">{% if supplier %}Edit{% else %}Create{% endif %}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post" class="needs-validation" novalidate>
+            {% csrf_token %}
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="mb-3">Basic Information</h5>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Company Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ supplier.name|default:'' }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Supplier Code</label>
+                        <input type="text" class="form-control" id="code" name="code" value="{{ supplier.code|default:'' }}" placeholder="Auto-generated if blank">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="company" class="form-label">Company *</label>
+                        <select class="form-select" id="company" name="company" required>
+                            <option value="">Select Company</option>
+                            {% for comp in companies %}
+                            <option value="{{ comp.id }}" {% if supplier.company.id == comp.id %}selected{% endif %}>{{ comp.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="tin" class="form-label">TIN Number</label>
+                            <input type="text" class="form-control" id="tin" name="tin" value="{{ supplier.tin|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="tax_id" class="form-label">Tax ID/VAT</label>
+                            <input type="text" class="form-control" id="tax_id" name="tax_id" value="{{ supplier.tax_id|default:'' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="registration_number" class="form-label">Registration Number</label>
+                        <input type="text" class="form-control" id="registration_number" name="registration_number" value="{{ supplier.registration_number|default:'' }}">
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5 class="mb-3">Contact Information</h5>
+                    <div class="mb-3">
+                        <label for="contact_person" class="form-label">Contact Person</label>
+                        <input type="text" class="form-control" id="contact_person" name="contact_person" value="{{ supplier.contact_person|default:'' }}">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="phone" name="phone" value="{{ supplier.phone|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="mobile" class="form-label">Mobile</label>
+                            <input type="text" class="form-control" id="mobile" name="mobile" value="{{ supplier.mobile|default:'' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ supplier.email|default:'' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="website" class="form-label">Website</label>
+                        <input type="url" class="form-control" id="website" name="website" value="{{ supplier.website|default:'' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address</label>
+                        <textarea class="form-control" id="address" name="address" rows="2">{{ supplier.address|default:'' }}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="city" class="form-label">City</label>
+                            <input type="text" class="form-control" id="city" name="city" value="{{ supplier.city|default:'Addis Ababa' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="country" class="form-label">Country</label>
+                            <input type="text" class="form-control" id="country" name="country" value="{{ supplier.country|default:'Ethiopia' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="mb-3">Financial & Payment Terms</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="payment_terms_days" class="form-label">Payment Terms (days)</label>
+                            <input type="number" class="form-control" id="payment_terms_days" name="payment_terms_days" value="{{ supplier.payment_terms_days|default:'30' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="credit_limit" class="form-label">Credit Limit (ETB)</label>
+                            <input type="number" step="0.01" class="form-control" id="credit_limit" name="credit_limit" value="{{ supplier.credit_limit|default:'0' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="currency" class="form-label">Currency</label>
+                        <select class="form-select" id="currency" name="currency">
+                            <option value="ETB" {% if supplier.currency == 'ETB' or not supplier.currency %}selected{% endif %}>ETB - Ethiopian Birr</option>
+                            <option value="USD" {% if supplier.currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                            <option value="EUR" {% if supplier.currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                            <option value="GBP" {% if supplier.currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5 class="mb-3">Banking Information</h5>
+                    <div class="mb-3">
+                        <label for="bank_name" class="form-label">Bank Name</label>
+                        <input type="text" class="form-control" id="bank_name" name="bank_name" value="{{ supplier.bank_name|default:'' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="bank_account" class="form-label">Account Number</label>
+                        <input type="text" class="form-control" id="bank_account" name="bank_account" value="{{ supplier.bank_account|default:'' }}">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="bank_branch" class="form-label">Branch</label>
+                            <input type="text" class="form-control" id="bank_branch" name="bank_branch" value="{{ supplier.bank_branch|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="swift_code" class="form-label">SWIFT Code</label>
+                            <input type="text" class="form-control" id="swift_code" name="swift_code" value="{{ supplier.swift_code|default:'' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <h5 class="mb-3">Performance Ratings</h5>
+                    <div class="mb-3">
+                        <label for="performance_rating" class="form-label">Overall Rating (0-5)</label>
+                        <input type="number" step="0.1" min="0" max="5" class="form-control" id="performance_rating" name="performance_rating" value="{{ supplier.performance_rating|default:'0' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="on_time_delivery_rate" class="form-label">On-Time Delivery %</label>
+                        <input type="number" step="0.1" min="0" max="100" class="form-control" id="on_time_delivery_rate" name="on_time_delivery_rate" value="{{ supplier.on_time_delivery_rate|default:'0' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="quality_rating" class="form-label">Quality Rating (0-5)</label>
+                        <input type="number" step="0.1" min="0" max="5" class="form-control" id="quality_rating" name="quality_rating" value="{{ supplier.quality_rating|default:'0' }}">
+                    </div>
+                </div>
+                
+                <div class="col-md-8">
+                    <h5 class="mb-3">Additional Information</h5>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="4">{{ supplier.notes|default:'' }}</textarea>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {% if supplier.is_active or not supplier %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">Active</label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_preferred" name="is_preferred" {% if supplier.is_preferred %}checked{% endif %}>
+                        <label class="form-check-label" for="is_preferred">Preferred Supplier</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save me-1"></i> {% if supplier %}Update{% else %}Create{% endif %} Supplier
+                </button>
+                <a href="{% url 'purchasing:supplier_list' %}" class="btn btn-outline-secondary ms-2">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

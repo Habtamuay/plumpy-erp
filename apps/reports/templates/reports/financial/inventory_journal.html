@@ -1,0 +1,122 @@
+<!-- reports/financial/inventory_journal.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Inventory Journal{% endblock %}
+{% block report_title %}Inventory Journal{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-2">
+                <label for="date_from">From Date:</label>
+                {{ form.date_from }}
+            </div>
+            <div class="col-md-2">
+                <label for="date_to">To Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-2">
+                <label for="warehouse">Warehouse:</label>
+                {{ form.warehouse }}
+            </div>
+            <div class="col-md-2">
+                <label for="item">Item Code:</label>
+                {{ form.item }}
+            </div>
+            <div class="col-md-2 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Total Transactions</h5>
+                <h3 class="text-info">{{ journal_entries|length }}</h3>
+                <small class="text-muted">Stock movements</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Report Date</h5>
+                <h6 class="text-primary">{{ today|date:"M d, Y" }}</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Inventory Movement Transactions</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Narration</th>
+                        <th>Item</th>
+                        <th class="text-center">Quantity</th>
+                        <th>From Warehouse</th>
+                        <th>To Warehouse</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in journal_entries %}
+                    <tr>
+                        <td>{{ entry.date|date:"M d, Y" }}</td>
+                        <td>{{ entry.reference }}</td>
+                        <td>{{ entry.narration }}</td>
+                        <td>{{ entry.item }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-{% if entry.type == 'Stock In' %}success{% elif entry.type == 'Stock Out' %}danger{% else %}info{% endif %}">
+                                {{ entry.quantity|floatformat:2 }}
+                            </span>
+                        </td>
+                        <td>{{ entry.warehouse_from }}</td>
+                        <td>{{ entry.warehouse_to }}</td>
+                        <td>
+                            <span class="badge bg-secondary">{{ entry.type }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if not journal_entries %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    No inventory transactions found for the selected criteria.
+</div>
+{% endif %}
+
+{% if journal_entries %}
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Inventory Journal Report</strong>
+            <br>
+            Showing {{ journal_entries|length }} stock movement transactions.
+            {% if journal_entries|length >= 500 %}
+                <br><small class="text-muted">Limited to 500 most recent transactions for performance.</small>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

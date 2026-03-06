@@ -1,0 +1,117 @@
+{% extends 'reports/base_report.html' %}
+
+{% block title %}Purchase Order Summary{% endblock %}
+{% block report_title %}Purchase Order Summary Report{% endblock %}
+
+{% block filters %}
+<div class="col-md-3">
+    <label class="form-label">Date Range</label>
+    <input type="text" class="form-control" id="dateRange" name="date_range">
+</div>
+<div class="col-md-2">
+    <label class="form-label">Status</label>
+    <select class="form-select" id="status">
+        <option value="all">All</option>
+        <option value="draft">Draft</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="received">Received</option>
+        <option value="cancelled">Cancelled</option>
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">Supplier</label>
+    <select class="form-select" id="supplier">
+        <option value="all">All Suppliers</option>
+        <option value="1">ABC Supplies</option>
+        <option value="2">Global Materials</option>
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">Category</label>
+    <select class="form-select" id="category">
+        <option value="all">All</option>
+        <option value="raw">Raw Materials</option>
+        <option value="packaging">Packaging</option>
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">&nbsp;</label>
+    <button class="btn btn-primary w-100" onclick="applyFilters()">
+        <i class="fas fa-filter"></i> Apply
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Total POs</h6>
+                <h3>156</h3>
+                <small class="text-success">+12 vs last month</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Value</h6>
+                <h3>$1.2M</h3>
+                <small class="text-success">+8.3%</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Pending Orders</h6>
+                <h3>23</h3>
+                <small class="text-warning">$345K value</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Avg. Lead Time</h6>
+                <h3>8.5 days</h3>
+                <small class="text-success">-1.2 days</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-container">
+    <table class="table table-hover datatable">
+        <thead>
+            <tr>
+                <th>PO Number</th>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Expected Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><a href="#">PO-2024-0045</a></td>
+                <td>2024-03-01</td>
+                <td>ABC Supplies Ltd</td>
+                <td>5</td>
+                <td>$12,450.00</td>
+                <td><span class="badge bg-success">Received</span></td>
+                <td>2024-03-05</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i></button>
+                </td>
+            </tr>
+            <!-- More rows -->
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ item.code }} - {{ item.name }} - Item Details{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">
+            <i class="bi bi-box me-2"></i>{{ item.code }} - {{ item.name }}
+        </h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'core:item_list' %}">Items</a></li>
+                <li class="breadcrumb-item active">{{ item.code }}</li>
+            </ol>
+        </nav>
+    </div>
+    <div>
+        <a href="{% url 'core:item_edit' item.id %}" class="btn btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+        <a href="{% url 'admin:core_item_change' item.id %}" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-gear me-1"></i> Admin
+        </a>
+    </div>
+</div>
+
+<!-- Item Details Grid -->
+<div class="row g-4">
+    <!-- Basic Information -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Basic Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 120px;">Code:</th>
+                        <td><strong>{{ item.code }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Name:</th>
+                        <td>{{ item.name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Peach Code:</th>
+                        <td>{{ item.peach_code|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Category:</th>
+                        <td>{{ item.get_category_display }}</td>
+                    </tr>
+                    <tr>
+                        <th>Product Type:</th>
+                        <td>{{ item.get_product_type_display|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Unit:</th>
+                        <td>{{ item.unit.abbreviation }} ({{ item.unit.name }})</td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stock Information -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-box-seam me-2 text-success"></i>Stock Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 120px;">Current Stock:</th>
+                        <td>
+                            <span class="fw-bold {% if item.current_stock <= item.minimum_stock %}text-danger{% elif item.current_stock <= item.reorder_point %}text-warning{% else %}text-success{% endif %}">
+                                {{ item.current_stock|floatformat:2 }} {{ item.unit.abbreviation }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Minimum Stock:</th>
+                        <td>{{ item.minimum_stock|floatformat:2 }} {{ item.unit.abbreviation }}</td>
+                    </tr>
+                    <tr>
+                        <th>Reorder Point:</th>
+                        <td>{{ item.reorder_point|floatformat:2 }} {{ item.unit.abbreviation }}</td>
+                    </tr>
+                    <tr>
+                        <th>Reorder Quantity:</th>
+                        <td>{{ item.reorder_quantity|floatformat:2 }} {{ item.unit.abbreviation }}</td>
+                    </tr>
+                    <tr>
+                        <th>Stock Value:</th>
+                        <td class="fw-bold">{{ item.stock_value|floatformat:2|intcomma }} ETB</td>
+                    </tr>
+                    <tr>
+                        <th>Unit Cost:</th>
+                        <td>{{ item.unit_cost|floatformat:2 }} ETB</td>
+                    </tr>
+                    <tr>
+                        <th>Average Cost:</th>
+                        <td>{{ item.current_avg_cost|floatformat:2 }} ETB</td>
+                    </tr>
+                </table>
+                
+                <!-- Stock Status Badge -->
+                <div class="mt-3">
+                    {% if item.current_stock <= 0 %}
+                        <span class="badge bg-danger p-2">⚠ Out of Stock</span>
+                    {% elif item.current_stock <= item.minimum_stock %}
+                        <span class="badge bg-danger p-2">⚠ Critical - Below Safety Stock</span>
+                    {% elif item.current_stock <= item.reorder_point %}
+                        <span class="badge bg-warning text-dark p-2">⚠ Reorder Needed</span>
+                    {% else %}
+                        <span class="badge bg-success p-2">✓ Stock OK</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- RUTF Specific Information -->
+    {% if item.is_rutf %}
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-cake2 me-2 text-info"></i>RUTF Specific Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Shelf Life:</th>
+                        <td>{{ item.shelf_life_days }} days ({{ item.shelf_life_days|add:"-365" }} year{{ item.shelf_life_days|add:"-365"|pluralize }})</td>
+                    </tr>
+                    <tr>
+                        <th>Min Shelf Life on Receipt:</th>
+                        <td>{{ item.min_shelf_life_on_receipt }} days</td>
+                    </tr>
+                    <tr>
+                        <th>Allergen (Peanut):</th>
+                        <td>
+                            {% if item.allergen_peanut %}
+                            <span class="badge bg-danger">Contains Peanut</span>
+                            {% else %}
+                            <span class="badge bg-success">No Peanut</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Pack Size:</th>
+                        <td>{{ item.pack_size_kg|floatformat:3 }} kg</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Additional Information -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-card-text me-2 text-secondary"></i>Additional Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 120px;">Created:</th>
+                        <td>{{ item.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Updated:</th>
+                        <td>{{ item.updated_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Description:</th>
+                        <td>{{ item.description|default:"—"|linebreaksbr }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Back button -->
+<div class="mt-4">
+    <a href="{% url 'core:item_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Items
+    </a>
+</div>
+
+{% endblock %}

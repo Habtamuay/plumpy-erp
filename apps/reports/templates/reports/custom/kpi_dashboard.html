@@ -1,0 +1,143 @@
+<!-- reports/custom/kpi_dashboard.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}KPI Dashboard{% endblock %}
+{% block report_title %}KPI Dashboard{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="date_to">As of Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Key Performance Indicators as of {{ date_to }}</h3>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Current Ratio</h5>
+                <h3 class="text-primary">{{ kpis.current_ratio|floatformat:2 }}</h3>
+                <p class="card-text">Current Assets / Current Liabilities</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Quick Ratio</h5>
+                <h3 class="text-info">{{ kpis.quick_ratio|floatformat:2 }}</h3>
+                <p class="card-text">(Current Assets - Inventory) / Current Liabilities</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Gross Profit Margin</h5>
+                <h3 class="text-success">{{ kpis.gross_profit_margin|floatformat:1 }}%</h3>
+                <p class="card-text">Gross Profit / Revenue</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Net Profit Margin</h5>
+                <h3 class="text-warning">{{ kpis.net_profit_margin|floatformat:1 }}%</h3>
+                <p class="card-text">Net Profit / Revenue</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Return on Assets</h5>
+                <h3 class="text-danger">{{ kpis.return_on_assets|floatformat:1 }}%</h3>
+                <p class="card-text">Net Profit / Total Assets</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Return on Equity</h5>
+                <h3 class="text-secondary">{{ kpis.return_on_equity|floatformat:1 }}%</h3>
+                <p class="card-text">Net Profit / Total Equity</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Debt to Equity</h5>
+                <h3 class="text-dark">{{ kpis.debt_to_equity|floatformat:2 }}</h3>
+                <p class="card-text">Total Liabilities / Total Equity</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Inventory Turnover</h5>
+                <h3 class="text-muted">{{ kpis.inventory_turnover|floatformat:1 }}</h3>
+                <p class="card-text">COGS / Average Inventory</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<canvas id="kpiChart" width="400" height="200"></canvas>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('kpiChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: ['Current Ratio', 'Quick Ratio', 'Gross Margin', 'Net Margin', 'ROA', 'ROE'],
+            datasets: [{
+                label: 'Financial Ratios',
+                data: [
+                    {{ kpis.current_ratio|default:0 }},
+                    {{ kpis.quick_ratio|default:0 }},
+                    {{ kpis.gross_profit_margin|default:0 }},
+                    {{ kpis.net_profit_margin|default:0 }},
+                    {{ kpis.return_on_assets|default:0 }},
+                    {{ kpis.return_on_equity|default:0 }}
+                ],
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Financial Ratios Overview'
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

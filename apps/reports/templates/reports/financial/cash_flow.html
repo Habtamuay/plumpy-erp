@@ -1,0 +1,176 @@
+<!-- reports/financial/cash_flow.html -->
+{% extends "reports/base_report.html" %}
+
+{% block title %}Cash Flow{% endblock %}
+{% block report_title %}Cash Flow Statement{% endblock %}
+
+{% block filters %}
+<div class="filter-form">
+    <form method="GET">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="date_from">From Date:</label>
+                {{ form.date_from }}
+            </div>
+            <div class="col-md-4">
+                <label for="date_to">To Date:</label>
+                {{ form.date_to }}
+            </div>
+            <div class="col-md-4 mt-4">
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block report_content %}
+<h3>Cash Flow Statement from {{ date_from }} to {{ date_to }}</h3>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Inflows</th>
+            <th>Outflows</th>
+            <th>Net Cash Flow</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Operating Activities</strong></td>
+            <td></td>
+            <td></td>
+            <td><strong>${{ operating_net|floatformat:2 }}</strong></td>
+        </tr>
+        {% for flow in operating_flows %}
+        <tr>
+            <td>{{ flow.account }}</td>
+            <td class="text-end">${{ flow.net|floatformat:2 }}</td>
+            <td></td>
+            <td></td>
+        </tr>
+        {% endfor %}
+        
+        <tr>
+            <td><strong>Investing Activities</strong></td>
+            <td></td>
+            <td></td>
+            <td><strong>${{ investing_net|floatformat:2 }}</strong></td>
+        </tr>
+        {% for flow in investing_flows %}
+        <tr>
+            <td>{{ flow.account }}</td>
+            <td></td>
+            <td class="text-end">${{ flow.net|floatformat:2 }}</td>
+            <td></td>
+        </tr>
+        {% endfor %}
+        
+        <tr>
+            <td><strong>Financing Activities</strong></td>
+            <td></td>
+            <td></td>
+            <td><strong>${{ financing_net|floatformat:2 }}</strong></td>
+        </tr>
+        {% for flow in financing_flows %}
+        <tr>
+            <td>{{ flow.account }}</td>
+            <td class="text-end">${{ flow.net|floatformat:2 }}</td>
+            <td></td>
+            <td></td>
+        </tr>
+        {% endfor %}
+        
+        <tr class="table-dark">
+            <th>Net Cash Flow</th>
+            <th></th>
+            <th></th>
+            <th>${{ net_cash_flow|floatformat:2 }}</th>
+        </tr>
+    </tbody>
+</table>
+
+<canvas id="cashFlowChart" width="400" height="200"></canvas>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('cashFlowChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Operating', 'Investing', 'Financing'],
+            datasets: [{
+                label: 'Cash Flow',
+                data: [{{ operating_net|default:0 }}, {{ investing_net|default:0 }}, {{ financing_net|default:0 }}],
+                backgroundColor: [
+                    'rgba(75, 192, 192, 0.6)',
+                    'rgba(54, 162, 235, 0.6)',
+                    'rgba(255, 206, 86, 0.6)'
+                ],
+                borderColor: [
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Cash Flow by Activity'
+                }
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ctx = document.getElementById('cashFlowChart').getContext('2d');
+    const cashFlowChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Operating', 'Investing', 'Financing'],
+            datasets: [{
+                label: 'Net Cash Flow',
+                data: [{{ operating.net }}, {{ investing.net }}, {{ financing.net }}],
+                backgroundColor: [
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 206, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

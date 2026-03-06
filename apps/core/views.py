@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib import messages
-from django.db.models import Q, Sum, Count, F  # Make sure F is imported
+from django.db.models import Q, Sum, Count, F
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
@@ -11,8 +11,11 @@ import csv
 import json
 
 from .models import Item, Unit
-from apps.inventory.models import StockTransaction, CurrentStock, Lot
-from apps.production.models import BOM, ProductionRun
+from apps.inventory.models import StockTransaction, CurrentStock, Lot, Warehouse
+from apps.production.models import ProductionRun, BOM
+from apps.purchasing.models import PurchaseOrder
+from apps.sales.models import SalesOrder, SalesInvoice
+from apps.accounting.models import Account
 
 
 # ============================
@@ -30,24 +33,125 @@ def core_dashboard(request):
         count=Count('id')
     ).order_by('category')
     
-    # Stock value - FIXED: Use F() expressions to reference fields
-    total_stock_value = Item.objects.aggregate(
-        total=Sum(F('current_stock') * F('current_avg_cost'))  # Fixed: added F() around field names
+    # Stock value
+    total_stock_value = CurrentStock.objects.aggregate(
+        total=Sum(F('quantity') * F('item__unit_cost'))
     )['total'] or 0
     
     # Low stock items
-    low_stock_items = Item.objects.filter(
-        is_active=True,
-        current_stock__lte=F('minimum_stock')
+    low_stock_items = CurrentStock.objects.filter(
+        Q(quantity__lt=F('item__minimum_stock')) |
+        Q(quantity__lte=F('item__reorder_point'))
     ).count()
     
     # Recent items
-    recent_items = Item.objects.filter(is_active=True).order_by('-created_at')[:10]
+    recent_items = Item.objects.filter(is_active=True).order_by('-created_at')[:5]
+    
+    # Inventory stats
+    warehouse_count = Warehouse.objects.filter(is_active=True).count()
+    active_lots = Lot.objects.filter(is_active=True).count()
+    near_expiry_count = Lot.objects.filter(
+        expiry_date__lte=today + timedelta(days=90),
+        expiry_date__gte=today,
+        is_active=True
+    ).count()
+    
+    # Recent transactions
+    recent_transactions = StockTransaction.objects.select_related(
+        'item'
+    ).order_by('-transaction_date')[:10]
     
     # Production stats
     active_production_runs = ProductionRun.objects.filter(status='in_progress').count()
-    open_pos = 0  # You can add actual count from purchasing app if needed
-    outstanding_invoices = 0  # You can add actual count from accounting/sales app if needed
+    planned_runs = ProductionRun.objects.filter(status='planned').count()
+    completed_runs = ProductionRun.objects.filter(status='completed').count()
+    in_progress_runs = ProductionRun.objects.filter(status='in_progress').count()
+    active_boms = BOM.objects.filter(is_active=True).count()
+    
+    # Active production runs list with calculated percentages
+    active_runs = ProductionRun.objects.filter(
+        status__in=['planned', 'in_progress']
+    ).select_related('product').order_by('-start_date')[:5]
+    
+    # Calculate percentages in the view
+    for run in active_runs:
+        if run.planned_quantity and run.planned_quantity > 0:
+            run.progress_percentage = (run.actual_quantity or 0) / run.planned_quantity * 100
+            run.progress_percentage_int = int(run.progress_percentage)
+        else:
+            run.progress_percentage = 0
+            run.progress_percentage_int = 0
+    
+    # Purchasing stats
+    pending_pos = PurchaseOrder.objects.filter(status__in=['draft', 'approved', 'ordered']).count()
+    received_pos = PurchaseOrder.objects.filter(status='received').count()
+    overdue_deliveries = PurchaseOrder.objects.filter(
+        expected_delivery_date__lt=today,
+        status__in=['ordered', 'partial']
+    ).count()
+    
+    # Sales stats
+    monthly_sales = SalesInvoice.objects.filter(
+        invoice_date__month=today.month,
+        invoice_date__year=today.year,
+        status__in=['posted', 'paid']
+    ).aggregate(total=Sum('total_amount'))['total'] or 0
+    
+    pending_orders = SalesOrder.objects.filter(status__in=['confirmed', 'processing']).count()
+    overdue_invoices = SalesInvoice.objects.filter(
+        due_date__lt=today,
+        status__in=['posted', 'partial']
+    ).count()
+    
+    # Total alerts count
+    total_alerts = low_stock_items + near_expiry_count + overdue_deliveries + overdue_invoices
+    
+    # Recent activities (combine recent transactions from different modules)
+    recent_activities = []
+    
+    # Add recent stock transactions
+    for trans in recent_transactions[:3]:
+        recent_activities.append({
+            'description': f"{trans.get_transaction_type_display()} - {trans.item.code}",
+            'details': f"{trans.quantity} {trans.item.unit.abbreviation if trans.item.unit else ''}",
+            'time': trans.transaction_date,
+            'icon': 'arrow-left-right' if trans.transaction_type == 'transfer' else 
+                   'box-seam' if trans.transaction_type == 'receipt' else 'box-arrow-right'
+        })
+    
+    # Add recent production runs
+    for run in ProductionRun.objects.filter(status='completed').order_by('-end_date')[:3]:
+        recent_activities.append({
+            'description': f"Production completed - {run.product.code if run.product else 'N/A'}",
+            'details': f"{run.actual_quantity or 0} kg produced",
+            'time': run.end_date or run.updated_at,
+            'icon': 'gear-wide-connected'
+        })
+    
+    # Add recent purchase orders
+    for po in PurchaseOrder.objects.filter(status='received').order_by('-updated_at')[:2]:
+        recent_activities.append({
+            'description': f"PO Received - {po.po_number}",
+            'details': f"From {po.supplier.name if po.supplier else 'N/A'}",
+            'time': po.updated_at,
+            'icon': 'truck'
+        })
+    
+    # Sort by time
+    recent_activities.sort(key=lambda x: x['time'], reverse=True)
+    recent_activities = recent_activities[:10]
+    
+    # Format time for display
+    for activity in recent_activities:
+        time_diff = timezone.now() - activity['time']
+        if time_diff.days > 0:
+            activity['time_display'] = f"{time_diff.days} days ago"
+        elif time_diff.seconds > 3600:
+            activity['time_display'] = f"{time_diff.seconds // 3600} hours ago"
+        elif time_diff.seconds > 60:
+            activity['time_display'] = f"{time_diff.seconds // 60} minutes ago"
+        else:
+            activity['time_display'] = "just now"
     
     context = {
         'total_items': total_items,
@@ -55,17 +159,31 @@ def core_dashboard(request):
         'total_stock_value': total_stock_value,
         'low_stock_items': low_stock_items,
         'recent_items': recent_items,
+        'warehouse_count': warehouse_count,
+        'active_lots': active_lots,
+        'near_expiry_count': near_expiry_count,
+        'recent_transactions': recent_transactions,
         'active_production_runs': active_production_runs,
-        'open_pos': open_pos,
-        'outstanding_invoices': outstanding_invoices,
+        'planned_runs': planned_runs,
+        'completed_runs': completed_runs,
+        'in_progress_runs': in_progress_runs,
+        'active_boms': active_boms,
+        'active_runs': active_runs,
+        'pending_pos': pending_pos,
+        'received_pos': received_pos,
+        'overdue_deliveries': overdue_deliveries,
+        'monthly_sales': monthly_sales,
+        'pending_orders': pending_orders,
+        'overdue_invoices': overdue_invoices,
+        'total_alerts': total_alerts,
+        'recent_activities': recent_activities,
         'today': today,
     }
     
     return render(request, 'core/dashboard.html', context)
 
 
-# ... rest of the views remain the same ...
-
+# ... rest of the core views (item_list, item_detail, etc.) ...
 
 # ============================
 # Item Views
@@ -319,6 +437,7 @@ def unit_create(request):
             unit = Unit(
                 name=request.POST.get('name'),
                 abbreviation=request.POST.get('abbreviation'),
+                is_active=True
             )
             unit.save()
             messages.success(request, f'Unit {unit.name} created successfully.')

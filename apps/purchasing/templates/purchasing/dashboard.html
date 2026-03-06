@@ -1,0 +1,546 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Purchasing Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">Purchasing Dashboard</h2>
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-calendar-alt me-2"></i>Last Updated: {% now "F j, Y H:i" %}
+                        </p>
+                    </div>
+                    <div>
+                        <a href="{% url 'purchasing:po_create' %}" class="btn btn-primary me-2">
+                            <i class="fas fa-plus-circle me-2"></i>New Purchase Order
+                        </a>
+                        <a href="{% url 'purchasing:supplier_list' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-truck me-2"></i>Suppliers
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row mb-4">
+        <!-- Total PO Value -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total PO Value ({{ current_period|default:"Current Period" }})</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$1,234,567</div>
+                            <div class="small mt-2">
+                                <span class="text-success"><i class="fas fa-arrow-up"></i> 12.5%</span>
+                                vs last period
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-shopping-cart fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Orders -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Pending Orders</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">23</div>
+                            <div class="small mt-2">
+                                <span class="text-danger"><i class="fas fa-clock"></i> 5 overdue</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-hourglass-half fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Supplier Performance -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                On-Time Delivery</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">94.5%</div>
+                            <div class="small mt-2">
+                                <span class="text-success"><i class="fas fa-arrow-up"></i> 2.3%</span>
+                                vs last month
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Suppliers -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Active Suppliers</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">48</div>
+                            <div class="small mt-2">
+                                <span class="text-success"><i class="fas fa-plus"></i> 3 new</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-building fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- PO Value Trend -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Purchase Order Value Trend</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="poTrendChart" style="height: 300px; width: 100%;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Spend by Category -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Spend by Category</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryPieChart" style="height: 300px; width: 100%;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row -->
+    <div class="row mb-4">
+        <!-- Top Suppliers -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Top Suppliers by Spend</h5>
+                    <a href="{% url 'purchasing:supplier_dashboard' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-chart-line me-1"></i>View Dashboard
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Supplier</th>
+                                    <th>Total Spend</th>
+                                    <th>Orders</th>
+                                    <th>On-Time %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>ABC Supplies Ltd</td>
+                                    <td>$234,567</td>
+                                    <td>45</td>
+                                    <td><span class="badge bg-success">98%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Global Materials Inc</td>
+                                    <td>$189,432</td>
+                                    <td>32</td>
+                                    <td><span class="badge bg-success">95%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>TechParts Co</td>
+                                    <td>$145,789</td>
+                                    <td>28</td>
+                                    <td><span class="badge bg-warning">88%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Raw Materials Direct</td>
+                                    <td>$98,654</td>
+                                    <td>19</td>
+                                    <td><span class="badge bg-success">96%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Packaging Solutions</td>
+                                    <td>$76,543</td>
+                                    <td>15</td>
+                                    <td><span class="badge bg-danger">82%</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Purchase Orders -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Purchase Orders</h5>
+                    <a href="{% url 'purchasing:po_list' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list me-1"></i>View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>PO Number</th>
+                                    <th>Supplier</th>
+                                    <th>Date</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><a href="{% url 'purchasing:po_detail' 1 %}">PO-2024-0045</a></td>
+                                    <td>ABC Supplies Ltd</td>
+                                    <td>2024-03-01</td>
+                                    <td>$12,450</td>
+                                    <td><span class="badge bg-success">Received</span></td>
+                                </tr>
+                                <tr>
+                                    <td><a href="{% url 'purchasing:po_detail' 2 %}">PO-2024-0044</a></td>
+                                    <td>Global Materials Inc</td>
+                                    <td>2024-02-28</td>
+                                    <td>$8,765</td>
+                                    <td><span class="badge bg-primary">Shipped</span></td>
+                                </tr>
+                                <tr>
+                                    <td><a href="{% url 'purchasing:po_detail' 3 %}">PO-2024-0043</a></td>
+                                    <td>TechParts Co</td>
+                                    <td>2024-02-27</td>
+                                    <td>$5,432</td>
+                                    <td><span class="badge bg-warning">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><a href="{% url 'purchasing:po_detail' 4 %}">PO-2024-0042</a></td>
+                                    <td>Raw Materials Direct</td>
+                                    <td>2024-02-26</td>
+                                    <td>$15,678</td>
+                                    <td><span class="badge bg-danger">Overdue</span></td>
+                                </tr>
+                                <tr>
+                                    <td><a href="{% url 'purchasing:po_detail' 5 %}">PO-2024-0041</a></td>
+                                    <td>Packaging Solutions</td>
+                                    <td>2024-02-25</td>
+                                    <td>$3,210</td>
+                                    <td><span class="badge bg-success">Received</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lead Time Analysis -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Supplier Lead Time Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="leadTimeChart" style="height: 300px; width: 100%;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Materials Requiring Attention -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Materials Requiring Attention</h5>
+                    <div>
+                        <a href="{% url 'purchasing:purchasing_report' %}" class="btn btn-sm btn-outline-info me-2">
+                            <i class="fas fa-chart-bar"></i> Reports
+                        </a>
+                        <button class="btn btn-sm btn-outline-success me-2" onclick="exportToExcel()">
+                            <i class="fas fa-file-excel"></i> Export
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="exportToPDF()">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover" id="materialsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Material</th>
+                                    <th>Category</th>
+                                    <th>Current Stock</th>
+                                    <th>Reorder Level</th>
+                                    <th>Status</th>
+                                    <th>Lead Time (Days)</th>
+                                    <th>Recommended Order</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>RAW-SUGAR (Sugar)</td>
+                                    <td>Raw Material</td>
+                                    <td>1,500 kg</td>
+                                    <td>2,000 kg</td>
+                                    <td><span class="badge bg-warning">Below Reorder</span></td>
+                                    <td>7</td>
+                                    <td>1,000 kg</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" onclick="createPO('RAW-SUGAR')">
+                                            <i class="fas fa-plus"></i> Create PO
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>RAW-PALMOIL (Palm Oil)</td>
+                                    <td>Raw Material</td>
+                                    <td>800 kg</td>
+                                    <td>1,500 kg</td>
+                                    <td><span class="badge bg-danger">Critical</span></td>
+                                    <td>10</td>
+                                    <td>1,200 kg</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" onclick="createPO('RAW-PALMOIL')">
+                                            <i class="fas fa-plus"></i> Create PO
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>PKG-CARTON-NUT (Carton Box)</td>
+                                    <td>Packaging</td>
+                                    <td>5,000 pcs</td>
+                                    <td>10,000 pcs</td>
+                                    <td><span class="badge bg-warning">Below Reorder</span></td>
+                                    <td>5</td>
+                                    <td>6,000 pcs</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" onclick="createPO('PKG-CARTON-NUT')">
+                                            <i class="fas fa-plus"></i> Create PO
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Date Range Filter Modal -->
+<div class="modal fade" id="dateRangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Date Range</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dateRangeForm">
+                    <div class="mb-3">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="startDate" value="2024-01-01">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="endDate" value="2024-12-31">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="applyDateRange()">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
+
+<script>
+    // PO Trend Chart
+    const ctx1 = document.getElementById('poTrendChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+            datasets: [{
+                label: 'Purchase Orders',
+                data: [45000, 52000, 48000, 61000, 55000, 67000, 72000, 68000, 75000, 82000, 79000, 85000],
+                borderColor: '#4e73df',
+                backgroundColor: 'rgba(78, 115, 223, 0.05)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // Category Pie Chart
+    const ctx2 = document.getElementById('categoryPieChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: ['Raw Materials', 'Packaging', 'Equipment', 'Services', 'Other'],
+            datasets: [{
+                data: [45, 25, 15, 10, 5],
+                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Lead Time Chart
+    const ctx3 = document.getElementById('leadTimeChart').getContext('2d');
+    new Chart(ctx3, {
+        type: 'bar',
+        data: {
+            labels: ['ABC Supplies', 'Global Materials', 'TechParts', 'Raw Direct', 'Packaging Sol'],
+            datasets: [
+                {
+                    label: 'Actual Lead Time (Days)',
+                    data: [7, 10, 12, 8, 15],
+                    backgroundColor: '#4e73df'
+                },
+                {
+                    label: 'Target Lead Time (Days)',
+                    data: [7, 10, 10, 7, 10],
+                    backgroundColor: '#e74a3b'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Export functions
+    function exportToExcel() {
+        alert('Exporting to Excel...');
+        // Implement Excel export logic
+        // You can use the DataTable button export instead
+        $('#materialsTable').DataTable().button('.buttons-excel').trigger();
+    }
+
+    function exportToPDF() {
+        alert('Exporting to PDF...');
+        // Implement PDF export logic
+        $('#materialsTable').DataTable().button('.buttons-pdf').trigger();
+    }
+
+    function createPO(materialCode) {
+        window.location.href = `/purchasing/po/create/?material=${materialCode}`;
+    }
+
+    function applyDateRange() {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        window.location.href = updateQueryStringParameter(
+            window.location.href,
+            'date_range',
+            `${startDate} to ${endDate}`
+        );
+    }
+
+    function updateQueryStringParameter(uri, key, value) {
+        const re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+        const separator = uri.indexOf('?') !== -1 ? "&" : "?";
+        if (uri.match(re)) {
+            return uri.replace(re, '$1' + key + "=" + value + '$2');
+        } else {
+            return uri + separator + key + "=" + value;
+        }
+    }
+
+    // Initialize DataTable
+    $(document).ready(function() {
+        $('#materialsTable').DataTable({
+            pageLength: 10,
+            responsive: true,
+            dom: 'Bfrtip',
+            buttons: [
+                'copy', 
+                {
+                    extend: 'excel',
+                    text: 'Excel',
+                    filename: 'materials_requiring_attention'
+                },
+                {
+                    extend: 'pdf',
+                    text: 'PDF',
+                    filename: 'materials_requiring_attention'
+                },
+                'print'
+            ]
+        });
+    });
+</script>
+{% endblock %}

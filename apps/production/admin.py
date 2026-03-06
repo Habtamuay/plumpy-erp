@@ -7,17 +7,16 @@ from django.urls import reverse
 from django.shortcuts import redirect
 from django.db import transaction
 from decimal import Decimal
-from .models import BOM, BOMLine, ProductionRun, InventoryMovement
-
+from .models import BOM, BOMLine, ProductionRun, InventoryMovement, ProductionCostVariance
 
 class BOMLineInline(admin.TabularInline):
-    """Inline for BOM lines"""
+    """Inline for BOM lines - MUST BE DEFINED BEFORE BOMAdmin"""
     model = BOMLine
     extra = 3
     fields = (
         'sequence',
         'component',
-        'quantity_per_kg',
+        'quantity_per_base',  # Changed from quantity_per_kg
         'unit',
         'wastage_percentage',
         'cost_display',
@@ -27,32 +26,38 @@ class BOMLineInline(admin.TabularInline):
     autocomplete_fields = ['component', 'unit']
     
     def cost_display(self, obj):
-        """Display cost per kg for this component"""
+        """Display cost per base quantity for this component"""
         if obj.component and obj.component.unit_cost:
-            cost = obj.quantity_per_kg * obj.component.unit_cost
-            return format_html('{:,.2f} ETB', cost)
+            try:
+                # Calculate cost per base quantity (for 1 MT / 1000 kg)
+                cost = float(obj.quantity_per_base) * float(obj.component.unit_cost)
+                formatted_cost = f"{cost:,.2f}"
+                return format_html('{} ETB', formatted_cost)
+            except (TypeError, ValueError):
+                return '-'
         return '-'
-    cost_display.short_description = 'Cost/kg'
+    cost_display.short_description = 'Cost/MT'  # Changed to reflect per MT
 
 
 @admin.register(BOM)
 class BOMAdmin(admin.ModelAdmin):
     list_display = (
         'product_link',
+        'bom_type',  # Added bom_type to display
         'version',
         'is_active',
         'effective_from',
         'base_quantity',
         'components_count',
         'material_cost_display',
-        'total_cost_display',
         'is_current',
     )
     list_filter = (
+        'bom_type',  # Added bom_type filter
         'is_active',
+        'is_default',  # Added is_default filter
         'effective_from',
         'product__category',
-        'product__product_type',
     )
     search_fields = (
         'product__code',
@@ -63,30 +68,36 @@ class BOMAdmin(admin.ModelAdmin):
     ordering = ('-effective_from', '-version')
     date_hierarchy = 'effective_from'
     list_per_page = 25
-    readonly_fields = ('created_at', 'updated_at', 'components_count')
-    autocomplete_fields = ['product']
+    readonly_fields = ('created_at', 'updated_at', 'components_count', 'total_material_cost_per_base', 'total_material_cost_per_kg')
+    autocomplete_fields = ['product', 'base_uom']
 
     fieldsets = (
         ('Basic Information', {
             'fields': (
                 'product',
+                'bom_type',  # Added bom_type field
                 'version',
                 'is_active',
+                'is_default',  # Added is_default field
                 'effective_from',
+                'effective_to',  # Added effective_to field
                 'base_quantity',
+                'base_uom',  # Added base_uom field
+                'yield_percent',  # Added yield_percent field
                 'notes',
             ),
             'classes': ('wide',),
         }),
         ('Cost Summary', {
             'fields': (
-                'total_material_cost',
                 'components_count',
+                'total_material_cost_per_base',
+                'total_material_cost_per_kg',
             ),
             'classes': ('collapse',),
         }),
         ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
+            'fields': ('created_at', 'updated_at', 'created_by'),
             'classes': ('collapse',),
         }),
     )
@@ -102,30 +113,24 @@ class BOMAdmin(admin.ModelAdmin):
 
     def components_count(self, obj):
         """Count of components in this BOM"""
-        return obj.lines.count()
+        return obj.components_count
     components_count.short_description = 'Components'
 
     def material_cost_display(self, obj):
         """Display material cost per base quantity"""
         try:
-            cost = obj.total_material_cost_per_base
-            return format_html('{:,.2f} ETB', cost)
-        except (AttributeError, TypeError):
+            total_cost = obj.total_material_cost_per_base
+            if total_cost:
+                formatted_cost = f"{float(total_cost):,.2f}"
+                return format_html('<span style="font-weight: bold;">{} ETB</span>', formatted_cost)
+            return "0.00 ETB"
+        except (AttributeError, TypeError, ValueError):
             return "—"
-    material_cost_display.short_description = 'Material Cost'
-
-    def total_cost_display(self, obj):
-        """Display total cost (material + labor + overhead)"""
-        try:
-            cost = obj.total_material_cost_per_base
-            return format_html('<span style="font-weight: bold;">{:,.2f} ETB</span>', cost)
-        except (AttributeError, TypeError):
-            return "—"
-    total_cost_display.short_description = 'Total Cost'
+    material_cost_display.short_description = 'Total Cost'
 
     @admin.display(description="Current?", boolean=True)
     def is_current(self, obj):
-        return obj.is_active and obj.effective_from <= timezone.now().date()
+        return obj.is_current
 
     actions = ['activate_boms', 'deactivate_boms', 'duplicate_bom']
 
@@ -151,10 +156,14 @@ class BOMAdmin(admin.ModelAdmin):
         # Create new BOM
         new_bom = BOM.objects.create(
             product=original.product,
+            bom_type=original.bom_type,
             version=new_version,
             is_active=False,
+            is_default=False,
             effective_from=timezone.now().date(),
             base_quantity=original.base_quantity,
+            base_uom=original.base_uom,
+            yield_percent=original.yield_percent,
             notes=f"Duplicated from v{original.version}"
         )
         
@@ -163,10 +172,11 @@ class BOMAdmin(admin.ModelAdmin):
             BOMLine.objects.create(
                 bom=new_bom,
                 component=line.component,
-                quantity_per_kg=line.quantity_per_kg,
+                quantity_per_base=line.quantity_per_base,  # Changed from quantity_per_kg
                 unit=line.unit,
                 wastage_percentage=line.wastage_percentage,
                 sequence=line.sequence,
+                is_critical=line.is_critical,
                 notes=line.notes
             )
         
@@ -176,6 +186,58 @@ class BOMAdmin(admin.ModelAdmin):
             level=messages.SUCCESS
         )
     duplicate_bom.short_description = "Duplicate selected BOM (new version)"
+
+
+@admin.register(BOMLine)
+class BOMLineAdmin(admin.ModelAdmin):
+    list_display = (
+        'bom_link',
+        'component',
+        'quantity_per_base',  # Changed from quantity_per_kg
+        'unit',
+        'wastage_percentage',
+        'sequence',
+        'is_critical',
+        'line_cost_display',
+    )
+    list_filter = (
+        'bom__bom_type',
+        'is_critical',
+        'component__category',
+        'bom__is_active',
+    )
+    search_fields = (
+        'bom__product__code',
+        'component__code',
+        'component__name',
+        'notes',
+    )
+    autocomplete_fields = ['bom', 'component', 'unit']
+    list_editable = ('sequence', 'is_critical')
+    ordering = ['bom', 'sequence']
+    readonly_fields = ('line_cost_display',)
+
+    def bom_link(self, obj):
+        """Link to the BOM"""
+        url = reverse('admin:production_bom_change', args=[obj.bom.id])
+        return format_html('<a href="{}">{}</a>', url, obj.bom)
+    bom_link.short_description = 'BOM'
+    bom_link.admin_order_field = 'bom__product__code'
+
+    def line_cost_display(self, obj):
+        """Display cost for this line per base quantity"""
+        try:
+            if obj.component and obj.component.unit_cost:
+                cost = float(obj.quantity_per_base) * float(obj.component.unit_cost)
+                formatted_cost = f"{cost:,.2f}"
+                return format_html('{} ETB', formatted_cost)
+            return "0.00 ETB"
+        except (TypeError, ValueError):
+            return "—"
+    line_cost_display.short_description = 'Line Cost'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('bom', 'component', 'unit')
 
 
 class MaterialRequirementInline(admin.TabularInline):
@@ -275,7 +337,6 @@ class ProductionRunAdmin(admin.ModelAdmin):
     )
     date_hierarchy = 'start_date'
     readonly_fields = (
-        'run_number',
         'estimated_material_cost',
         'standard_material_cost',
         'actual_material_cost',
@@ -295,7 +356,6 @@ class ProductionRunAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Run Information', {
             'fields': (
-                'run_number',
                 'bom',
                 'product',
                 'status',
@@ -335,32 +395,35 @@ class ProductionRunAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('product', 'bom', 'created_by')
 
-    def get_inlines(self, request, obj):
-        """Show material requirements inline when viewing/editing a production run"""
-        if obj and obj.pk:  # Only show when editing existing run
-            # Set the production_run attribute for the inline
-            inline = MaterialRequirementInline
-            inline.production_run = obj
-            return [MaterialRequirementInline]
-        return []
-
     def run_number(self, obj):
-        return f"RUN-{obj.id:05d}"
+        """Display run number - FIXED for None values"""
+        if obj and obj.id:
+            return f"RUN-{obj.id:05d}"
+        return "New Run"
     run_number.short_description = 'Run #'
     run_number.admin_order_field = 'id'
 
     def product_link(self, obj):
-        url = reverse('admin:core_item_change', args=[obj.product.id])
-        return format_html('<a href="{}">{}</a>', url, obj.product.code)
+        """Link to product - FIXED for None values"""
+        if obj and obj.product:
+            url = reverse('admin:core_item_change', args=[obj.product.id])
+            return format_html('<a href="{}">{}</a>', url, obj.product.code)
+        return '-'
     product_link.short_description = 'Product'
     product_link.admin_order_field = 'product__code'
 
     def bom_link(self, obj):
-        url = reverse('admin:production_bom_change', args=[obj.bom.id])
-        return format_html('<a href="{}">v{}</a>', url, obj.bom.version)
+        """Link to BOM - FIXED for None values"""
+        if obj and obj.bom:
+            url = reverse('admin:production_bom_change', args=[obj.bom.id])
+            return format_html('<a href="{}">v{}</a>', url, obj.bom.version)
+        return '-'
     bom_link.short_description = 'BOM'
 
     def status_colored(self, obj):
+        """Color-coded status display - FIXED for None values"""
+        if not obj or not obj.status:
+            return '-'
         colors = {
             'planned': '#17a2b8',  # blue
             'in_progress': '#ffc107',  # yellow
@@ -378,20 +441,27 @@ class ProductionRunAdmin(admin.ModelAdmin):
     status_colored.admin_order_field = 'status'
 
     def yield_percentage(self, obj):
-        if obj.planned_quantity and obj.actual_quantity:
-            pct = (obj.actual_quantity / obj.planned_quantity) * 100
-            color = 'green' if pct >= 95 else 'orange' if pct >= 85 else 'red'
-            return format_html(
-                '<span style="color: {}; font-weight: bold;">{:.1f}%</span>',
-                color,
-                pct
-            )
+        """Calculate yield percentage - FIXED for None values"""
+        if obj and obj.planned_quantity and obj.actual_quantity:
+            try:
+                planned = float(obj.planned_quantity)
+                actual = float(obj.actual_quantity)
+                if planned > 0:
+                    pct = (actual / planned) * 100
+                    color = 'green' if pct >= 95 else 'orange' if pct >= 85 else 'red'
+                    return format_html(
+                        '<span style="color: {}; font-weight: bold;">{:.1f}%</span>',
+                        color,
+                        pct
+                    )
+            except (TypeError, ValueError):
+                pass
         return '-'
     yield_percentage.short_description = 'Yield'
 
     def stock_readiness(self, obj):
-        """Show stock readiness with color coding"""
-        if not obj.pk or not obj.bom:
+        """Check stock readiness - FIXED for None values"""
+        if not obj or not obj.pk or not obj.bom or not obj.planned_quantity:
             return '-'
             
         try:
@@ -414,9 +484,11 @@ class ProductionRunAdmin(admin.ModelAdmin):
                     '<span style="color: red;" title="{}">✗ Insufficient</span>',
                     ' | '.join(deficits)
                 )
-        except:
+        except Exception:
             return '-'
     stock_readiness.short_description = 'Stock Ready'
+
+    # ... rest of the methods (start_runs, complete_runs, etc.) ...
 
     def material_requirements_summary(self, obj):
         """Generate a summary table of material requirements"""
