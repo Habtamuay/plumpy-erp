@@ -3,11 +3,12 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 import json
+from apps.core.models import CompanyModel
 
 User = get_user_model()
 
 
-class ReportCategory(models.Model):
+class ReportCategory(CompanyModel):
     """Category for organizing reports"""
     name = models.CharField(max_length=100, unique=True)
     icon = models.CharField(max_length=50, blank=True, help_text="Font Awesome icon class")
@@ -26,7 +27,7 @@ class ReportCategory(models.Model):
         return self.name
 
 
-class ReportTemplate(models.Model):
+class ReportTemplate(CompanyModel):
     """Template for generating reports"""
     
     REPORT_TYPES = [
@@ -122,7 +123,7 @@ class ReportTemplate(models.Model):
         return self.name
 
 
-class ScheduledReport(models.Model):
+class ScheduledReport(CompanyModel):
     """Schedule reports to run automatically"""
     
     SCHEDULE_TYPES = [
@@ -223,7 +224,7 @@ class ScheduledReport(models.Model):
         self.next_run = next_date
 
 
-class DashboardWidget(models.Model):
+class DashboardWidget(CompanyModel):
     """Customizable dashboard widgets"""
     
     WIDGET_TYPES = [

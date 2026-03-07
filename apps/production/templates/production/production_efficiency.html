@@ -1,0 +1,28 @@
+{% extends "reports/base_report.html" %}
+{% block report_name %}Production Run Efficiency Analysis{% endblock %}
+{% block content %}
+<table>
+    <thead>
+        <tr>
+            <th>Run ID</th>
+            <th>Product</th>
+            <th>Expected Yield</th>
+            <th>Actual Yield</th>
+            <th>Efficiency %</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in data %}
+        <tr>
+            <td>{{ run.id }}</td>
+            <td>{{ run.product }}</td>
+            <td>{{ run.expected }}</td>
+            <td>{{ run.actual }}</td>
+            <td>{{ run.efficiency }}%</td>
+            <td>{{ run.status }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

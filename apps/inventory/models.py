@@ -4,13 +4,14 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from apps.core.models import Item
 from apps.production.models import ProductionRun
+from apps.core.models import CompanyModel
 
 # Signals
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
-class Warehouse(models.Model):
+class Warehouse(CompanyModel):
     """Warehouse/Storage location"""
     
     WAREHOUSE_TYPE_CHOICES = (
@@ -101,7 +102,7 @@ class Warehouse(models.Model):
         return self.current_stock.values('item').distinct().count()
 
 
-class Lot(models.Model):
+class Lot(CompanyModel):
     """Batch/Lot – mandatory for RUTF traceability"""
     
     QUALITY_STATUS_CHOICES = (
@@ -239,7 +240,7 @@ class Lot(models.Model):
         super().save(*args, **kwargs)
 
 
-class StockTransaction(models.Model):
+class StockTransaction(CompanyModel):
     """Every single stock movement is recorded here"""
     
     TYPE_CHOICES = (
@@ -363,7 +364,7 @@ class StockTransaction(models.Model):
         super().save(*args, **kwargs)
 
 
-class CurrentStock(models.Model):
+class CurrentStock(CompanyModel):
     """Fast lookup of current balance (updated automatically via signals)"""
     
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='inventory_stock')

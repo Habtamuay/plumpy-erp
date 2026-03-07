@@ -2,14 +2,14 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from decimal import Decimal
-from apps.core.models import Item, Unit  # Import these from your core app
+from apps.core.models import Item, Unit, CompanyModel  # Import these from your core app
 
 
 # =====================================================
 # SUPPLIER
 # =====================================================
 
-class Supplier(models.Model):
+class Supplier(CompanyModel):
     company = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=50, unique=True)
@@ -60,7 +60,7 @@ class Supplier(models.Model):
 # PURCHASE REQUISITION
 # =====================================================
 
-class PurchaseRequisition(models.Model):
+class PurchaseRequisition(CompanyModel):
     STATUS_CHOICES = [
         ("draft", "Draft"),
         ("submitted", "Submitted"),
@@ -93,7 +93,7 @@ class PurchaseRequisition(models.Model):
         return self.requisition_number
 
 
-class PurchaseRequisitionLine(models.Model):
+class PurchaseRequisitionLine(CompanyModel):
     requisition = models.ForeignKey(
         PurchaseRequisition,
         related_name="lines",
@@ -126,7 +126,7 @@ class PurchaseRequisitionLine(models.Model):
 # PURCHASE ORDER
 # =====================================================
 
-class PurchaseOrder(models.Model):
+class PurchaseOrder(CompanyModel):
     STATUS_CHOICES = [
         ("draft", "Draft"),
         ("approved", "Approved"),
@@ -231,7 +231,7 @@ class PurchaseOrder(models.Model):
         """Calculate grand total including all charges"""
         return self.subtotal + self.tax_total + self.shipping_cost - self.discount
 
-class PurchaseOrderLine(models.Model):
+class PurchaseOrderLine(CompanyModel):
     po = models.ForeignKey(
         PurchaseOrder,
         related_name="lines",
@@ -297,7 +297,7 @@ class PurchaseOrderLine(models.Model):
 # PURCHASE ORDER APPROVAL
 # =====================================================
 
-class PurchaseOrderApproval(models.Model):
+class PurchaseOrderApproval(CompanyModel):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("approved", "Approved"),
@@ -323,7 +323,7 @@ class PurchaseOrderApproval(models.Model):
 # GOODS RECEIPT
 # =====================================================
 
-class GoodsReceipt(models.Model):
+class GoodsReceipt(CompanyModel):
     po = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='goods_receipts')
     receipt_number = models.CharField(max_length=50, unique=True)
 
@@ -344,7 +344,7 @@ class GoodsReceipt(models.Model):
         return self.receipt_number
 
 
-class GoodsReceiptLine(models.Model):
+class GoodsReceiptLine(CompanyModel):
     receipt = models.ForeignKey(
         GoodsReceipt,
         related_name="lines",
@@ -370,7 +370,7 @@ class GoodsReceiptLine(models.Model):
 # VENDOR PERFORMANCE
 # =====================================================
 
-class VendorPerformance(models.Model):
+class VendorPerformance(CompanyModel):
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='performance_records')
 
     period_start = models.DateField()

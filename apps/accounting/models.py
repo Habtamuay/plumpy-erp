@@ -1,9 +1,10 @@
 from django.db import models
 from django.utils import timezone
 from decimal import Decimal
+from apps.core.models import CompanyModel
 
 
-class AccountType(models.Model):
+class AccountType(CompanyModel):
     """
     Flexible Account Type model that users can create/modify
     Examples: Asset, Liability, Equity, Income, Expense
@@ -24,7 +25,7 @@ class AccountType(models.Model):
         return f"{self.name} ({self.code_prefix})"
 
 
-class AccountGroup(models.Model):
+class AccountGroup(CompanyModel):
     """
     Grouping level for accounts (e.g., Current Assets, Fixed Assets, Current Liabilities)
     Users can create/modify these as needed
@@ -48,7 +49,7 @@ class AccountGroup(models.Model):
         return f"{self.name} ({self.code_range_start}-{self.code_range_end})"
 
 
-class AccountCategory(models.Model):
+class AccountCategory(CompanyModel):
     """
     Detailed category for reporting purposes
     """
@@ -77,7 +78,7 @@ class AccountCategory(models.Model):
         return self.name
 
 
-class Account(models.Model):
+class Account(CompanyModel):
     """
     Main Chart of Accounts model with flexible typing, grouping, and categorization
     """
@@ -167,7 +168,7 @@ class Account(models.Model):
         return level
 
 
-class JournalEntry(models.Model):
+class JournalEntry(CompanyModel):
     """Journal Entry header"""
     company = models.ForeignKey('company.Company', on_delete=models.PROTECT, related_name='journal_entries')
     branch = models.ForeignKey('company.Branch', on_delete=models.PROTECT, null=True, blank=True, related_name='journal_entries')
@@ -201,7 +202,7 @@ class JournalEntry(models.Model):
         return self.total_debit() == self.total_credit()
 
 
-class JournalLine(models.Model):
+class JournalLine(CompanyModel):
     """Journal Entry lines"""
     journal = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name='lines')
     account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name='journal_lines')  # Make sure this related_name is set
@@ -222,7 +223,7 @@ class JournalLine(models.Model):
         return f"{self.account.code} Dr {self.debit} Cr {self.credit}"
 
 
-class PurchaseBill(models.Model):
+class PurchaseBill(CompanyModel):
     """Purchase Bill (Supplier Invoice)"""
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -289,7 +290,7 @@ class PurchaseBill(models.Model):
         return self.due_date < timezone.now().date() and self.status not in ['paid', 'cancelled']
 
 
-class PurchaseBillLine(models.Model):
+class PurchaseBillLine(CompanyModel):
     """Line items for Purchase Bill"""
     bill = models.ForeignKey(PurchaseBill, on_delete=models.CASCADE, related_name='lines')
     item = models.ForeignKey('core.Item', on_delete=models.PROTECT, related_name='purchase_bill_lines')
@@ -313,7 +314,7 @@ class PurchaseBillLine(models.Model):
         super().save(*args, **kwargs)
 
 
-class Payment(models.Model):
+class Payment(CompanyModel):
     """Payment received from customer or paid to supplier"""
     PAYMENT_TYPE_CHOICES = [
         ('customer', 'Customer Receipt'),
@@ -357,7 +358,7 @@ class Payment(models.Model):
         return f"{self.get_payment_type_display()} - {self.amount}"
 
 
-class ReconciliationAuditLog(models.Model):
+class ReconciliationAuditLog(CompanyModel):
     """Audit log for payment reconciliation actions"""
     payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='audit_logs')
     reconciled_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)

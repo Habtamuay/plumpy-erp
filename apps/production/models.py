@@ -4,10 +4,10 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 
-from apps.core.models import Item, Unit
+from apps.core.models import Item, Unit, CompanyModel
 
 
-class BOM(models.Model):
+class BOM(CompanyModel):
     """
     Bill of Materials
     Defined per base quantity (normally 1000kg = 1 Metric Ton)
@@ -185,7 +185,7 @@ class BOM(models.Model):
         return self.lines.filter(component__category=category)
 
 
-class BOMLine(models.Model):
+class BOMLine(CompanyModel):
     """
     BOM Component Line
     """
@@ -323,7 +323,7 @@ class BOMLine(models.Model):
 
         return f"{qty:.6f} kg"
 
-class InventoryMovement(models.Model):
+class InventoryMovement(CompanyModel):
     """Stock Movement Log - tracks all inventory movements"""
     MOVEMENT_TYPES = [
         ('in_purchase', 'Received from Purchase'),
@@ -441,7 +441,7 @@ class InventoryMovement(models.Model):
         return f"{sign}{abs(self.quantity)} {self.item.code}{direction} – {self.get_movement_type_display()}"
 
 
-class ProductionRun(models.Model):
+class ProductionRun(CompanyModel):
     """Production Run - tracks a batch of production"""
     
     STATUS_CHOICES = [
@@ -937,7 +937,7 @@ class ProductionRun(models.Model):
         return None
 
 
-class ProductionCostVariance(models.Model):
+class ProductionCostVariance(CompanyModel):
     """Tracks cost variances for production runs"""
     
     production_run = models.OneToOneField(

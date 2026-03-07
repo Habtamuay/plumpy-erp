@@ -5,14 +5,14 @@ from django.contrib.auth.models import User
 from decimal import Decimal
 
 from apps.company.models import Customer
-from apps.core.models import Item, Unit
+from apps.core.models import Item, Unit, CompanyModel
 from apps.inventory.models import Warehouse
 
 # =====================================================
 # SALES ORDER
 # =====================================================
 
-class SalesOrder(models.Model):
+class SalesOrder(CompanyModel):
     STATUS_CHOICES = (
         ('draft', 'Draft'),
         ('confirmed', 'Confirmed'),
@@ -77,7 +77,7 @@ class SalesOrder(models.Model):
         return invoice
 
 
-class SalesOrderLine(models.Model):
+class SalesOrderLine(CompanyModel):
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="lines")
     item = models.ForeignKey(Item, on_delete=models.PROTECT)
     warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, null=True, blank=True)
@@ -101,7 +101,7 @@ class SalesOrderLine(models.Model):
 # SALES INVOICE
 # =====================================================
 
-class SalesInvoice(models.Model):
+class SalesInvoice(CompanyModel):
     STATUS_CHOICES = (('draft', 'Draft'), ('posted', 'Posted'), ('paid', 'Paid'), ('cancelled', 'Cancelled'))
     
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
@@ -214,7 +214,7 @@ class SalesInvoice(models.Model):
         return self.invoice_number
 
 
-class SalesInvoiceLine(models.Model):
+class SalesInvoiceLine(CompanyModel):
     invoice = models.ForeignKey(SalesInvoice, on_delete=models.CASCADE, related_name="lines")
     item = models.ForeignKey(Item, on_delete=models.PROTECT)
     quantity = models.DecimalField(max_digits=12, decimal_places=4)
@@ -235,7 +235,7 @@ class SalesInvoiceLine(models.Model):
 # SALES SHIPMENT
 # =====================================================
 
-class SalesShipment(models.Model):
+class SalesShipment(CompanyModel):
     STATUS_CHOICES = (('pending', 'Pending'), ('shipped', 'Shipped'), ('delivered', 'Delivered'))
     
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, related_name="shipments")
@@ -252,7 +252,7 @@ class SalesShipment(models.Model):
         super().save(*args, **kwargs)
 
 
-class SalesShipmentLine(models.Model):
+class SalesShipmentLine(CompanyModel):
     shipment = models.ForeignKey(SalesShipment, on_delete=models.CASCADE, related_name="lines")
     sales_order_line = models.ForeignKey(SalesOrderLine, on_delete=models.PROTECT, related_name="shipment_lines")
     quantity = models.DecimalField(max_digits=12, decimal_places=4)
@@ -268,23 +268,22 @@ class SalesShipmentLine(models.Model):
 
         # Inventory Movement logic
         if self.shipment.status == "shipped":
-            from apps.inventory.models_stock import StockMovement
-            StockMovement.objects.get_or_create(
-                reference=self.shipment.shipment_number,
+            from apps.inventory.models import StockTransaction
+            StockTransaction.objects.create(
+                transaction_type="issue",
                 item=so_line.item,
-                defaults={
-                    'warehouse': self.shipment.warehouse,
-                    'movement_type': "out",
-                    'quantity': self.quantity,
-                    'notes': f"Shipment {self.shipment.shipment_number}"
-                }
+                warehouse_from=self.shipment.warehouse,
+                quantity=self.quantity,
+                reference=self.shipment.shipment_number,
+                sales_order=self.sales_order_line.order,
+                notes=f"Shipment {self.shipment.shipment_number}"
             )
 
 # =====================================================
 # SALES PAYMENT
 # =====================================================
 
-class SalesPayment(models.Model):
+class SalesPayment(CompanyModel):
     METHODS = (('cash', 'Cash'), ('bank', 'Bank'), ('mobile', 'Mobile'), ('check', 'Cheque'))
     
     invoice = models.ForeignKey(SalesInvoice, on_delete=models.PROTECT, related_name="payments")

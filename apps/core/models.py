@@ -3,7 +3,22 @@ from django.utils import timezone
 from decimal import Decimal
 
 
-class Unit(models.Model):
+class CompanyModel(models.Model):
+    """Abstract base model that adds company scoping to all models"""
+    company = models.ForeignKey(
+        'company.Company',
+        on_delete=models.CASCADE,
+        related_name='%(class)s_set',
+        help_text="Company this record belongs to",
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Unit(CompanyModel):
     """Unit of measurement for items"""
     name = models.CharField(max_length=50, unique=True)
     abbreviation = models.CharField(max_length=10, unique=True)
@@ -23,7 +38,7 @@ class Unit(models.Model):
         return f"{self.abbreviation} ({self.name})"
 
 
-class Item(models.Model):
+class Item(CompanyModel):
     """Item master data for all products, raw materials, and packaging"""
     
     ITEM_CATEGORY = (

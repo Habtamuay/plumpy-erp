@@ -9,8 +9,9 @@ urlpatterns = [
     path('dashboard/', views.company_dashboard, name='dashboard'),
     
     # Company URLs
-    path('list/', views.company_list, name='company_list'),
-    path('<int:company_id>/', views.company_detail, name='company_detail'),
+    path('create/', views.company_create, name='create'),
+    path('list/', views.company_list, name='list'),
+    path('<int:company_id>/', views.company_detail, name='detail'),
     
     # Branch URLs
     path('branches/', views.branch_list, name='branch_list'),
@@ -35,4 +36,8 @@ urlpatterns = [
     
     # Export URLs
     path('export/customers/', views.export_customers, name='export_customers'),
+    path('export/companies/', views.export_companies, name='export_companies'),
+    path('export/branches/', views.export_branches, name='export_branches'),
+    path('export/departments/', views.export_departments, name='export_departments'),
+    path('export/company-customers/', views.export_company_customers, name='export_company_customers'),
 ]

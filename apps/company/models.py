@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator, EmailValidator
+from apps.core.models import CompanyModel
 
 
 class Company(models.Model):
@@ -76,7 +77,7 @@ class Company(models.Model):
         return self.branches.filter(is_active=True).count()
 
 
-class Branch(models.Model):
+class Branch(CompanyModel):
     """Branch/Division of a company"""
     company = models.ForeignKey(
         Company, 
@@ -118,7 +119,7 @@ class Branch(models.Model):
         super().save(*args, **kwargs)
 
 
-class Department(models.Model):
+class Department(CompanyModel):
     """Department within a company/branch"""
     company = models.ForeignKey(
         Company, 
@@ -156,7 +157,7 @@ class Department(models.Model):
         return f"{self.name} - {self.company.name}"
 
 
-class UserProfile(models.Model):
+class UserProfile(CompanyModel):
     """Extended user profile with company and role information"""
     
     ROLE_CHOICES = [
@@ -281,7 +282,7 @@ class UserProfile(models.Model):
         super().save(*args, **kwargs)
 
 
-class Customer(models.Model):
+class Customer(CompanyModel):
     """Customer model for sales and receivables"""
     company = models.ForeignKey(
         Company, 

@@ -1,5 +1,6 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.db.models import Sum, Q, Count
 from django.utils import timezone
 from django.http import HttpResponse
@@ -8,6 +9,8 @@ from decimal import Decimal
 import csv
 
 from .models import Company, Branch, Department, Customer, UserProfile
+from .forms import CompanyForm
+from .resources import CompanyResource, BranchResource, DepartmentResource, CustomerResource, UserProfileResource
 from apps.accounting.models import PurchaseBill, Payment
 from apps.purchasing.models import Supplier, PurchaseOrder
 from apps.sales.models import SalesOrder, SalesInvoice
@@ -16,6 +19,26 @@ from apps.sales.models import SalesOrder, SalesInvoice
 # ============================
 # Company Views
 # ============================
+
+@login_required
+def company_create(request):
+    """Create a new company"""
+    if request.method == 'POST':
+        form = CompanyForm(request.POST, request.FILES)
+        if form.is_valid():
+            company = form.save(commit=False)
+            company.created_by = request.user
+            company.save()
+            messages.success(request, f'Company "{company.name}" created successfully!')
+            return redirect('company:detail', company_id=company.id)
+    else:
+        form = CompanyForm()
+    
+    return render(request, 'company/company_form.html', {
+        'form': form,
+        'title': 'Create Company'
+    })
+
 
 @login_required
 def company_list(request):
@@ -55,8 +78,12 @@ def company_detail(request, company_id):
 
 @login_required
 def branch_list(request):
-    """List all branches"""
-    branches = Branch.objects.filter(is_active=True).select_related('company').order_by('company__name', 'name')
+    """List branches for current company"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    branches = Branch.objects.filter(company=request.company, is_active=True).order_by('name')
     return render(request, 'company/branch_list.html', {'branches': branches})
 
 
@@ -86,8 +113,12 @@ def branch_detail(request, branch_id):
 
 @login_required
 def department_list(request):
-    """List all departments"""
-    departments = Department.objects.filter(is_active=True).select_related('company', 'branch', 'manager').order_by('company__name', 'name')
+    """List departments for current company"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    departments = Department.objects.filter(company=request.company, is_active=True).select_related('branch', 'manager').order_by('name')
     return render(request, 'company/department_list.html', {'departments': departments})
 
 
@@ -116,8 +147,12 @@ def department_detail(request, department_id):
 
 @login_required
 def customer_list(request):
-    """List all customers"""
-    customers = Customer.objects.filter(is_active=True).select_related('company').order_by('company__name', 'name')
+    """List customers for current company"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    customers = Customer.objects.filter(company=request.company, is_active=True).order_by('name')
     return render(request, 'company/customer_list.html', {'customers': customers})
 
 
@@ -389,4 +424,67 @@ def export_customers(request):
             'Active' if customer.is_active else 'Inactive',
         ])
     
+    return response
+
+
+@login_required
+def export_companies(request):
+    """Export companies to Excel/CSV"""
+    if not request.user.is_staff:
+        messages.error(request, 'Access denied.')
+        return redirect('company:list')
+    
+    resource = CompanyResource()
+    dataset = resource.export()
+    
+    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="companies_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    return response
+
+
+@login_required
+def export_branches(request):
+    """Export branches to Excel"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    resource = BranchResource()
+    queryset = Branch.objects.filter(company=request.company)
+    dataset = resource.export(queryset)
+    
+    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="branches_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    return response
+
+
+@login_required
+def export_departments(request):
+    """Export departments to Excel"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    resource = DepartmentResource()
+    queryset = Department.objects.filter(company=request.company)
+    dataset = resource.export(queryset)
+    
+    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="departments_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    return response
+
+
+@login_required
+def export_company_customers(request):
+    """Export customers for current company to Excel"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    resource = CustomerResource()
+    queryset = Customer.objects.filter(company=request.company)
+    dataset = resource.export(queryset)
+    
+    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="customers_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
     return response
