@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Financial Trial Balance{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h3>Financial Trial Balance</h3>
+  <p class="text-muted">Company: {{ company.name }}</p>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered">
+      <thead>
+        <tr>
+          <th>Account Code</th>
+          <th>Account Name</th>
+          <th class="text-end">Debit</th>
+          <th class="text-end">Credit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.accounts %}
+        <tr>
+          <td>{{ row.account_code }}</td>
+          <td>{{ row.account_name }}</td>
+          <td class="text-end">{{ row.debit|floatformat:2 }}</td>
+          <td class="text-end">{{ row.credit|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold">
+          <td colspan="2" class="text-end">TOTAL</td>
+          <td class="text-end">{{ report.total_debit|floatformat:2 }}</td>
+          <td class="text-end">{{ report.total_credit|floatformat:2 }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if report.is_balanced %}
+  <div class="alert alert-success">Balanced: total debit equals total credit.</div>
+  {% else %}
+  <div class="alert alert-danger">Not balanced: total debit does not equal total credit.</div>
+  {% endif %}
+</div>
+{% endblock %}
+

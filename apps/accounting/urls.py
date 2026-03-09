@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import financial_views
 
 app_name = 'accounting'
 
@@ -31,4 +32,10 @@ urlpatterns = [
     path('fiscal-periods/create/', views.fiscal_period_create, name='fiscal_period_create'),
     path('fiscal-periods/<int:period_id>/', views.fiscal_period_detail, name='fiscal_period_detail'),
     path('fiscal-periods/<int:period_id>/close/', views.fiscal_period_close, name='fiscal_period_close'),
+
+    # Financial Reporting Engine (General Ledger based)
+    path('financial/trial-balance/', financial_views.financial_trial_balance, name='financial_trial_balance'),
+    path('financial/profit-and-loss/', financial_views.financial_profit_and_loss, name='financial_profit_and_loss'),
+    path('financial/balance-sheet/', financial_views.financial_balance_sheet, name='financial_balance_sheet'),
+    path('financial/cash-flow/', financial_views.financial_cash_flow, name='financial_cash_flow'),
 ]

@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from decimal import Decimal
+from django.conf import settings
 
 
 class CompanyModel(models.Model):
@@ -350,3 +351,85 @@ class Item(CompanyModel):
         )
         
         return transaction
+
+
+class Role(CompanyModel):
+    """ERP user role scoped by company."""
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_system_role = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('company', 'name')]
+        ordering = ['name']
+        indexes = [models.Index(fields=['company', 'name'])]
+
+    def __str__(self):
+        return self.name
+
+
+class Permission(CompanyModel):
+    """Module-level ERP permission."""
+
+    MODULES = [
+        ('sales', 'Sales'),
+        ('inventory', 'Inventory'),
+        ('accounting', 'Accounting'),
+        ('reports', 'Reports'),
+        ('manufacturing', 'Manufacturing'),
+        ('admin', 'Administration'),
+    ]
+
+    ACTIONS = [
+        ('view', 'View'),
+        ('create', 'Create'),
+        ('edit', 'Edit'),
+        ('delete', 'Delete'),
+        ('approve', 'Approve'),
+    ]
+
+    module = models.CharField(max_length=50, choices=MODULES)
+    action = models.CharField(max_length=50, choices=ACTIONS)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('company', 'module', 'action')]
+        ordering = ['module', 'action']
+        indexes = [models.Index(fields=['company', 'module', 'action'])]
+
+    def __str__(self):
+        return f"{self.module}:{self.action}"
+
+
+class RolePermission(models.Model):
+    """Mapping between Role and Permission."""
+
+    role = models.ForeignKey('core.Role', on_delete=models.CASCADE, related_name='role_permissions')
+    permission = models.ForeignKey('core.Permission', on_delete=models.CASCADE, related_name='role_permissions')
+
+    class Meta:
+        unique_together = [('role', 'permission')]
+        indexes = [models.Index(fields=['role', 'permission'])]
+
+    def __str__(self):
+        return f"{self.role} -> {self.permission}"
+
+
+class UserRole(CompanyModel):
+    """Assignment of roles to users in a company."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='company_roles')
+    role = models.ForeignKey('core.Role', on_delete=models.CASCADE, related_name='user_roles')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('company', 'user', 'role')]
+        indexes = [models.Index(fields=['company', 'user', 'role'])]
+
+    def __str__(self):
+        return f"{self.user} @ {self.company} -> {self.role}"

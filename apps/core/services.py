@@ -1,6 +1,6 @@
 import requests
 from django.conf import settings
-from .models import Currency
+from .models import Currency, RolePermission, UserRole
 
 class CurrencyService:
     @staticmethod
@@ -17,3 +17,30 @@ class CurrencyService:
                 )
             return True
         return False
+
+
+def user_has_permission(user, company, module, action):
+    """
+    Check custom ERP RBAC permission:
+    User -> UserRole -> RolePermission -> Permission(module/action)
+    """
+    if not user or not user.is_authenticated:
+        return False
+
+    if not company:
+        return False
+
+    roles = UserRole.objects.filter(
+        user=user,
+        company=company
+    ).values_list('role_id', flat=True)
+
+    if not roles:
+        return False
+
+    return RolePermission.objects.filter(
+        role_id__in=roles,
+        permission__company=company,
+        permission__module=module,
+        permission__action=action,
+    ).exists()

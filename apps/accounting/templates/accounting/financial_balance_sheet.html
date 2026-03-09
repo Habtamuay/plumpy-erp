@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Balance Sheet{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h3>Balance Sheet</h3>
+  <p class="text-muted">Company: {{ company.name }}</p>
+  <table class="table table-bordered w-auto">
+    <tr>
+      <th>Assets</th>
+      <td class="text-end">{{ report.assets|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <th>Liabilities</th>
+      <td class="text-end">{{ report.liabilities|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <th>Equity</th>
+      <td class="text-end">{{ report.equity|floatformat:2 }}</td>
+    </tr>
+    <tr class="fw-bold">
+      <th>Liabilities + Equity</th>
+      <td class="text-end">{{ report.liabilities|add:report.equity|floatformat:2 }}</td>
+    </tr>
+  </table>
+</div>
+{% endblock %}
+

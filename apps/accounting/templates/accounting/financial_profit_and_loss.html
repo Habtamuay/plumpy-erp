@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Profit and Loss{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h3>Profit and Loss</h3>
+  <p class="text-muted">Company: {{ company.name }}</p>
+  <table class="table table-bordered w-auto">
+    <tr>
+      <th>Income</th>
+      <td class="text-end">{{ report.income|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <th>Expenses</th>
+      <td class="text-end">{{ report.expenses|floatformat:2 }}</td>
+    </tr>
+    <tr class="fw-bold">
+      <th>Profit</th>
+      <td class="text-end">{{ report.profit|floatformat:2 }}</td>
+    </tr>
+  </table>
+</div>
+{% endblock %}
+

@@ -364,6 +364,64 @@ class StockTransaction(CompanyModel):
         super().save(*args, **kwargs)
 
 
+class StockLedger(CompanyModel):
+    """
+    Central stock ledger.
+    Every stock movement should result in one or more immutable ledger entries.
+    """
+
+    product = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name='stock_ledger_entries'
+    )
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.CASCADE,
+        related_name='stock_ledger_entries'
+    )
+
+    document_type = models.CharField(max_length=50, blank=True, default='')
+    document_id = models.PositiveIntegerField(null=True, blank=True)
+
+    quantity_in = models.DecimalField(
+        max_digits=14,
+        decimal_places=4,
+        default=Decimal('0.0000')
+    )
+    quantity_out = models.DecimalField(
+        max_digits=14,
+        decimal_places=4,
+        default=Decimal('0.0000')
+    )
+    balance_quantity = models.DecimalField(max_digits=14, decimal_places=4)
+
+    unit_cost = models.DecimalField(
+        max_digits=14,
+        decimal_places=4,
+        default=Decimal('0.0000')
+    )
+    total_value = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+
+    posting_date = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['posting_date', 'id']
+        indexes = [
+            models.Index(fields=['company', 'product', 'warehouse']),
+            models.Index(fields=['document_type', 'document_id']),
+            models.Index(fields=['posting_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.product.code} @ {self.warehouse.code} = {self.balance_quantity}"
+
+
 class CurrentStock(CompanyModel):
     """Fast lookup of current balance (updated automatically via signals)"""
     
@@ -435,3 +493,90 @@ def update_item_current_stock(sender, instance, **kwargs):
     )['total'] or 0
     item.current_stock = total_stock
     item.save(update_fields=['current_stock'])
+
+
+@receiver(post_save, sender=StockTransaction)
+def write_stock_ledger_from_transaction(sender, instance, created, **kwargs):
+    """
+    Write stock ledger entries automatically from each StockTransaction.
+    Transfer transactions produce two entries:
+    - OUT from source warehouse
+    - IN to destination warehouse
+    """
+    if not created:
+        return
+
+    from apps.inventory.services.stock_service import create_stock_entry
+
+    unit_cost = instance.unit_cost or instance.item.current_avg_cost or instance.item.unit_cost or Decimal('0.0000')
+
+    if instance.transaction_type == 'transfer':
+        if instance.warehouse_from:
+            create_stock_entry(
+                company=instance.company,
+                product=instance.item,
+                warehouse=instance.warehouse_from,
+                qty_out=instance.quantity,
+                document_type='StockTransferOut',
+                document_id=instance.id,
+                unit_cost=unit_cost,
+                posting_date=instance.transaction_date,
+            )
+        if instance.warehouse_to:
+            create_stock_entry(
+                company=instance.company,
+                product=instance.item,
+                warehouse=instance.warehouse_to,
+                qty_in=instance.quantity,
+                document_type='StockTransferIn',
+                document_id=instance.id,
+                unit_cost=unit_cost,
+                posting_date=instance.transaction_date,
+            )
+        return
+
+    in_types = {'receipt', 'return'}
+    out_types = {'issue', 'adjustment', 'scrap', 'sample', 'return_supplier'}
+
+    if instance.transaction_type in in_types and instance.warehouse_to:
+        create_stock_entry(
+            company=instance.company,
+            product=instance.item,
+            warehouse=instance.warehouse_to,
+            qty_in=instance.quantity,
+            document_type=instance.transaction_type,
+            document_id=instance.id,
+            unit_cost=unit_cost,
+            posting_date=instance.transaction_date,
+        )
+        return
+
+    if instance.transaction_type in out_types and instance.warehouse_from:
+        create_stock_entry(
+            company=instance.company,
+            product=instance.item,
+            warehouse=instance.warehouse_from,
+            qty_out=instance.quantity,
+            document_type=instance.transaction_type,
+            document_id=instance.id,
+            unit_cost=unit_cost,
+            posting_date=instance.transaction_date,
+        )
+        return
+
+    # Fallback path for incomplete source/target data
+    fallback_warehouse = instance.warehouse_to or instance.warehouse_from
+    if not fallback_warehouse:
+        return
+
+    create_stock_entry(
+        company=instance.company,
+        product=instance.item,
+        warehouse=fallback_warehouse,
+        qty_in=instance.quantity if instance.warehouse_to else Decimal('0.0000'),
+        qty_out=instance.quantity if instance.warehouse_from and not instance.warehouse_to else Decimal('0.0000'),
+        document_type=instance.transaction_type,
+        document_id=instance.id,
+        unit_cost=unit_cost,
+        posting_date=instance.transaction_date,
+    )

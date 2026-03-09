@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
-from .models import Warehouse, Lot, StockTransaction, CurrentStock
+from .models import CurrentStock, Lot, StockLedger, StockTransaction, Warehouse
 
 
 @admin.register(Warehouse)
@@ -279,6 +279,22 @@ class CurrentStockAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('item', 'warehouse', 'lot', 'item__unit')
+
+
+@admin.register(StockLedger)
+class StockLedgerAdmin(admin.ModelAdmin):
+    list_display = (
+        'posting_date', 'company', 'product', 'warehouse',
+        'quantity_in', 'quantity_out', 'balance_quantity', 'unit_cost', 'total_value',
+        'document_type', 'document_id'
+    )
+    list_filter = ('company', 'warehouse', 'document_type', 'posting_date')
+    search_fields = ('product__code', 'product__name', 'warehouse__name', 'document_type')
+    autocomplete_fields = ('product', 'warehouse', 'company')
+    date_hierarchy = 'posting_date'
+    readonly_fields = ('created_at',)
+    ordering = ('-posting_date', '-id')
+    list_per_page = 50
 
 
 # Custom admin site with additional links

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.contrib import messages
 from django.db.models import F
-from .models import Unit, Item
+from .models import Item, Permission, Role, RolePermission, Unit, UserRole
 
 
 @admin.register(Unit)
@@ -106,3 +106,31 @@ class ItemAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, 'No items needed reorder point updates.', messages.INFO)
     update_reorder_points.short_description = "Update reorder points (150% of min stock)"
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ('name', 'company', 'is_system_role', 'updated_at')
+    list_filter = ('is_system_role', 'company')
+    search_fields = ('name', 'description')
+
+
+@admin.register(Permission)
+class PermissionAdmin(admin.ModelAdmin):
+    list_display = ('module', 'action', 'company', 'updated_at')
+    list_filter = ('module', 'action', 'company')
+    search_fields = ('module', 'action')
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ('role', 'permission')
+    list_filter = ('role', 'permission')
+    search_fields = ('role__name', 'permission__module', 'permission__action')
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    list_display = ('user', 'company', 'role', 'updated_at')
+    list_filter = ('company', 'role')
+    search_fields = ('user__username', 'role__name')
