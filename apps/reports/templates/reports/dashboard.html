@@ -254,4 +254,157 @@
         </div>
     </div>
 </div>
+
+<!-- KPI Cards Row -->
+<div class="row mb-4">
+    {% for widget in kpi_widgets %}
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-{{ widget.color }} shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-{{ widget.color }} text-uppercase mb-1">
+                            {{ widget.title }}
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            ${{ widget.value|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-{{ widget.icon }} fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+            {% if widget.link %}
+            <a href="{% url widget.link %}" class="card-footer text-center text-decoration-none">
+                View Details <i class="bi bi-arrow-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    {% for chart in chart_widgets %}
+    <div class="col-xl-6 col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">{{ chart.title }}</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-area" style="height: {{ chart.height }}px;">
+                    <canvas id="{{ chart.id }}"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Tables Row -->
+<div class="row">
+    {% for table in table_widgets %}
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-primary">{{ table.title }}</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                {% for header in table.headers %}
+                                <th>{{ header }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in table.data %}
+                            <tr>
+                                {% for cell in row %}
+                                <td>{{ cell }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{{ table.headers|length }}" class="text-center">
+                                    No data available
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if table.link %}
+            <a href="{% url table.link %}" class="card-footer text-center text-decoration-none">
+                View All <i class="bi bi-arrow-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Chart Initialization Script -->
+<script>
+$(document).ready(function() {
+    {% for chart in chart_widgets %}
+    {% if chart.type == 'line' %}
+    // Initialize line chart
+    $.get('{{ chart.data_url }}', function(data) {
+        new Chart(document.getElementById('{{ chart.id }}'), {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Revenue',
+                    data: data.values,
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            }
+        });
+    });
+    {% elif chart.type == 'pie' %}
+    // Initialize pie chart
+    $.get('{{ chart.data_url }}', function(data) {
+        new Chart(document.getElementById('{{ chart.id }}'), {
+            type: 'pie',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    data: data.values,
+                    backgroundColor: [
+                        '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'
+                    ]
+                }]
+            }
+        });
+    });
+    {% elif chart.type == 'gauge' %}
+    // Initialize gauge
+    new Chart(document.getElementById('{{ chart.id }}'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Efficiency', 'Remaining'],
+            datasets: [{
+                data: [{{ chart.value }}, {{ chart.max }} - {{ chart.value }}],
+                backgroundColor: ['#1cc88a', '#e0e0e0']
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: {
+                tooltip: { enabled: false }
+            }
+        }
+    });
+    {% endif %}
+    {% endfor %}
+});
+</script>
 {% endblock %}

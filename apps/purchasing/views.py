@@ -11,6 +11,7 @@ import json
 from decimal import Decimal
 from django.http import FileResponse
 from .utils import generate_po_pdf
+from apps.company.models import Company
 
 from .models import (
     PurchaseOrder, PurchaseOrderLine, Supplier, 
@@ -18,6 +19,79 @@ from .models import (
 )
 from apps.inventory.models import Item, Warehouse
 from apps.core.models import Unit
+
+
+# ============================
+# Local Helpers
+# ============================
+def _generate_auto_item_code():
+    """Generate a unique auto item code for PO quick-create."""
+    base = timezone.now().strftime("AUTO-%Y%m%d")
+    seq = 1
+    code = f"{base}-{seq:03d}"
+    while Item.objects.filter(code=code).exists():
+        seq += 1
+        code = f"{base}-{seq:03d}"
+    return code
+
+
+def _resolve_po_item(item_token, unit_id=None):
+    """
+    Resolve item token posted from PO form.
+    Supports:
+    - existing item id, e.g. "12"
+    - new tag value, e.g. "new:Item Name"
+    """
+    token = (item_token or '').strip()
+    if not token:
+        raise ValueError("Empty item token")
+
+    if token.isdigit():
+        return Item.objects.get(id=int(token))
+
+    if token.startswith('new:'):
+        item_name = token[4:].strip()
+        if not item_name:
+            raise ValueError("Invalid item name")
+
+        unit = None
+        if unit_id:
+            try:
+                unit = Unit.objects.get(id=int(unit_id))
+            except (Unit.DoesNotExist, ValueError, TypeError):
+                unit = None
+        if not unit:
+            unit = Unit.objects.order_by('id').first()
+        if not unit:
+            raise ValueError("No Unit configured in system")
+
+        return Item.objects.create(
+            code=_generate_auto_item_code(),
+            name=item_name,
+            category='raw',
+            unit=unit,
+            is_active=True,
+            is_purchased=True,
+            is_sold=False,
+            unit_cost=Decimal('0.00'),
+            current_stock=Decimal('0.00'),
+            minimum_stock=Decimal('0.00'),
+            reorder_point=Decimal('0.00'),
+        )
+
+    raise ValueError("Unsupported item token")
+
+
+def _calculate_withholding_tax(withholding_base, currency):
+    """
+    Ethiopian WHT rule for this system:
+    - 3% only when currency is ETB
+    - and taxable base is above 20,000 ETB
+    """
+    base = withholding_base or Decimal('0.00')
+    if currency == 'ETB' and base > Decimal('20000'):
+        return (base * Decimal('0.03')).quantize(Decimal('0.01'))
+    return Decimal('0.00')
 
 
 # ============================
@@ -65,6 +139,11 @@ def po_list(request):
     queryset = PurchaseOrder.objects.select_related(
         'supplier', 'created_by'
     ).prefetch_related('lines').all()
+
+    # Scope by selected company from session
+    company_name = request.session.get('current_company_name')
+    if company_name:
+        queryset = queryset.filter(company=company_name)
     
     # Apply filters
     status = request.GET.get('status')
@@ -97,16 +176,23 @@ def po_list(request):
     page_obj = paginator.get_page(page_number)
     
     # Statistics
-    total_po_count = PurchaseOrder.objects.count()
-    total_po_value = PurchaseOrder.objects.aggregate(
+    summary_qs = PurchaseOrder.objects.all()
+    if company_name:
+        summary_qs = summary_qs.filter(company=company_name)
+
+    total_po_count = summary_qs.count()
+    total_po_value = summary_qs.aggregate(
         total=Sum('total_amount')
     )['total'] or 0
-    pending_count = PurchaseOrder.objects.filter(
+    pending_count = summary_qs.filter(
         status__in=['draft', 'pending', 'approved']
     ).count()
     
     # Get all active suppliers for filter dropdown
-    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+    suppliers = Supplier.objects.filter(is_active=True)
+    if company_name:
+        suppliers = suppliers.filter(company=company_name)
+    suppliers = suppliers.order_by('name')
     
     context = {
         'purchase_orders': page_obj,
@@ -116,7 +202,7 @@ def po_list(request):
         'total_po_count': total_po_count,
         'total_po_value': f"{total_po_value:,.0f}",
         'pending_count': pending_count,
-        'this_month_count': PurchaseOrder.objects.filter(
+        'this_month_count': summary_qs.filter(
             order_date__month=timezone.now().month,
             order_date__year=timezone.now().year
         ).count(),
@@ -130,13 +216,22 @@ def po_detail(request, po_id):
     """
     View purchase order details
     """
-    po = get_object_or_404(
-        PurchaseOrder.objects.select_related('supplier', 'created_by'),
-        id=po_id
-    )
+    po_qs = PurchaseOrder.objects.select_related('supplier', 'created_by')
+    company_name = request.session.get('current_company_name')
+    if company_name:
+        po_qs = po_qs.filter(company=company_name)
+    po = get_object_or_404(po_qs, id=po_id)
     
-    # Get lines with related items and units
-    lines = PurchaseOrderLine.objects.filter(po=po).select_related('item', 'unit')
+    # Get lines, then attach related objects using the temporary item_id/unit_id fields
+    lines = list(PurchaseOrderLine.objects.filter(po=po))
+    # preload items and units for efficiency
+    item_ids = [l.item_id for l in lines if l.item_id]
+    unit_ids = [l.unit_id for l in lines if l.unit_id]
+    items_map = {i.id: i for i in Item.objects.filter(id__in=item_ids)} if item_ids else {}
+    units_map = {u.id: u for u in Unit.objects.filter(id__in=unit_ids)} if unit_ids else {}
+    for l in lines:
+        l.item_obj = items_map.get(l.item_id)
+        l.unit_obj = units_map.get(l.unit_id)
     
     # Calculate totals
     subtotal = Decimal('0')
@@ -148,7 +243,9 @@ def po_detail(request, po_id):
         subtotal += line_total
         tax_total += line_tax
     
+    withholding_tax = _calculate_withholding_tax(subtotal, po.currency)
     grand_total = subtotal + tax_total + po.shipping_cost - po.discount
+    net_grand_total = grand_total - withholding_tax
     
     # Get related receipts if any
     receipts = GoodsReceipt.objects.filter(po=po).select_related('received_by')
@@ -158,7 +255,9 @@ def po_detail(request, po_id):
         'lines': lines,
         'subtotal': subtotal,
         'tax_total': tax_total,
+        'withholding_tax': withholding_tax,
         'grand_total': grand_total,
+        'net_grand_total': net_grand_total,
         'receipts': receipts,
         'can_edit': po.status in ['draft', 'pending'],
         'can_cancel': po.status not in ['received', 'cancelled', 'closed'],
@@ -180,7 +279,7 @@ def po_create(request):
             supplier_id = request.POST.get('supplier')
             po_number = request.POST.get('po_number')
             order_date = request.POST.get('order_date')
-            expected_date = request.POST.get('expected_date')
+            expected_date = request.POST.get('expected_delivery_date') or request.POST.get('expected_date')
             shipping_method = request.POST.get('shipping_method')
             shipping_address = request.POST.get('shipping_address')
             billing_address = request.POST.get('billing_address')
@@ -190,6 +289,10 @@ def po_create(request):
             discount = Decimal(request.POST.get('discount', 0))
             currency = request.POST.get('currency', 'USD')
             payment_terms = request.POST.get('payment_terms')
+            company_name = request.session.get('current_company_name')
+            if not company_name:
+                messages.error(request, "Please select a company first.")
+                return redirect('core:home')
             
             # Validate required fields
             if not supplier_id or not po_number or not order_date:
@@ -201,6 +304,7 @@ def po_create(request):
             
             # Create purchase order
             po = PurchaseOrder.objects.create(
+                company=company_name,
                 po_number=po_number,
                 supplier=supplier,
                 order_date=order_date,
@@ -226,13 +330,15 @@ def po_create(request):
             tax_rates = request.POST.getlist('tax_rate')
             
             total_amount = Decimal('0')
+            withholding_base = Decimal('0')
             
             for i in range(len(line_items)):
                 if line_items[i] and quantities[i] and quantities[i].strip():
                     item_id = line_items[i]
                     if item_id and item_id.strip():
                         try:
-                            item = Item.objects.get(id=int(item_id))
+                            unit_id_value = units[i] if i < len(units) else None
+                            item = _resolve_po_item(item_id, unit_id=unit_id_value)
                             quantity = Decimal(quantities[i]) if quantities[i] else Decimal('0')
                             unit_price = Decimal(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else Decimal('0')
                             tax_rate = Decimal(tax_rates[i]) if i < len(tax_rates) and tax_rates[i] else Decimal('0')
@@ -247,8 +353,10 @@ def po_create(request):
                             if quantity > 0:
                                 line = PurchaseOrderLine.objects.create(
                                     po=po,
-                                    item=str(item.id),  # Store as string since item is CharField
+                                    item=f"{item.code} - {item.name}",
+                                    item_id=item.id,
                                     unit=str(unit.id) if unit else '',
+                                    unit_id=unit.id if unit else None,
                                     quantity_ordered=quantity,
                                     unit_price=unit_price,
                                     tax_rate=tax_rate
@@ -257,12 +365,14 @@ def po_create(request):
                                 line_total = line.quantity_ordered * line.unit_price
                                 tax_amount = line_total * (line.tax_rate / 100)
                                 total_amount += line_total + tax_amount
+                                withholding_base += line_total
                         except (Item.DoesNotExist, ValueError) as e:
                             print(f"Error processing line {i}: {e}")
                             continue
             
             # Update PO total
-            po.total_amount = total_amount + shipping_cost - discount
+            withholding_tax = _calculate_withholding_tax(withholding_base, currency)
+            po.total_amount = total_amount + shipping_cost - discount - withholding_tax
             po.save()
             
             messages.success(request, f"Purchase Order {po.po_number} created successfully.")
@@ -283,11 +393,17 @@ def po_create(request):
             return redirect('purchasing:po_create')
     
     # GET request - show form
-    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+    company_name = request.session.get('current_company_name')
+    suppliers = Supplier.objects.filter(is_active=True)
+    if company_name:
+        suppliers = suppliers.filter(company=company_name)
+    suppliers = suppliers.order_by('name')
     
-    # Get items - since item is CharField, we need to get from somewhere
-    # This is a placeholder - you might have a different source for items
-    items = []  # Replace with actual item query
+    # Load purchasable inventory items for dropdown
+    items = Item.objects.filter(
+        is_active=True,
+        is_purchased=True
+    ).select_related('unit').order_by('code')
     
     units = Unit.objects.all().order_by('name')
     
@@ -320,7 +436,11 @@ def po_edit(request, po_id):
     """
     Edit a purchase order
     """
-    po = get_object_or_404(PurchaseOrder, id=po_id)
+    po_qs = PurchaseOrder.objects.all()
+    company_name = request.session.get('current_company_name')
+    if company_name:
+        po_qs = po_qs.filter(company=company_name)
+    po = get_object_or_404(po_qs, id=po_id)
     
     # Check if PO can be edited
     if po.status not in ['draft', 'pending']:
@@ -333,7 +453,7 @@ def po_edit(request, po_id):
             po.supplier_id = request.POST.get('supplier')
             po.po_number = request.POST.get('po_number')
             po.order_date = request.POST.get('order_date')
-            po.expected_delivery_date = request.POST.get('expected_date')
+            po.expected_delivery_date = request.POST.get('expected_delivery_date') or request.POST.get('expected_date')
             po.shipping_method = request.POST.get('shipping_method')
             po.shipping_address = request.POST.get('shipping_address')
             po.billing_address = request.POST.get('billing_address')
@@ -355,34 +475,44 @@ def po_edit(request, po_id):
             tax_rates = request.POST.getlist('tax_rate')
             
             total_amount = Decimal('0')
+            withholding_base = Decimal('0')
             
             for i in range(len(line_items)):
                 if line_items[i] and quantities[i] and quantities[i].strip():
                     item_id = line_items[i]
                     if item_id and item_id.strip():
                         try:
+                            unit_id_value = units[i] if i < len(units) else None
+                            item_obj = _resolve_po_item(item_id, unit_id=unit_id_value)
                             quantity = Decimal(quantities[i]) if quantities[i] else Decimal('0')
                             unit_price = Decimal(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else Decimal('0')
                             tax_rate = Decimal(tax_rates[i]) if i < len(tax_rates) and tax_rates[i] else Decimal('0')
                             
                             if quantity > 0:
+                                # build a readable string for the item field
+                                item_str = f"{item_obj.code} - {item_obj.name}"
+
                                 line = PurchaseOrderLine.objects.create(
                                     po=po,
-                                    item=str(item_id),
+                                    item=item_str,
+                                    item_id=item_obj.id,
                                     unit=str(units[i]) if i < len(units) and units[i] else '',
+                                    unit_id=int(units[i]) if i < len(units) and units[i] else None,
                                     quantity_ordered=quantity,
                                     unit_price=unit_price,
                                     tax_rate=tax_rate
                                 )
-                                
+
                                 line_total = line.quantity_ordered * line.unit_price
                                 tax_amount = line_total * (line.tax_rate / 100)
                                 total_amount += line_total + tax_amount
+                                withholding_base += line_total
                         except (ValueError, DecimalException) as e:
                             print(f"Error processing line {i}: {e}")
                             continue
             
-            po.total_amount = total_amount + po.shipping_cost - po.discount
+            withholding_tax = _calculate_withholding_tax(withholding_base, po.currency)
+            po.total_amount = total_amount + po.shipping_cost - po.discount - withholding_tax
             po.save()
             
             messages.success(request, f"Purchase Order {po.po_number} updated successfully.")
@@ -393,19 +523,32 @@ def po_edit(request, po_id):
             return redirect('purchasing:po_edit', po_id=po.id)
     
     # GET request - show form with existing data
-    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+    suppliers = Supplier.objects.filter(is_active=True)
+    if company_name:
+        suppliers = suppliers.filter(company=company_name)
+    suppliers = suppliers.order_by('name')
     
-    # Get items - placeholder
-    items = []
+    # Load items for dropdowns
+    items = Item.objects.filter(is_active=True).select_related('unit').order_by('code')
     
     units = Unit.objects.all().order_by('name')
+    
+    # prepare existing order lines with related objects as above
+    order_lines = list(po.lines.all())
+    item_ids = [l.item_id for l in order_lines if l.item_id]
+    unit_ids = [l.unit_id for l in order_lines if l.unit_id]
+    items_map = {i.id: i for i in Item.objects.filter(id__in=item_ids)} if item_ids else {}
+    units_map = {u.id: u for u in Unit.objects.filter(id__in=unit_ids)} if unit_ids else {}
+    for l in order_lines:
+        l.item_obj = items_map.get(l.item_id)
+        l.unit_obj = units_map.get(l.unit_id)
     
     context = {
         'po': po,
         'suppliers': suppliers,
         'items': items,
         'units': units,
-        'order_lines': po.lines.all(),
+        'order_lines': order_lines,
     }
     return render(request, 'purchasing/po_form.html', context)
 
@@ -546,12 +689,17 @@ def po_print(request, po_id):
     """
     Print purchase order (return PDF or print-friendly HTML)
     """
-    po = get_object_or_404(
-        PurchaseOrder.objects.select_related('supplier', 'created_by'),
-        id=po_id
-    )
+    po_qs = PurchaseOrder.objects.select_related('supplier', 'created_by')
+    company_name = request.session.get('current_company_name')
+    if company_name:
+        po_qs = po_qs.filter(company=company_name)
+    po = get_object_or_404(po_qs, id=po_id)
     
-    lines = PurchaseOrderLine.objects.filter(po=po)
+    lines = list(PurchaseOrderLine.objects.filter(po=po))
+    unit_ids = [l.unit_id for l in lines if l.unit_id]
+    units_map = {u.id: u for u in Unit.objects.filter(id__in=unit_ids)} if unit_ids else {}
+    for l in lines:
+        l.unit_obj = units_map.get(l.unit_id)
     
     # Calculate totals
     subtotal = Decimal('0')
@@ -563,19 +711,28 @@ def po_print(request, po_id):
         subtotal += line_total
         tax_total += line_tax
     
+    withholding_tax = _calculate_withholding_tax(subtotal, po.currency)
     grand_total = subtotal + tax_total + po.shipping_cost - po.discount
+    net_grand_total = grand_total - withholding_tax
     
+    company_obj = None
+    company_id = request.session.get('current_company_id')
+    if company_id:
+        company_obj = Company.objects.filter(id=company_id, is_active=True).first()
+
     context = {
         'po': po,
         'lines': lines,
         'subtotal': subtotal,
         'tax_total': tax_total,
+        'withholding_tax': withholding_tax,
         'grand_total': grand_total,
-        'company_name': 'Your Company Name',  # Get from settings or company model
-        'company_address': 'Your Company Address',
-        'company_phone': '123-456-7890',
-        'company_email': 'info@company.com',
-        'company_tax_id': 'TAX123456',
+        'net_grand_total': net_grand_total,
+        'company_name': company_obj.name if company_obj else (request.session.get('current_company_name') or po.company or 'Company'),
+        'company_address': company_obj.address if company_obj else '',
+        'company_phone': company_obj.phone if company_obj else '',
+        'company_email': company_obj.email if company_obj else '',
+        'company_tax_id': company_obj.tin_number if company_obj else '',
     }
     return render(request, 'purchasing/po_print.html', context)
 
@@ -778,30 +935,81 @@ def supplier_performance(request, supplier_id):
     
     # Get purchase orders for this supplier
     purchase_orders = PurchaseOrder.objects.filter(supplier=supplier).order_by('-order_date')
-    
-    # Calculate metrics
+
+    # Calculate core metrics
     total_orders = purchase_orders.count()
     total_spent = purchase_orders.filter(status='received').aggregate(
         total=Sum('total_amount')
-    )['total'] or 0
-    
-    # On-time delivery rate
-    received_orders = purchase_orders.filter(status='received')
+    )['total'] or Decimal('0.00')
+
+    received_orders = purchase_orders.filter(
+        status='received',
+        received_date__isnull=False
+    )
+    delivered_orders_count = received_orders.count()
+
     on_time_orders = received_orders.filter(
-        received_date__lte=models.F('expected_delivery_date')
+        expected_delivery_date__isnull=False,
+        received_date__lte=F('expected_delivery_date')
     ).count()
-    
-    on_time_rate = 0
-    if received_orders.count() > 0:
-        on_time_rate = (on_time_orders / received_orders.count()) * 100
-    
+    late_orders = max(delivered_orders_count - on_time_orders, 0)
+
+    on_time_rate = (on_time_orders / delivered_orders_count * 100) if delivered_orders_count else 0
+
+    lead_time_values = []
+    for po in received_orders.exclude(order_date__isnull=True):
+        if po.received_date and po.order_date:
+            lead_time_values.append((po.received_date - po.order_date).days)
+    avg_lead_time = round(sum(lead_time_values) / len(lead_time_values), 1) if lead_time_values else 0
+
+    # Build recent order performance rows
+    recent_orders = []
+    for po in purchase_orders[:20]:
+        lead_days = None
+        if po.received_date and po.order_date:
+            lead_days = (po.received_date - po.order_date).days
+
+        delay_days = None
+        is_on_time = None
+        if po.received_date and po.expected_delivery_date:
+            delay_days = (po.received_date - po.expected_delivery_date).days
+            is_on_time = delay_days <= 0
+
+        recent_orders.append({
+            'po': po,
+            'lead_days': lead_days,
+            'delay_days': delay_days,
+            'is_on_time': is_on_time,
+        })
+
+    # Weighted score (60% delivery + 40% quality)
+    quality_rating = float(supplier.quality_rating or 0)  # expected out of 5
+    delivery_score = on_time_rate
+    quality_score = (quality_rating / 5.0) * 100 if quality_rating > 0 else 0
+    score = round((delivery_score * 0.6) + (quality_score * 0.4), 1)
+
+    if score >= 90:
+        score_grade = 'A'
+    elif score >= 80:
+        score_grade = 'B'
+    elif score >= 70:
+        score_grade = 'C'
+    else:
+        score_grade = 'D'
+
     context = {
         'supplier': supplier,
-        'purchase_orders': purchase_orders[:10],
+        'recent_orders': recent_orders,
         'total_orders': total_orders,
+        'delivered_orders_count': delivered_orders_count,
+        'on_time_orders': on_time_orders,
+        'late_orders': late_orders,
         'total_spent': total_spent,
         'on_time_rate': round(on_time_rate, 1),
-        'avg_lead_time': 7.5,  # Calculate from actual data
+        'avg_lead_time': avg_lead_time,
+        'score': score,
+        'score_grade': score_grade,
+        'current_date': timezone.now(),
     }
     
     return render(request, 'purchasing/supplier_performance.html', context)
@@ -814,14 +1022,142 @@ def export_suppliers(request):
     """
     import csv
     from django.http import HttpResponse
-    
+
+    suppliers = Supplier.objects.all().order_by('name')
+
+    # Apply same filters as supplier_list, but never paginate
+    search = (request.GET.get('search') or '').strip()
+    if search:
+        suppliers = suppliers.filter(
+            Q(name__icontains=search) |
+            Q(code__icontains=search) |
+            Q(email__icontains=search) |
+            Q(phone__icontains=search) |
+            Q(contact_person__icontains=search)
+        )
+
+    is_active = request.GET.get('is_active')
+    if is_active == 'true':
+        suppliers = suppliers.filter(is_active=True)
+    elif is_active == 'false':
+        suppliers = suppliers.filter(is_active=False)
+
+    vat_registered = request.GET.get('vat_registered')
+    if vat_registered == 'true':
+        suppliers = suppliers.filter(
+            Q(tax_id__isnull=False) & ~Q(tax_id='') |
+            Q(tin__isnull=False) & ~Q(tin='')
+        )
+    elif vat_registered == 'false':
+        suppliers = suppliers.filter(
+            (Q(tax_id__isnull=True) | Q(tax_id='')) &
+            (Q(tin__isnull=True) | Q(tin=''))
+        )
+
+    export_format = (request.GET.get('format') or 'excel').lower()
+
+    if export_format == 'excel':
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            export_format = 'csv'
+        else:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Suppliers"
+
+            ws.append([
+                'Code', 'Name', 'Contact Person', 'Email', 'Phone',
+                'Address', 'Payment Terms', 'Tax ID', 'VAT Registered', 'Active'
+            ])
+
+            for supplier in suppliers:
+                ws.append([
+                    supplier.code,
+                    supplier.name,
+                    supplier.contact_person,
+                    supplier.email,
+                    supplier.phone,
+                    supplier.address,
+                    supplier.payment_terms_days,
+                    supplier.tax_id,
+                    'Yes' if (supplier.tax_id or supplier.tin) else 'No',
+                    'Yes' if supplier.is_active else 'No',
+                ])
+
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="suppliers.xlsx"'
+            wb.save(response)
+            return response
+
+    if export_format == 'pdf':
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.pdfgen import canvas
+        except ImportError:
+            return HttpResponse(
+                "PDF export is unavailable because reportlab is not installed.",
+                status=500,
+                content_type='text/plain'
+            )
+
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="suppliers.pdf"'
+
+        page_size = landscape(A4)
+        pdf = canvas.Canvas(response, pagesize=page_size)
+        width, height = page_size
+        y = height - 35
+
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(30, y, "Suppliers List")
+        y -= 18
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(30, y, f"Generated: {timezone.now().strftime('%d %b %Y %H:%M')}")
+        y -= 16
+
+        headers = ["Code", "Name", "Contact", "Email", "Phone", "Tax ID", "Active"]
+        col_x = [30, 95, 255, 380, 530, 620, 710]
+        pdf.setFont("Helvetica-Bold", 8)
+        for i, h in enumerate(headers):
+            pdf.drawString(col_x[i], y, h)
+        y -= 10
+        pdf.line(25, y + 6, width - 25, y + 6)
+        pdf.setFont("Helvetica", 7)
+
+        for supplier in suppliers:
+            if y < 40:
+                pdf.showPage()
+                y = height - 35
+                pdf.setFont("Helvetica-Bold", 8)
+                for i, h in enumerate(headers):
+                    pdf.drawString(col_x[i], y, h)
+                y -= 10
+                pdf.line(25, y + 6, width - 25, y + 6)
+                pdf.setFont("Helvetica", 7)
+
+            pdf.drawString(col_x[0], y, (supplier.code or '')[:10])
+            pdf.drawString(col_x[1], y, (supplier.name or '')[:30])
+            pdf.drawString(col_x[2], y, (supplier.contact_person or '')[:20])
+            pdf.drawString(col_x[3], y, (supplier.email or '')[:24])
+            pdf.drawString(col_x[4], y, (supplier.phone or '')[:14])
+            pdf.drawString(col_x[5], y, (supplier.tax_id or '')[:12])
+            pdf.drawString(col_x[6], y, 'Yes' if supplier.is_active else 'No')
+            y -= 9
+
+        pdf.showPage()
+        pdf.save()
+        return response
+
+    # Default CSV (Excel-friendly)
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="suppliers.csv"'
-    
+
     writer = csv.writer(response)
-    writer.writerow(['Code', 'Name', 'Contact Person', 'Email', 'Phone', 'Address', 'Payment Terms', 'Tax ID', 'Active'])
-    
-    suppliers = Supplier.objects.all()
+    writer.writerow(['Code', 'Name', 'Contact Person', 'Email', 'Phone', 'Address', 'Payment Terms', 'Tax ID', 'VAT Registered', 'Active'])
+
     for supplier in suppliers:
         writer.writerow([
             supplier.code,
@@ -832,9 +1168,10 @@ def export_suppliers(request):
             supplier.address,
             supplier.payment_terms_days,
             supplier.tax_id,
+            'Yes' if (supplier.tax_id or supplier.tin) else 'No',
             'Yes' if supplier.is_active else 'No',
         ])
-    
+
     return response
 
 
@@ -1198,6 +1535,8 @@ def ajax_supplier_info(request, supplier_id):
             'phone': supplier.phone,
             'address': supplier.address,
             'payment_terms': supplier.payment_terms_days,
+            'payment_terms_days': supplier.payment_terms_days,
+            'vat_registered': bool(supplier.tax_id or supplier.tin),
             'tax_id': supplier.tax_id,
         }
         return JsonResponse(data)

@@ -72,4 +72,9 @@ urlpatterns = [
     path('scheduled/<int:report_id>/edit/', views.edit_scheduled_report, name='edit_scheduled_report'),
     path('scheduled/<int:report_id>/delete/', views.delete_scheduled_report, name='delete_scheduled_report'),
     path('scheduled/<int:report_id>/run/', views.run_scheduled_report, name='run_scheduled_report'),
+       
+    # API endpoints for charts
+    path('api/revenue-trend/', views.api_revenue_trend, name='api_revenue_trend'),
+    path('api/sales-by-product/', views.api_sales_by_product, name='api_sales_by_product'),
+    path('api/inventory-by-category/', views.api_inventory_by_category, name='api_inventory_by_category'),
 ]

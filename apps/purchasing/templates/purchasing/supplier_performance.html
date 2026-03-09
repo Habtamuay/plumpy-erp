@@ -1,117 +1,181 @@
-{% extends 'reports/base_report.html' %}
+{% extends 'base.html' %}
+{% load humanize %}
 
-{% block title %}Supplier Performance{% endblock %}
-{% block report_title %}Supplier Performance Report{% endblock %}
+{% block title %}Supplier Performance - {{ supplier.name }}{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5>Supplier Scorecard</h5>
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-graph-up me-2 text-primary"></i>Supplier Performance</h2>
+            <p class="text-muted mb-0">{{ supplier.name }} ({{ supplier.code }})</p>
+        </div>
+        <a href="{% url 'purchasing:supplier_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to Suppliers
+        </a>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">Total Orders</small>
+                    <h3 class="mb-0">{{ total_orders }}</h3>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Supplier</th>
-                                <th>Total Orders</th>
-                                <th>On-Time</th>
-                                <th>Late</th>
-                                <th>On-Time %</th>
-                                <th>Quality Rating</th>
-                                <th>Avg. Lead Time</th>
-                                <th>Spend</th>
-                                <th>Score</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><strong>ABC Supplies Ltd</strong></td>
-                                <td>45</td>
-                                <td>44</td>
-                                <td>1</td>
-                                <td>98%</td>
-                                <td>4.8/5</td>
-                                <td>7.2 days</td>
-                                <td>$234,567</td>
-                                <td><span class="badge bg-success">A+</span></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Global Materials Inc</strong></td>
-                                <td>32</td>
-                                <td>30</td>
-                                <td>2</td>
-                                <td>94%</td>
-                                <td>4.5/5</td>
-                                <td>9.8 days</td>
-                                <td>$189,432</td>
-                                <td><span class="badge bg-success">A-</span></td>
-                            </tr>
-                            <tr>
-                                <td><strong>TechParts Co</strong></td>
-                                <td>28</td>
-                                <td>24</td>
-                                <td>4</td>
-                                <td>86%</td>
-                                <td>4.2/5</td>
-                                <td>12.5 days</td>
-                                <td>$145,789</td>
-                                <td><span class="badge bg-warning">B</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">Delivered</small>
+                    <h3 class="mb-0">{{ delivered_orders_count }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">On-Time</small>
+                    <h3 class="mb-0 text-success">{{ on_time_orders }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">Late</small>
+                    <h3 class="mb-0 text-danger">{{ late_orders }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">On-Time Rate</small>
+                    <h3 class="mb-0">{{ on_time_rate|floatformat:1 }}%</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase">Avg Lead Time</small>
+                    <h3 class="mb-0">{{ avg_lead_time|floatformat:1 }} <small class="text-muted">days</small></h3>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Supplier Quality Rating</h5>
+    <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <strong>Scorecard</strong>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Total Spend</span>
+                            <strong>{{ total_spent|floatformat:2|intcomma }}</strong>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Quality Rating</span>
+                            <strong>{{ supplier.quality_rating|floatformat:2 }}/5</strong>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Performance Score</span>
+                            <strong>{{ score|floatformat:1 }}%</strong>
+                        </div>
+                        <div class="progress mt-2" style="height: 10px;">
+                            <div class="progress-bar {% if score >= 90 %}bg-success{% elif score >= 80 %}bg-primary{% elif score >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 role="progressbar" style="width: {{ score|floatformat:0 }}%;"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="badge {% if score_grade == 'A' %}bg-success{% elif score_grade == 'B' %}bg-primary{% elif score_grade == 'C' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                            Grade {{ score_grade }}
+                        </span>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <canvas id="qualityChart" style="height: 300px;"></canvas>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <strong>Supplier Master Snapshot</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 small">
+                        <div class="col-6"><span class="text-muted">Contact:</span> {{ supplier.contact_person|default:"-" }}</div>
+                        <div class="col-6"><span class="text-muted">Phone:</span> {{ supplier.phone|default:"-" }}</div>
+                        <div class="col-6"><span class="text-muted">Email:</span> {{ supplier.email|default:"-" }}</div>
+                        <div class="col-6"><span class="text-muted">Tax ID:</span> {{ supplier.tax_id|default:"-" }}</div>
+                        <div class="col-6"><span class="text-muted">Payment Terms:</span> {{ supplier.payment_terms_days }} days</div>
+                        <div class="col-6"><span class="text-muted">Status:</span> {% if supplier.is_active %}Active{% else %}Inactive{% endif %}</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Lead Time Comparison</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="leadTimeChart" style="height: 300px;"></canvas>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+            <strong>Recent Purchase Orders</strong>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>PO Number</th>
+                            <th>Order Date</th>
+                            <th>Expected Date</th>
+                            <th>Received Date</th>
+                            <th class="text-end">Amount</th>
+                            <th>Status</th>
+                            <th class="text-end">Lead Days</th>
+                            <th>Delivery</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in recent_orders %}
+                        <tr>
+                            <td>{{ row.po.po_number }}</td>
+                            <td>{{ row.po.order_date|date:"d M Y" }}</td>
+                            <td>{{ row.po.expected_delivery_date|date:"d M Y"|default:"-" }}</td>
+                            <td>{{ row.po.received_date|date:"d M Y"|default:"-" }}</td>
+                            <td class="text-end">{{ row.po.total_amount|floatformat:2|intcomma }}</td>
+                            <td>
+                                <span class="badge {% if row.po.status == 'received' %}bg-success{% elif row.po.status == 'cancelled' %}bg-danger{% elif row.po.status == 'approved' %}bg-primary{% else %}bg-secondary{% endif %}">
+                                    {{ row.po.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                {% if row.lead_days is not None %}{{ row.lead_days }}{% else %}-{% endif %}
+                            </td>
+                            <td>
+                                {% if row.is_on_time is None %}
+                                    <span class="badge bg-light text-dark">N/A</span>
+                                {% elif row.is_on_time %}
+                                    <span class="badge bg-success">On Time</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Late{% if row.delay_days %} ({{ row.delay_days }}d){% endif %}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No purchase orders found for this supplier.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-    // Quality Chart
-    const ctx1 = document.getElementById('qualityChart').getContext('2d');
-    new Chart(ctx1, {
-        type: 'bar',
-        data: {
-            labels: ['ABC Supplies', 'Global Materials', 'TechParts', 'Raw Direct', 'Packaging Sol'],
-            datasets: [{
-                label: 'Quality Rating',
-                data: [4.8, 4.5, 4.2, 4.9, 4.0],
-                backgroundColor: '#4e73df'
-            }]
-        },
-        options: {
-            scales: {
-                y: {
-                    max: 5,
-                    min: 0
-                }
-            }
-        }
-    });
-</script>
 {% endblock %}

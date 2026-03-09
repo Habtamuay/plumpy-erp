@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Bill of Materials List{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-file-text me-2 text-primary"></i>Bill of Materials
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Manage your product recipes and components
+                        </p>
+                    </div>
+                    <div>
+                        <a href="{% url 'production:dashboard' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOM List Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="bomTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Product</th>
+                                    <th>BOM Name</th>
+                                    <th>Version</th>
+                                    <th>Type</th>
+                                    <th>Base Qty</th>
+                                    <th>Components</th>
+                                    <th>Total Cost</th>
+                                    <th>Status</th>
+                                    <th>Effective From</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for bom in boms %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ bom.product.code }}</strong>
+                                        <br><small>{{ bom.product.name }}</small>
+                                    </td>
+                                    <td>{{ bom.name }}</td>
+                                    <td>v{{ bom.version }}</td>
+                                    <td>{{ bom.get_bom_type_display }}</td>
+                                    <td>1000 kg</td>
+                                    <td class="text-center">{{ bom.component_count }}</td>
+                                    <td class="text-end">{{ bom.total_material_cost_per_base|floatformat:2 }}</td>
+                                    <td>
+                                        {% if bom.is_active %}
+                                            {% if bom.is_current %}
+                                            <span class="badge bg-success">Current</span>
+                                            {% else %}
+                                            <span class="badge bg-warning">Inactive</span>
+                                            {% endif %}
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ bom.effective_from|date:"Y-m-d" }}</td>
+                                    <td>
+                                        <a href="{% url 'production:bom_detail' bom.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="10" class="text-center py-5">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <h5 class="text-muted">No BOMs found</h5>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#bomTable').DataTable({
+            paging: true,
+            searching: true,
+            ordering: true,
+            pageLength: 25,
+            order: [[0, 'asc']]
+        });
+    });
+</script>
+{% endblock %}

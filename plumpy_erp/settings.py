@@ -172,6 +172,15 @@ LOGIN_URL = '/admin/login/'
 # For import_export - optional styling
 IMPORT_EXPORT_USE_TRANSACTIONS = True
 
+# Disable external Bootstrap CDN URLs from django_bootstrap5.
+# This removes browser Tracking Prevention warnings caused by jsDelivr.
+# If you need Bootstrap styling/JS, serve local files and set these URLs
+# to local static paths (e.g. "/static/vendor/bootstrap/css/bootstrap.min.css").
+BOOTSTRAP5 = {
+    "css_url": None,
+    "javascript_url": None,
+}
+
 # Email configuration (for future use)
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 # EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

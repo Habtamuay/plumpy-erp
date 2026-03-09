@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load django_bootstrap5 %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block report_title %}Reports - Plumpy ERP{% endblock %}</title>
 
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    {% bootstrap_css %}
 
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -232,6 +233,38 @@
                             </a>
                         </li>
 
+                        <!-- Inventory Reports -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_stock_summary' %}">
+                                <i class="bi bi-boxes"></i> Stock Summary
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_stock_value' %}">
+                                <i class="bi bi-cash-stack"></i> Stock Value
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_stock_aging' %}">
+                                <i class="bi bi-clock-history"></i> Stock Aging
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_expiry' %}">
+                                <i class="bi bi-exclamation-triangle"></i> Expiry Report
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_low_stock' %}">
+                                <i class="bi bi-exclamation-octagon"></i> Low Stock
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_movements' %}">
+                                <i class="bi bi-arrow-left-right"></i> Stock Movements
+                            </a>
+                        </li>
+
                         <!-- Production -->
                         <li class="nav-item mt-2">
                             <small class="px-3 text-secondary text-uppercase">Production</small>
@@ -247,6 +280,28 @@
                             </a>
                         </li>
 
+                        <!-- Production Reports -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'production:cost_variance_report' %}">
+                                <i class="bi bi-calculator"></i> Cost Variance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:production_yield' %}">
+                                <i class="bi bi-percent"></i> Yield Analysis
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:production_consumption' %}">
+                                <i class="bi bi-cup-straw"></i> Consumption
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:production_runs' %}">
+                                <i class="bi bi-list-check"></i> Production Runs
+                            </a>
+                        </li>
+
                         <!-- Purchasing -->
                         <li class="nav-item mt-2">
                             <small class="px-3 text-secondary text-uppercase">Purchasing</small>
@@ -259,6 +314,28 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'admin:purchasing_purchaseorder_changelist' %}">
                                 <i class="bi bi-cart"></i> Purchase Orders
+                            </a>
+                        </li>
+
+                        <!-- Purchasing Reports -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:supplier_performance' %}">
+                                <i class="bi bi-star"></i> Supplier Performance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:spend_analysis' %}">
+                                <i class="bi bi-pie-chart"></i> Spend Analysis
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:po_summary' %}">
+                                <i class="bi bi-file-text"></i> PO Summary
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:lead_time' %}">
+                                <i class="bi bi-clock"></i> Lead Time
                             </a>
                         </li>
 
@@ -287,20 +364,114 @@
                             </a>
                         </li>
 
-                        <!-- Reports -->
+                        <!-- Financial Reports -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:balance_sheet' %}">
+                                <i class="bi bi-file-spreadsheet"></i> Balance Sheet
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:profit_loss' %}">
+                                <i class="bi bi-graph-down"></i> Profit & Loss
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:cash_flow' %}">
+                                <i class="bi bi-cash"></i> Cash Flow
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:trial_balance' %}">
+                                <i class="bi bi-list"></i> Trial Balance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'accounting:ar_aging' %}">
+                                <i class="bi bi-clock-history"></i> AR Aging
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'accounting:ap_aging' %}">
+                                <i class="bi bi-clock-history"></i> AP Aging
+                            </a>
+                        </li>
+
+                        <!-- Journals -->
                         <li class="nav-item mt-2">
-                            <small class="px-3 text-secondary text-uppercase">Reports</small>
+                            <small class="px-3 text-secondary text-uppercase">Journals</small>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'inventory:stock_summary' %}">
-                                <i class="bi bi-pie-chart"></i> Stock Summary
+                            <a class="nav-link" href="{% url 'reports:general_ledger' %}">
+                                <i class="bi bi-journal-bookmark-fill"></i> General Ledger
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'inventory:consumption_vs_bom' %}">
-                                <i class="bi bi-bar-chart"></i> Consumption vs BOM
+                            <a class="nav-link" href="{% url 'reports:sales_journal' %}">
+                                <i class="bi bi-receipt"></i> Sales Journal
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:purchase_journal' %}">
+                                <i class="bi bi-truck"></i> Purchase Journal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:cash_payment_journal' %}">
+                                <i class="bi bi-cash"></i> Cash Payment Journal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:receipt_journal' %}">
+                                <i class="bi bi-wallet2"></i> Receipt Journal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:inventory_journal' %}">
+                                <i class="bi bi-box"></i> Inventory Journal
+                            </a>
+                        </li>
+
+                        <!-- Sales Reports -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Sales Reports</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:revenue_analysis' %}">
+                                <i class="bi bi-graph-up"></i> Revenue Analysis
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:product_sales' %}">
+                                <i class="bi bi-box-seam"></i> Product Sales
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:customer_performance' %}">
+                                <i class="bi bi-people"></i> Customer Performance
+                            </a>
+                        </li>
+
+                        <!-- Custom Reports -->
+                        <li class="nav-item mt-2">
+                            <small class="px-3 text-secondary text-uppercase">Custom Reports</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:kpi_dashboard' %}">
+                                <i class="bi bi-speedometer2"></i> KPI Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:comparative_analysis' %}">
+                                <i class="bi bi-bar-chart"></i> Comparative Analysis
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'reports:executive_summary' %}">
+                                <i class="bi bi-file-text"></i> Executive Summary
+                            </a>
+                        </li>
+
+                        <!-- Inventory Analytics (from inventory app) -->
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'inventory:inventory_analytics' %}">
                                 <i class="bi bi-graph-up"></i> Analytics
@@ -312,18 +483,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'production:cost_variance_report' %}">
-                                <i class="bi bi-calculator"></i> Cost Variance
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'accounting:ar_aging' %}">
-                                <i class="bi bi-clock-history"></i> AR Aging
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'accounting:ap_aging' %}">
-                                <i class="bi bi-clock-history"></i> AP Aging
+                            <a class="nav-link" href="{% url 'inventory:consumption_vs_bom' %}">
+                                <i class="bi bi-bar-chart"></i> Consumption vs BOM
                             </a>
                         </li>
                     </ul>
@@ -371,7 +532,7 @@
     </div>
 
     <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    {% bootstrap_javascript %}
 
     <!-- jQuery (optional, for some plugins) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

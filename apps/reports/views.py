@@ -41,6 +41,27 @@ from apps.sales.models import SalesInvoice
 from apps.company.models import Company, Customer, UserProfile
 
 
+def _company_ctx(request):
+    company_id = request.session.get('current_company_id')
+    company = Company.objects.filter(id=company_id, is_active=True).first() if company_id else None
+    company_name = company.name if company else request.session.get('current_company_name')
+    return company, company_id, company_name
+
+
+def _scope_fk(qs, company_id, include_legacy=False):
+    if not company_id:
+        return qs.none()
+    if include_legacy:
+        return qs.filter(Q(company_id=company_id) | Q(company__isnull=True))
+    return qs.filter(company_id=company_id)
+
+
+def _scope_name(qs, company_name):
+    if not company_name:
+        return qs.none()
+    return qs.filter(company=company_name)
+
+
 # ============================
 # Dashboard
 # ============================
@@ -48,24 +69,37 @@ from apps.company.models import Company, Customer, UserProfile
 @login_required
 def dashboard(request):
     """Main reports dashboard"""
-    categories = ReportCategory.objects.filter(is_active=True).prefetch_related('reports')
+    company, company_id, company_name = _company_ctx(request)
+    if not company_id:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
+    categories = _scope_fk(
+        ReportCategory.objects.filter(is_active=True).prefetch_related('reports'),
+        company_id,
+        include_legacy=True
+    )
     
     # Get user's custom widgets
-    widgets = DashboardWidget.objects.filter(user=request.user, is_visible=True).order_by('position')
+    widgets = _scope_fk(
+        DashboardWidget.objects.filter(user=request.user, is_visible=True),
+        company_id,
+        include_legacy=True
+    ).order_by('position')
     
     # Get scheduled reports
-    scheduled = ScheduledReport.objects.filter(is_active=True)[:5]
+    scheduled = _scope_fk(ScheduledReport.objects.filter(is_active=True), company_id, include_legacy=True)[:5]
     
     # Quick stats
-    total_items = Item.objects.filter(is_active=True).count()
-    total_suppliers = Supplier.objects.filter(is_active=True).count()
-    active_production = ProductionRun.objects.filter(status='in_progress').count()
-    pending_orders = PurchaseOrder.objects.filter(status__in=['draft', 'confirmed']).count()
-    monthly_revenue = SalesInvoice.objects.filter(
+    total_items = _scope_fk(Item.objects.filter(is_active=True), company_id, include_legacy=True).count()
+    total_suppliers = _scope_name(Supplier.objects.filter(is_active=True), company_name).count()
+    active_production = _scope_fk(ProductionRun.objects.filter(status='in_progress'), company_id).count()
+    pending_orders = _scope_name(PurchaseOrder.objects.filter(status__in=['draft', 'confirmed']), company_name).count()
+    monthly_revenue = _scope_fk(SalesInvoice.objects.filter(
         invoice_date__gte=timezone.now().replace(day=1),
         status__in=['posted', 'paid']
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
-    scheduled_reports = ScheduledReport.objects.filter(is_active=True).count()
+    ), company_id).aggregate(total=Sum('total_amount'))['total'] or 0
+    scheduled_reports = _scope_fk(ScheduledReport.objects.filter(is_active=True), company_id, include_legacy=True).count()
     
     context = {
         'categories': categories,
@@ -90,10 +124,18 @@ def dashboard(request):
 @login_required
 def stock_summary_report(request):
     """Stock summary report"""
+    company, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = InventoryReportFilterForm(request.GET)
     
     # Base queryset
-    stock_items = CurrentStock.objects.select_related('item', 'warehouse', 'lot')
+    stock_items = _scope_fk(
+        CurrentStock.objects.select_related('item', 'warehouse', 'lot'),
+        company_id,
+        include_legacy=True
+    )
     
     # Apply filters
     if form.is_valid():
@@ -130,7 +172,7 @@ def stock_summary_report(request):
 
     # include items with zero stock if they match filters
     existing_ids = [row['item_id'] for row in by_item]
-    zero_qs = Item.objects.filter(is_active=True).exclude(id__in=existing_ids)
+    zero_qs = _scope_fk(Item.objects.filter(is_active=True), company_id, include_legacy=True).exclude(id__in=existing_ids)
     if form.is_valid():
         if form.cleaned_data.get('category'):
             zero_qs = zero_qs.filter(category=form.cleaned_data['category'])
@@ -157,25 +199,25 @@ def stock_summary_report(request):
     
     # Expiry summary
     today = timezone.now().date()
-    near_expiry = Lot.objects.filter(
+    near_expiry = _scope_fk(Lot.objects.filter(
         expiry_date__lte=today + timedelta(days=90),
         expiry_date__gte=today,
         is_active=True
-    ).count()
+    ), company_id, include_legacy=True).count()
     
-    expired = Lot.objects.filter(
+    expired = _scope_fk(Lot.objects.filter(
         expiry_date__lt=today,
         is_active=True
-    ).count()
+    ), company_id, include_legacy=True).count()
     
     # good expiry count (>90 days until expiry)
-    good_expiry_count = Lot.objects.filter(
+    good_expiry_count = _scope_fk(Lot.objects.filter(
         expiry_date__gt=today + timedelta(days=90),
         is_active=True
-    ).count()
+    ), company_id, include_legacy=True).count()
     
     # warehouses and categories for filters
-    warehouses = Warehouse.objects.filter(is_active=True)
+    warehouses = _scope_fk(Warehouse.objects.filter(is_active=True), company_id, include_legacy=True)
     categories = Item.ITEM_CATEGORY
     
     # low stock count based on item thresholds
@@ -217,15 +259,19 @@ def stock_summary_report(request):
 @login_required
 def stock_value_report(request):
     """Stock value report with trends"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = InventoryReportFilterForm(request.GET)
     
     # Get current stock value
-    current_value = CurrentStock.objects.aggregate(
+    current_value = _scope_fk(CurrentStock.objects.all(), company_id, include_legacy=True).aggregate(
         total=Sum(F('quantity') * F('item__unit_cost'))
     )['total'] or 0
     
     # Get value by category
-    by_category = CurrentStock.objects.values(
+    by_category = _scope_fk(CurrentStock.objects.all(), company_id, include_legacy=True).values(
         'item__category'
     ).annotate(
         total_qty=Sum('quantity'),
@@ -233,14 +279,14 @@ def stock_value_report(request):
     ).order_by('-total_value')
     
     # Get value by warehouse
-    by_warehouse = CurrentStock.objects.values(
+    by_warehouse = _scope_fk(CurrentStock.objects.all(), company_id, include_legacy=True).values(
         'warehouse__name'
     ).annotate(
         total_value=Sum(F('quantity') * F('item__unit_cost'))
     ).order_by('-total_value')
     
     # Top 10 items by value
-    top_items = CurrentStock.objects.values(
+    top_items = _scope_fk(CurrentStock.objects.all(), company_id, include_legacy=True).values(
         'item__code', 'item__name'
     ).annotate(
         total_value=Sum(F('quantity') * F('item__unit_cost'))
@@ -272,10 +318,18 @@ def stock_value_report(request):
 @login_required
 def stock_aging_report(request):
     """Stock aging report by receipt date"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = InventoryReportFilterForm(request.GET)
     
     # Get all lots with their receipt dates
-    lots = Lot.objects.filter(is_active=True).select_related('item', 'warehouse')
+    lots = _scope_fk(
+        Lot.objects.filter(is_active=True).select_related('item', 'warehouse'),
+        company_id,
+        include_legacy=True
+    )
     
     # Apply filters
     if form.is_valid():
@@ -316,12 +370,16 @@ def stock_aging_report(request):
 @login_required
 def low_stock_report(request):
     """Low stock alert report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     # Get items below reorder point
-    low_stock = Item.objects.filter(
+    low_stock = _scope_fk(Item.objects.filter(
         Q(current_stock__lte=F('reorder_point')) |
         Q(current_stock__lte=F('minimum_stock')),
         is_active=True
-    ).select_related('unit').order_by('current_stock')
+    ), company_id, include_legacy=True).select_related('unit').order_by('current_stock')
     
     # Critical items (below minimum)
     critical = low_stock.filter(current_stock__lte=F('minimum_stock'))
@@ -333,7 +391,7 @@ def low_stock_report(request):
     )
     
     # Out of stock
-    out_of_stock = Item.objects.filter(current_stock=0, is_active=True)
+    out_of_stock = _scope_fk(Item.objects.filter(current_stock=0, is_active=True), company_id, include_legacy=True)
     
     context = {
         'low_stock': low_stock,
@@ -352,30 +410,34 @@ def low_stock_report(request):
 @login_required
 def expiry_report(request):
     """Expiry report for lots"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     today = timezone.now().date()
     
     # Expired lots
-    expired = Lot.objects.filter(
+    expired = _scope_fk(Lot.objects.filter(
         expiry_date__lt=today,
         is_active=True
-    ).select_related('item').order_by('expiry_date')
+    ), company_id, include_legacy=True).select_related('item').order_by('expiry_date')
     
     # Near expiry (next 90 days)
-    near_expiry = Lot.objects.filter(
+    near_expiry = _scope_fk(Lot.objects.filter(
         expiry_date__gte=today,
         expiry_date__lte=today + timedelta(days=90),
         is_active=True
-    ).select_related('item').order_by('expiry_date')
+    ), company_id, include_legacy=True).select_related('item').order_by('expiry_date')
     
     # 30-day buckets
     buckets = {}
     for days in [30, 60, 90]:
         cutoff = today + timedelta(days=days)
-        buckets[f'{days}_days'] = Lot.objects.filter(
+        buckets[f'{days}_days'] = _scope_fk(Lot.objects.filter(
             expiry_date__lte=cutoff,
             expiry_date__gt=cutoff - timedelta(days=30),
             is_active=True
-        ).count()
+        ), company_id, include_legacy=True).count()
     
     context = {
         'expired': expired,
@@ -392,11 +454,15 @@ def expiry_report(request):
 @login_required
 def inventory_movements_report(request):
     """Inventory movements report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = InventoryReportFilterForm(request.GET)
     
-    movements = StockTransaction.objects.select_related(
+    movements = _scope_fk(StockTransaction.objects.select_related(
         'item', 'lot', 'warehouse_from', 'warehouse_to', 'created_by'
-    ).order_by('-transaction_date')
+    ), company_id, include_legacy=True).order_by('-transaction_date')
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -425,9 +491,13 @@ def inventory_movements_report(request):
 @login_required
 def production_runs_report(request):
     """Production runs report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = ProductionReportFilterForm(request.GET)
     
-    runs = ProductionRun.objects.select_related('product', 'bom').order_by('-start_date')
+    runs = _scope_fk(ProductionRun.objects.select_related('product', 'bom'), company_id).order_by('-start_date')
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -469,10 +539,13 @@ def production_runs_report(request):
 def cost_variance_report(request):
     """Production cost variance report"""
     from apps.production.models import ProductionCostVariance
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
     
-    variances = ProductionCostVariance.objects.select_related(
+    variances = _scope_fk(ProductionCostVariance.objects.select_related(
         'production_run__product'
-    ).order_by('-calculated_at')[:100]
+    ), company_id).order_by('-calculated_at')[:100]
     
     # Summary
     total_std = variances.aggregate(total=Sum('standard_total_cost'))['total'] or 0
@@ -495,12 +568,16 @@ def cost_variance_report(request):
 @login_required
 def production_yield_report(request):
     """Production yield report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = ProductionReportFilterForm(request.GET)
     
-    runs = ProductionRun.objects.filter(
+    runs = _scope_fk(ProductionRun.objects.filter(
         status='completed',
         actual_quantity__isnull=False
-    ).select_related('product')
+    ), company_id).select_related('product')
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -586,9 +663,13 @@ def material_consumption_report(request):
 @login_required
 def po_summary_report(request):
     """Purchase Order summary report"""
+    _, company_id, company_name = _company_ctx(request)
+    if not company_name:
+        return redirect('core:home')
+
     form = PurchasingReportFilterForm(request.GET)
     
-    pos = PurchaseOrder.objects.select_related('supplier').order_by('-order_date')
+    pos = _scope_name(PurchaseOrder.objects.select_related('supplier'), company_name).order_by('-order_date')
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -635,7 +716,11 @@ def po_summary_report(request):
 @login_required
 def supplier_performance_report(request):
     """Supplier performance report"""
-    suppliers = Supplier.objects.annotate(
+    _, company_id, company_name = _company_ctx(request)
+    if not company_name:
+        return redirect('core:home')
+
+    suppliers = _scope_name(Supplier.objects.all(), company_name).annotate(
         total_orders=Count('purchase_orders'),
         total_purchase_amount=Sum('purchase_orders__total_amount'),
         on_time_deliveries=Count('purchase_orders', filter=Q(
@@ -671,9 +756,13 @@ def supplier_performance_report(request):
 @login_required
 def spend_analysis_report(request):
     """Spend analysis report"""
+    _, company_id, company_name = _company_ctx(request)
+    if not company_name:
+        return redirect('core:home')
+
     form = PurchasingReportFilterForm(request.GET)
     
-    pos = PurchaseOrder.objects.filter(status__in=['received', 'partial'])
+    pos = _scope_name(PurchaseOrder.objects.filter(status__in=['received', 'partial']), company_name)
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -688,9 +777,9 @@ def spend_analysis_report(request):
     ).order_by('-total')
     
     # By category (through items)
-    by_category = PurchaseOrderLine.objects.filter(
+    by_category = _scope_fk(PurchaseOrderLine.objects.filter(
         po__status__in=['received', 'partial']
-    ).values(
+    ), company_id).values(
         'item__category'
     ).annotate(
         total=Sum('total_price'),
@@ -732,10 +821,14 @@ def spend_analysis_report(request):
 @login_required
 def lead_time_report(request):
     """Lead time analysis report"""
-    completed_pos = PurchaseOrder.objects.filter(
+    _, company_id, company_name = _company_ctx(request)
+    if not company_name:
+        return redirect('core:home')
+
+    completed_pos = _scope_name(PurchaseOrder.objects.filter(
         status='received',
         goods_receipts__isnull=False
-    ).annotate(
+    ), company_name).annotate(
         lead_time=F('goods_receipts__receipt_date') - F('order_date')
     )
     
@@ -765,9 +858,13 @@ def lead_time_report(request):
 @login_required
 def revenue_analysis_report(request):
     """Revenue analysis report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = SalesReportFilterForm(request.GET)
     
-    invoices = SalesInvoice.objects.filter(status__in=['posted', 'paid', 'partial'])
+    invoices = _scope_fk(SalesInvoice.objects.filter(status__in=['posted', 'paid', 'partial']), company_id)
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -828,12 +925,16 @@ def revenue_analysis_report(request):
 @login_required
 def customer_performance_report(request):
     """Customer performance report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = SalesReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else None
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else None
     
-    customers_qs = Customer.objects
+    customers_qs = _scope_fk(Customer.objects.all(), company_id)
     
     if date_from:
         customers_qs = customers_qs.filter(
@@ -874,13 +975,16 @@ def customer_performance_report(request):
 def product_sales_report(request):
     """Product sales report"""
     from django.db.models.functions import Coalesce
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
     
     form = SalesReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else None
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else None
     
-    products_qs = Item.objects.filter(category='finished', is_active=True)
+    products_qs = _scope_fk(Item.objects.filter(category='finished', is_active=True), company_id, include_legacy=True)
     
     if date_from:
         products_qs = products_qs.filter(
@@ -900,7 +1004,7 @@ def product_sales_report(request):
     ).order_by('-total_revenue')
     
     # Category breakdown
-    category_qs = Item.objects.filter(category='finished', is_active=True)
+    category_qs = _scope_fk(Item.objects.filter(category='finished', is_active=True), company_id, include_legacy=True)
     if date_from:
         category_qs = category_qs.filter(
             Q(salesorderline__order__order_date__gte=date_from) |
@@ -931,6 +1035,10 @@ def product_sales_report(request):
 @login_required
 def profit_loss_report(request):
     """Profit & Loss report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
     # Get date range
@@ -938,18 +1046,18 @@ def profit_loss_report(request):
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else timezone.now().date()
     
     # Get income accounts (revenue)
-    income_accounts = Account.objects.filter(
+    income_accounts = _scope_fk(Account.objects.filter(
         account_type__name='Income',
         is_active=True
-    ).values('code', 'name').annotate(
+    ), company_id).values('code', 'name').annotate(
         balance=Sum('journal_lines__credit') - Sum('journal_lines__debit')
     ).filter(balance__gt=0).order_by('-balance')
     
     # Get expense accounts
-    expense_accounts = Account.objects.filter(
+    expense_accounts = _scope_fk(Account.objects.filter(
         account_type__name='Expense',
         is_active=True
-    ).values('code', 'name').annotate(
+    ), company_id).values('code', 'name').annotate(
         balance=Sum('journal_lines__debit') - Sum('journal_lines__credit')
     ).filter(balance__gt=0).order_by('-balance')
     
@@ -976,6 +1084,10 @@ def profit_loss_report(request):
 @login_required
 def balance_sheet_report(request):
     """Balance Sheet report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     date_to = timezone.now().date()
     
@@ -983,10 +1095,10 @@ def balance_sheet_report(request):
         date_to = form.cleaned_data['date_to']
     
     # Asset accounts
-    assets = Account.objects.filter(
+    assets = _scope_fk(Account.objects.filter(
         account_type__name='Asset',
         is_active=True
-    ).values('code', 'name', 'account_category__name').annotate(
+    ), company_id).values('code', 'name', 'account_category__name').annotate(
         balance=Sum(
             models.Case(
                 models.When(journal_lines__journal__entry_date__lte=date_to, then='journal_lines__debit'),
@@ -1001,10 +1113,10 @@ def balance_sheet_report(request):
     ).order_by('code')
     
     # Liability accounts
-    liabilities = Account.objects.filter(
+    liabilities = _scope_fk(Account.objects.filter(
         account_type__name='Liability',
         is_active=True
-    ).values('code', 'name', 'account_category__name').annotate(
+    ), company_id).values('code', 'name', 'account_category__name').annotate(
         balance=Sum(
             models.Case(
                 models.When(journal_lines__journal__entry_date__lte=date_to, then='journal_lines__credit'),
@@ -1019,10 +1131,10 @@ def balance_sheet_report(request):
     ).order_by('code')
     
     # Equity accounts
-    equity = Account.objects.filter(
+    equity = _scope_fk(Account.objects.filter(
         account_type__name='Equity',
         is_active=True
-    ).values('code', 'name', 'account_category__name').annotate(
+    ), company_id).values('code', 'name', 'account_category__name').annotate(
         balance=Sum(
             models.Case(
                 models.When(journal_lines__journal__entry_date__lte=date_to, then='journal_lines__credit'),
@@ -1261,12 +1373,15 @@ def accounts_receivable_report(request):
     """Accounts Receivable Aging report"""
     # SalesInvoice belongs to sales app, not accounting
     from apps.sales.models import SalesInvoice
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
     
     today = timezone.now().date()
     
-    invoices = SalesInvoice.objects.filter(
+    invoices = _scope_fk(SalesInvoice.objects.filter(
         status__in=['posted', 'partial', 'overdue']
-    ).select_related('customer')
+    ), company_id).select_related('customer')
     
     # Aging buckets
     aging = {
@@ -1321,12 +1436,15 @@ def accounts_receivable_report(request):
 def accounts_payable_report(request):
     """Accounts Payable Aging report"""
     from apps.accounting.models import PurchaseBill
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
     
     today = timezone.now().date()
     
-    bills = PurchaseBill.objects.filter(
+    bills = _scope_fk(PurchaseBill.objects.filter(
         status__in=['posted', 'partial', 'overdue']
-    ).select_related('supplier')
+    ), company_id).select_related('supplier')
     
     # Aging buckets
     aging = {
@@ -1550,9 +1668,13 @@ def comparative_analysis(request):
 @login_required
 def general_ledger_report(request):
     """General Ledger report"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
-    accounts = Account.objects.filter(is_active=True).select_related(
+    accounts = _scope_fk(Account.objects.filter(is_active=True), company_id).select_related(
         'account_type', 'account_group'
     ).order_by('code')
     
@@ -1566,10 +1688,10 @@ def general_ledger_report(request):
     # Get journal entries for each account
     ledger_data = []
     for account in accounts:
-        entries = JournalEntry.objects.filter(
+        entries = _scope_fk(JournalEntry.objects.filter(
             journal_lines__account=account,
             is_posted=True
-        ).distinct().order_by('entry_date')
+        ), company_id).distinct().order_by('entry_date')
         
         if date_from:
             entries = entries.filter(entry_date__gte=date_from)
@@ -1618,22 +1740,26 @@ def general_ledger_report(request):
 @login_required
 def cash_payment_journal(request):
     """Cash Payment Journal"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else timezone.now().date().replace(day=1)
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else timezone.now().date()
     
     # Get cash account
-    cash_account = Account.objects.filter(code='1010').first()
+    cash_account = _scope_fk(Account.objects.filter(code='1010'), company_id).first()
     
     if cash_account:
         # Get journal entries where cash is credited (payments)
-        payments = JournalEntry.objects.filter(
+        payments = _scope_fk(JournalEntry.objects.filter(
             entry_date__range=[date_from, date_to],
             is_posted=True,
             journal_lines__account=cash_account,
             journal_lines__credit__gt=0
-        ).distinct().select_related().order_by('entry_date')
+        ), company_id).distinct().select_related().order_by('entry_date')
         
         payment_data = []
         for entry in payments:
@@ -1667,22 +1793,26 @@ def cash_payment_journal(request):
 @login_required
 def sales_journal(request):
     """Sales Journal"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else timezone.now().date().replace(day=1)
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else timezone.now().date()
     
     # Get sales revenue account
-    sales_account = Account.objects.filter(code='4100').first()
+    sales_account = _scope_fk(Account.objects.filter(code='4100'), company_id).first()
     
     if sales_account:
         # Get journal entries where sales revenue is credited
-        sales_entries = JournalEntry.objects.filter(
+        sales_entries = _scope_fk(JournalEntry.objects.filter(
             entry_date__range=[date_from, date_to],
             is_posted=True,
             journal_lines__account=sales_account,
             journal_lines__credit__gt=0
-        ).distinct().select_related().order_by('entry_date')
+        ), company_id).distinct().select_related().order_by('entry_date')
         
         sales_data = []
         for entry in sales_entries:
@@ -1716,22 +1846,26 @@ def sales_journal(request):
 @login_required
 def receipt_journal(request):
     """Receipt Journal (Cash/Bank Receipts)"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else timezone.now().date().replace(day=1)
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else timezone.now().date()
     
     # Get cash account
-    cash_account = Account.objects.filter(code='1010').first()
+    cash_account = _scope_fk(Account.objects.filter(code='1010'), company_id).first()
     
     if cash_account:
         # Get journal entries where cash is debited (receipts)
-        receipts = JournalEntry.objects.filter(
+        receipts = _scope_fk(JournalEntry.objects.filter(
             entry_date__range=[date_from, date_to],
             is_posted=True,
             journal_lines__account=cash_account,
             journal_lines__debit__gt=0
-        ).distinct().select_related().order_by('entry_date')
+        ), company_id).distinct().select_related().order_by('entry_date')
         
         receipt_data = []
         for entry in receipts:
@@ -1765,22 +1899,26 @@ def receipt_journal(request):
 @login_required
 def purchase_journal(request):
     """Purchase Journal"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = FinancialReportFilterForm(request.GET)
     
     date_from = form.cleaned_data.get('date_from') if form.is_valid() else timezone.now().date().replace(day=1)
     date_to = form.cleaned_data.get('date_to') if form.is_valid() else timezone.now().date()
     
     # Get inventory/purchase expense account
-    inventory_account = Account.objects.filter(code='1300').first()
+    inventory_account = _scope_fk(Account.objects.filter(code='1300'), company_id).first()
     
     if inventory_account:
         # Get journal entries where inventory is debited
-        purchase_entries = JournalEntry.objects.filter(
+        purchase_entries = _scope_fk(JournalEntry.objects.filter(
             entry_date__range=[date_from, date_to],
             is_posted=True,
             journal_lines__account=inventory_account,
             journal_lines__debit__gt=0
-        ).distinct().select_related().order_by('entry_date')
+        ), company_id).distinct().select_related().order_by('entry_date')
         
         purchase_data = []
         for entry in purchase_entries:
@@ -1814,11 +1952,15 @@ def purchase_journal(request):
 @login_required
 def inventory_journal(request):
     """Inventory Journal (Stock Movements)"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     form = InventoryReportFilterForm(request.GET)
     
-    transactions = StockTransaction.objects.select_related(
+    transactions = _scope_fk(StockTransaction.objects.select_related(
         'item', 'warehouse_from', 'warehouse_to', 'created_by'
-    ).order_by('-transaction_date')
+    ), company_id, include_legacy=True).order_by('-transaction_date')
     
     if form.is_valid():
         if form.cleaned_data.get('date_from'):
@@ -1863,7 +2005,8 @@ def inventory_journal(request):
 @login_required
 def scheduled_reports_list(request):
     """List scheduled reports"""
-    reports = ScheduledReport.objects.filter(created_by=request.user).order_by('next_run')
+    _, company_id, _ = _company_ctx(request)
+    reports = _scope_fk(ScheduledReport.objects.filter(created_by=request.user), company_id, include_legacy=True).order_by('next_run')
     
     context = {
         'reports': reports,
@@ -1876,10 +2019,15 @@ def scheduled_reports_list(request):
 @login_required
 def create_scheduled_report(request):
     """Create a new scheduled report"""
+    company, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return redirect('core:home')
+
     if request.method == 'POST':
         form = ScheduledReportForm(request.POST)
         if form.is_valid():
             report = form.save(commit=False)
+            report.company = company
             report.created_by = request.user
             report.save()
             messages.success(request, f'Scheduled report "{report.name}" created successfully.')
@@ -1898,7 +2046,8 @@ def create_scheduled_report(request):
 @login_required
 def edit_scheduled_report(request, report_id):
     """Edit a scheduled report"""
-    report = get_object_or_404(ScheduledReport, id=report_id, created_by=request.user)
+    _, company_id, _ = _company_ctx(request)
+    report = get_object_or_404(_scope_fk(ScheduledReport.objects.all(), company_id, include_legacy=True), id=report_id, created_by=request.user)
     
     if request.method == 'POST':
         form = ScheduledReportForm(request.POST, instance=report)
@@ -1921,7 +2070,8 @@ def edit_scheduled_report(request, report_id):
 @login_required
 def delete_scheduled_report(request, report_id):
     """Delete a scheduled report"""
-    report = get_object_or_404(ScheduledReport, id=report_id, created_by=request.user)
+    _, company_id, _ = _company_ctx(request)
+    report = get_object_or_404(_scope_fk(ScheduledReport.objects.all(), company_id, include_legacy=True), id=report_id, created_by=request.user)
     
     if request.method == 'POST':
         report.delete()
@@ -1938,7 +2088,8 @@ def delete_scheduled_report(request, report_id):
 @login_required
 def run_scheduled_report(request, report_id):
     """Run a scheduled report manually"""
-    report = get_object_or_404(ScheduledReport, id=report_id, created_by=request.user)
+    _, company_id, _ = _company_ctx(request)
+    report = get_object_or_404(_scope_fk(ScheduledReport.objects.all(), company_id, include_legacy=True), id=report_id, created_by=request.user)
     
     # Trigger report generation
     messages.success(request, f'Report "{report.name}" has been queued for generation.')
@@ -2068,3 +2219,86 @@ def export_stock_summary_csv(context):
         ])
     
     return response
+
+def api_revenue_trend(request):
+    """API endpoint for revenue trend chart"""
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return JsonResponse({'labels': [], 'values': []})
+
+    today = timezone.now().date()
+    days = 30
+    
+    labels = []
+    values = []
+    
+    for i in range(days):
+        date = today - timedelta(days=days-i-1)
+        labels.append(date.strftime('%b %d'))
+        
+        # Get revenue for this date
+        revenue = _scope_fk(SalesInvoice.objects.filter(
+            invoice_date=date,
+            status__in=['posted', 'paid']
+        ), company_id).aggregate(total=Sum('total_amount'))['total'] or 0
+        
+        values.append(float(revenue))
+    
+    return JsonResponse({
+        'labels': labels,
+        'values': values
+    })
+
+def api_sales_by_product(request):
+    """API endpoint for sales by product chart"""
+    from django.db.models import F, Sum, DecimalField
+    from apps.sales.models import SalesInvoiceLine
+    
+    # Get top 5 products by sales
+    top_products = _scope_fk(SalesInvoiceLine.objects.filter(
+        invoice__status__in=['posted', 'paid']
+    ), company_id).values(
+        'item__name'
+    ).annotate(
+        total=Sum(
+            F('quantity') * F('unit_price'),
+            output_field=DecimalField()
+        )
+    ).order_by('-total')[:5]
+    
+    labels = [p['item__name'] for p in top_products]
+    values = [float(p['total']) for p in top_products]
+    
+    return JsonResponse({
+        'labels': labels,
+        'values': values
+    })
+
+def api_inventory_by_category(request):
+    """API endpoint for inventory by category chart"""
+    from apps.inventory.models import Item
+    
+    # Get inventory value by category
+    categories = _scope_fk(Item.objects.filter(
+        is_active=True,
+        current_stock__gt=0
+    ), company_id, include_legacy=True).values(
+        'category__name'
+    ).annotate(
+        total=Sum('current_stock_value')
+    ).order_by('-total')[:5]
+    
+    labels = [c['category__name'] or 'Uncategorized' for c in categories]
+    values = [float(c['total']) for c in categories]
+    
+    return JsonResponse({
+        'labels': labels,
+        'values': values
+    })
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return JsonResponse({'labels': [], 'values': []})
+
+    _, company_id, _ = _company_ctx(request)
+    if not company_id:
+        return JsonResponse({'labels': [], 'values': []})

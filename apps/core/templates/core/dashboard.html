@@ -6,207 +6,411 @@
 
 {% block extra_css %}
 <style>
-    .dashboard-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: none;
-        border-radius: 10px;
-        overflow: hidden;
-        height: 100%;
+    :root {
+        --step--1: 12px;
+        --step-0: 14px;
+        --step-1: 16px;
+        --step-2: 20px;
+        --step-3: 26px;
     }
-    .dashboard-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    .banner {
+        background: linear-gradient(135deg, #102c62 0%, #205ec1 100%);
+        color: #fff;
+        border-radius: 16px;
+        padding: 24px 26px;
+        margin-bottom: 20px;
+        box-shadow: 0 20px 35px rgba(16, 44, 98, 0.25);
     }
-    .card-header-module {
-        padding: 15px 20px;
-        font-weight: 600;
-        font-size: 1.1rem;
-        border-bottom: none;
+    .banner h2 {
+        margin: 0 0 8px;
+        font-size: var(--step-3);
+        line-height: 1.15;
+        letter-spacing: 0.2px;
     }
-    .stat-icon {
-        font-size: 2.5rem;
-        opacity: 0.7;
-        margin-right: 15px;
+    .banner p {
+        margin: 0;
+        opacity: .88;
+        font-size: var(--step-1);
+        line-height: 1.5;
     }
-    .stat-value {
-        font-size: 2rem;
-        font-weight: bold;
-        line-height: 1.2;
-    }
-    .stat-label {
-        font-size: 0.85rem;
-        opacity: 0.8;
-    }
-    .quick-action-btn {
-        border-radius: 8px;
-        padding: 10px;
-        transition: all 0.2s;
-        text-align: center;
-        color: #495057;
-        text-decoration: none;
-        display: block;
-    }
-    .quick-action-btn:hover {
-        background-color: #f8f9fa;
-        transform: translateY(-2px);
-        text-decoration: none;
-        color: #0d6efd;
-    }
-    .quick-action-icon {
-        font-size: 1.5rem;
-        margin-bottom: 5px;
-    }
-    .progress-sm {
-        height: 6px;
-        border-radius: 3px;
-    }
-    .alert-badge {
-        position: absolute;
-        top: -5px;
-        right: -5px;
-        font-size: 0.7rem;
-    }
-    .module-section {
-        margin-bottom: 30px;
-    }
-    .welcome-banner {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 25px;
-        border-radius: 10px;
-        margin-bottom: 30px;
-    }
-    .date-badge {
-        background: rgba(255,255,255,0.2);
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-size: 0.9rem;
-    }
-    .activity-item {
-        padding: 12px 15px;
-        border-left: 3px solid transparent;
-        transition: all 0.2s;
-    }
-    .activity-item:hover {
-        background-color: #f8f9fa;
-        border-left-color: #0d6efd;
-    }
-    .activity-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-    }
-    .badge-low-stock {
-        background-color: #fef3c7;
-        color: #92400e;
-        padding: 4px 8px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-    }
-    .badge-critical {
-        background-color: #fee2e2;
-        color: #991b1b;
-        padding: 4px 8px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-    }
-    .badge-good {
-        background-color: #d1fae5;
-        color: #065f46;
-        padding: 4px 8px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-    }
-    
-    /* New styles for the left menu */
-    .dashboard-wrapper {
-        display: flex;
-        gap: 20px;
-    }
-    
-    .left-menu {
-        width: 260px;
-        flex-shrink: 0;
-        background: white;
-        border-radius: 12px;
-        padding: 20px 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        height: fit-content;
-    }
-    
-    .menu-section {
+    .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
         margin-bottom: 20px;
     }
-    
-    .menu-section-title {
-        font-size: 0.75rem;
+    .kpi {
+        border-radius: 14px;
+        border: 1px solid #d8e2ef;
+        background: #fff;
+        padding: 16px;
+        box-shadow: 0 8px 20px rgba(17, 34, 66, .08);
+    }
+    .kpi .label {
+        color: #61748c;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #6c757d;
-        padding: 10px 20px 5px;
+        letter-spacing: .55px;
+        font-weight: 700;
+    }
+    .kpi .value {
+        font-size: 30px;
+        font-weight: 750;
+        margin: 6px 0 4px;
+        line-height: 1.12;
+        letter-spacing: -0.3px;
+    }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 20px; }
+    .chip {
+        font-size: var(--step--1);
+        padding: 6px 11px;
+        border-radius: 999px;
+        border: 1px solid #d1dceb;
+        background: #fff;
+        color: #2f435f;
         font-weight: 600;
     }
-    
+    .chip.good { background: #e7f8ef; border-color: #bfe5ce; color: #1f6c41; }
+    .chip.warn { background: #fff3db; border-color: #f7d38a; color: #8d6400; }
+    .chip.bad { background: #ffe6e6; border-color: #f6bcbc; color: #9b2f2f; }
+    .dashboard-shell {
+        display: grid;
+        grid-template-columns: 280px 1fr 340px;
+        gap: 16px;
+        align-items: start;
+    }
+    .left-menu, .activity-panel {
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid #dbe4f0;
+        box-shadow: 0 8px 20px rgba(20, 38, 62, .08);
+    }
+    .left-menu { padding: 14px 0 12px; }
+    .menu-section-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #6e829c;
+        letter-spacing: .7px;
+        padding: 11px 16px 7px;
+        font-weight: 700;
+    }
     .menu-item {
         display: flex;
         align-items: center;
-        padding: 10px 20px;
-        color: #495057;
-        text-decoration: none;
-        transition: all 0.2s;
+        gap: 8px;
+        padding: 10px 16px;
+        color: #304256;
         border-left: 3px solid transparent;
+        font-size: var(--step-0);
+        line-height: 1.35;
     }
-    
-    .menu-item:hover {
-        background-color: #f8f9fa;
-        border-left-color: #0d6efd;
-        color: #0d6efd;
+    .menu-item:hover { background: #f5f9ff; border-left-color: #2a6ad0; }
+    .menu-item.active { background: #eaf2ff; border-left-color: #2a6ad0; font-weight: 600; }
+    .workflow-grid {
+        display: grid;
+        gap: 16px;
     }
-    
-    .menu-item.active {
-        background-color: #e7f1ff;
-        border-left-color: #0d6efd;
-        color: #0d6efd;
-        font-weight: 500;
+    .workflow-group {
+        border: 1px solid #d8e3ef;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(20, 38, 62, .08);
+        padding: 16px;
     }
-    
-    .menu-item i {
-        width: 24px;
-        margin-right: 12px;
-        font-size: 1.1rem;
+    .workflow-group h4 {
+        margin: 0 0 4px;
+        font-size: var(--step-2);
+        line-height: 1.25;
+        letter-spacing: 0.1px;
     }
-    
-    .menu-badge {
-        margin-left: auto;
-        background-color: #e9ecef;
-        padding: 2px 8px;
+    .workflow-group .sub {
+        margin: 0 0 14px;
+        color: #637991;
+        font-size: var(--step-0);
+        line-height: 1.45;
+    }
+    .module-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .module-card {
+        border: 1px solid #d8e2ef;
         border-radius: 12px;
-        font-size: 0.7rem;
-        color: #495057;
+        background: #fbfdff;
+        padding: 12px;
     }
-    
-    .main-content {
-        flex: 1;
-        min-width: 0;
+    .module-card h5 {
+        margin: 0 0 9px;
+        font-size: 16px;
+        line-height: 1.3;
+        letter-spacing: 0.1px;
     }
-    
-    @media (max-width: 992px) {
-        .dashboard-wrapper {
-            flex-direction: column;
-        }
-        .left-menu {
-            width: 100%;
-        }
+    .module-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 11px; }
+    .stat-pill {
+        font-size: 11px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid #ccd9ea;
+        background: #fff;
+        font-weight: 600;
+    }
+    .module-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .module-actions a {
+        font-size: 12px;
+        border: 1px solid #bfd1e7;
+        background: #fff;
+        color: #234b80;
+        padding: 6px 10px;
+        border-radius: 9px;
+        line-height: 1.2;
+    }
+    .activity-panel { padding: 15px; }
+    .activity-panel h4 {
+        margin: 0 0 10px;
+        font-size: 18px;
+        line-height: 1.25;
+    }
+    .activity-item {
+        border: 1px solid #dbe5f1;
+        border-radius: 10px;
+        background: #fff;
+        padding: 11px;
+        margin-bottom: 9px;
+    }
+    .activity-item h6 {
+        margin: 0 0 3px;
+        font-size: 13px;
+        line-height: 1.35;
+    }
+    .activity-item p {
+        margin: 0;
+        color: #5f7590;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .mobile-controls {
+        display: none;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .mobile-controls button {
+        border: 1px solid #c7d5e7;
+        background: #fff;
+        color: #24486f;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    @media (max-width: 1180px) {
+        .dashboard-shell { grid-template-columns: 1fr; }
+        .left-menu, .activity-panel { display: none; }
+        .left-menu.open, .activity-panel.open { display: block; }
+        .mobile-controls { display: flex; }
+        .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+        .kpi-strip { grid-template-columns: 1fr; }
+        .module-cards { grid-template-columns: 1fr; }
+        .banner h2 { font-size: 22px; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="banner">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2>Operations Dashboard</h2>
+            <p>Cross-module health and execution focus for {{ today|date:"l, F j, Y" }}</p>
+        </div>
+        <div class="badge bg-info">{{ request.user.get_full_name|default:request.user.username }}</div>
+    </div>
+</div>
 
+<div class="chips">
+    <span class="chip {% if low_stock_items > 0 %}warn{% else %}good{% endif %}">Low Stock: {{ low_stock_items }}</span>
+    <span class="chip {% if overdue_deliveries > 0 %}bad{% else %}good{% endif %}">Overdue Deliveries: {{ overdue_deliveries }}</span>
+    <span class="chip {% if overdue_invoices > 0 %}bad{% else %}good{% endif %}">Overdue Invoices: {{ overdue_invoices }}</span>
+    <span class="chip {% if active_production_runs > 0 %}good{% else %}warn{% endif %}">Production Active: {{ active_production_runs }}</span>
+</div>
+
+<div class="kpi-strip">
+    <div class="kpi">
+        <div class="label">Inventory Value</div>
+        <div class="value">{{ total_stock_value|floatformat:0|intcomma }}</div>
+        <div class="small text-muted">ETB across {{ warehouse_count }} warehouses</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Items Monitored</div>
+        <div class="value">{{ total_items|intcomma }}</div>
+        <div class="small text-muted">{{ items_by_category|length }} categories</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Monthly Sales</div>
+        <div class="value">{{ monthly_sales|floatformat:0|intcomma }}</div>
+        <div class="small text-muted">Pending orders: {{ pending_orders }}</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Open Risks</div>
+        <div class="value">{{ total_alerts }}</div>
+        <div class="small text-muted">Inventory, purchasing and receivables</div>
+    </div>
+</div>
+
+<div class="mobile-controls">
+    <button type="button" id="toggleMenuBtn">Toggle Menu</button>
+    <button type="button" id="toggleActivityBtn">Toggle Activity</button>
+</div>
+
+<div class="dashboard-shell">
+    <aside class="left-menu" id="leftMenuPanel">
+        <div class="menu-section-title">Core</div>
+        <a href="{% url 'core:dashboard' %}" class="menu-item active">Dashboard</a>
+        <a href="{% url 'core:item_list' %}" class="menu-item">Items</a>
+        <a href="{% url 'core:unit_list' %}" class="menu-item">Units</a>
+
+        <div class="menu-section-title">Operations</div>
+        <a href="{% url 'inventory:dashboard' %}" class="menu-item">Inventory</a>
+        <a href="{% url 'production:dashboard' %}" class="menu-item">Production</a>
+        <a href="{% url 'purchasing:dashboard' %}" class="menu-item">Purchasing</a>
+        <a href="{% url 'sales:dashboard' %}" class="menu-item">Sales</a>
+        <a href="{% url 'accounting:dashboard' %}" class="menu-item">Accounting</a>
+        <a href="{% url 'reports:dashboard' %}" class="menu-item">Reports</a>
+    </aside>
+
+    <section class="workflow-grid">
+        <div class="workflow-group">
+            <h4>Priority 1: Keep Operations Running</h4>
+            <p class="sub">Inventory availability and production continuity</p>
+            <div class="module-cards">
+                <article class="module-card">
+                    <h5>Inventory</h5>
+                    <div class="module-stats">
+                        <span class="stat-pill">Low stock: {{ low_stock_items }}</span>
+                        <span class="stat-pill">Near expiry: {{ near_expiry_count }}</span>
+                        <span class="stat-pill">Lots: {{ active_lots }}</span>
+                    </div>
+                    <div class="module-actions">
+                        <a href="{% url 'inventory:current_stock' %}">Current Stock</a>
+                        <a href="{% url 'inventory:low_stock_alerts' %}">Alerts</a>
+                    </div>
+                </article>
+                <article class="module-card">
+                    <h5>Production</h5>
+                    <div class="module-stats">
+                        <span class="stat-pill">Planned: {{ planned_runs }}</span>
+                        <span class="stat-pill">In progress: {{ in_progress_runs }}</span>
+                        <span class="stat-pill">Completed: {{ completed_runs }}</span>
+                    </div>
+                    <div class="module-actions">
+                        <a href="{% url 'production:production_run_list' %}">Runs</a>
+                        <a href="{% url 'production:start_run' %}">Start Run</a>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <div class="workflow-group">
+            <h4>Priority 2: Protect Cash Flow</h4>
+            <p class="sub">Procurement timing, billing and collections</p>
+            <div class="module-cards">
+                <article class="module-card">
+                    <h5>Purchasing</h5>
+                    <div class="module-stats">
+                        <span class="stat-pill">Pending POs: {{ pending_pos }}</span>
+                        <span class="stat-pill">Received: {{ received_pos }}</span>
+                        <span class="stat-pill">Overdue: {{ overdue_deliveries }}</span>
+                    </div>
+                    <div class="module-actions">
+                        <a href="{% url 'purchasing:po_list' %}">Purchase Orders</a>
+                        <a href="{% url 'purchasing:po_create' %}">Create PO</a>
+                    </div>
+                </article>
+                <article class="module-card">
+                    <h5>Sales</h5>
+                    <div class="module-stats">
+                        <span class="stat-pill">Monthly ETB: {{ monthly_sales|floatformat:0|intcomma }}</span>
+                        <span class="stat-pill">Pending: {{ pending_orders }}</span>
+                        <span class="stat-pill">Overdue invoices: {{ overdue_invoices }}</span>
+                    </div>
+                    <div class="module-actions">
+                        <a href="{% url 'sales:order_list' %}">Orders</a>
+                        <a href="{% url 'sales:order_create' %}">Create Order</a>
+                    </div>
+                </article>
+                <article class="module-card">
+                    <h5>Accounting</h5>
+                    <div class="module-stats">
+                        <span class="stat-pill">AR overdue: {{ overdue_invoices }}</span>
+                        <span class="stat-pill">AP overdue: {{ overdue_deliveries }}</span>
+                    </div>
+                    <div class="module-actions">
+                        <a href="{% url 'accounting:dashboard' %}">Accounting Home</a>
+                        <a href="{% url 'accounting:payment_entry' %}">Record Payment</a>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <div class="workflow-group">
+            <h4>Recent Transactions</h4>
+            <p class="sub">Latest stock movements across warehouses</p>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Item</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in recent_transactions %}
+                        <tr>
+                            <td>{{ transaction.transaction_date|date:"d M H:i" }}</td>
+                            <td>{{ transaction.item.code }}</td>
+                            <td>{{ transaction.get_transaction_type_display }}</td>
+                            <td>{{ transaction.quantity|floatformat:2 }}</td>
+                            <td>{{ transaction.reference|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No recent transactions</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <aside class="activity-panel" id="activityPanel">
+        <h4>Action Queue</h4>
+        {% if total_alerts > 0 %}
+        <div class="activity-item">
+            <h6>Open alerts: {{ total_alerts }}</h6>
+            <p>Prioritize low stock and overdue obligations first.</p>
+        </div>
+        {% endif %}
+        {% for activity in recent_activities %}
+        <div class="activity-item">
+            <h6>{{ activity.description }}</h6>
+            <p>{{ activity.details }}</p>
+            <p class="small text-muted">{{ activity.time_display }}</p>
+        </div>
+        {% empty %}
+        <div class="activity-item">
+            <h6>No recent activity</h6>
+            <p>New transactions will appear here.</p>
+        </div>
+        {% endfor %}
+    </aside>
+</div>
+{% comment %}
 <!-- Welcome Banner -->
 <div class="welcome-banner d-flex justify-content-between align-items-center">
     <div>
@@ -327,7 +531,7 @@
     
     <div class="menu-section">
         <div class="menu-section-title">Company</div>
-        <a href="{% url 'company:company_list' %}" class="menu-item">
+        <a href="{% url 'company:list' %}" class="menu-item">
             <i class="bi bi-building"></i>
             <span>Companies</span>
         </a>
@@ -917,4 +1121,28 @@
         </div>
     </div>
 </div>
+{% endcomment %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const menuBtn = document.getElementById("toggleMenuBtn");
+    const activityBtn = document.getElementById("toggleActivityBtn");
+    const menuPanel = document.getElementById("leftMenuPanel");
+    const activityPanel = document.getElementById("activityPanel");
+
+    if (menuBtn && menuPanel) {
+        menuBtn.addEventListener("click", function () {
+            menuPanel.classList.toggle("open");
+        });
+    }
+
+    if (activityBtn && activityPanel) {
+        activityBtn.addEventListener("click", function () {
+            activityPanel.classList.toggle("open");
+        });
+    }
+});
+</script>
 {% endblock %}

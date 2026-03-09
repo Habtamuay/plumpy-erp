@@ -1,10 +1,10 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from .models import (
     AccountType, AccountGroup, AccountCategory, Account,
     JournalEntry, JournalLine, PurchaseBill, PurchaseBillLine,
-    Payment, ReconciliationAuditLog
+    Payment, ReconciliationAuditLog, FiscalPeriod
 )
 
 
@@ -29,7 +29,7 @@ class AccountTypeAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('name', 'code_prefix', 'description')
     ordering = ('code_prefix',)
-    
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('name', 'code_prefix', 'description', 'is_active')
@@ -49,7 +49,7 @@ class AccountGroupAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
     ordering = ('display_order', 'name')
     autocomplete_fields = ['account_type']
-    
+
     fieldsets = (
         ('Group Information', {
             'fields': ('name', 'account_type', 'description', 'is_active')
@@ -76,7 +76,7 @@ class AccountCategoryAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
     ordering = ('display_order', 'name')
     autocomplete_fields = ['account_group']
-    
+
     fieldsets = (
         ('Category Information', {
             'fields': ('name', 'account_group', 'description', 'is_active')
@@ -103,7 +103,7 @@ class AccountAdmin(admin.ModelAdmin):
     ordering = ('code',)
     autocomplete_fields = ['account_type', 'account_group', 'account_category', 'parent']
     readonly_fields = ('current_balance', 'created_at', 'updated_at', 'balance_display')
-    
+
     fieldsets = (
         ('Account Identification', {
             'fields': ('code', 'name', 'description', 'is_active')
@@ -126,7 +126,7 @@ class AccountAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     def current_balance_display(self, obj):
         """Display current balance with color coding"""
         try:
@@ -143,7 +143,7 @@ class AccountAdmin(admin.ModelAdmin):
             return obj.current_balance
     current_balance_display.short_description = 'Current Balance'
     current_balance_display.admin_order_field = 'current_balance'
-    
+
     def balance_display(self, obj):
         """Simple balance display for readonly field"""
         try:
@@ -162,7 +162,7 @@ class JournalEntryAdmin(admin.ModelAdmin):
     readonly_fields = ('posted_at', 'total_debit_display', 'total_credit_display', 'is_balanced_display')
     inlines = [AccountLineInline]
     autocomplete_fields = ['company', 'branch', 'posted_by', 'created_by']
-    
+
     fieldsets = (
         ('Journal Information', {
             'fields': ('company', 'branch', 'entry_date', 'reference', 'narration')
@@ -175,21 +175,21 @@ class JournalEntryAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     def total_debit_display(self, obj):
         return format_html('<span style="font-weight: bold;">{:,.2f}</span>', obj.total_debit())
     total_debit_display.short_description = 'Total Debit'
-    
+
     def total_credit_display(self, obj):
         return format_html('<span style="font-weight: bold;">{:,.2f}</span>', obj.total_credit())
     total_credit_display.short_description = 'Total Credit'
-    
+
     def is_balanced_display(self, obj):
         if obj.is_balanced():
             return format_html('<span style="color: green;">✓ Balanced</span>')
         return format_html('<span style="color: red;">✗ Not Balanced</span>')
     is_balanced_display.short_description = 'Balance Status'
-    
+
     def journal_display(self, obj):
         if obj.is_posted:
             return format_html('<span style="color: green;">{}</span>', obj.reference or f"JE-{obj.id}")
@@ -206,7 +206,7 @@ class PurchaseBillAdmin(admin.ModelAdmin):
     readonly_fields = ('bill_number', 'total_amount', 'paid_amount', 'remaining_amount_display', 'created_at', 'updated_at')
     autocomplete_fields = ['supplier', 'journal_entry', 'purchase_order', 'created_by']
     inlines = [PurchaseBillLineInline]
-    
+
     fieldsets = (
         ('Bill Information', {
             'fields': ('supplier', 'purchase_order', 'bill_number', 'bill_date', 'due_date', 'status')
@@ -226,7 +226,7 @@ class PurchaseBillAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     def supplier_link(self, obj):
         url = reverse('admin:purchasing_supplier_change', args=[obj.supplier.id])
         return format_html('<a href="{}">{}</a>', url, obj.supplier.name)
@@ -243,7 +243,7 @@ class PurchaseBillAdmin(admin.ModelAdmin):
             return str(obj.total_amount)
     total_amount_display.short_description = 'Total'
     total_amount_display.admin_order_field = 'total_amount'
-    
+
     def remaining_amount_display(self, obj):
         """Display remaining amount - FIXED"""
         try:
@@ -255,7 +255,7 @@ class PurchaseBillAdmin(admin.ModelAdmin):
         except (TypeError, ValueError):
             return str(obj.remaining_amount)
     remaining_amount_display.short_description = 'Remaining'
-    
+
     def status_badge(self, obj):
         colors = {
             'draft': '#6c757d',
@@ -272,7 +272,7 @@ class PurchaseBillAdmin(admin.ModelAdmin):
             obj.get_status_display()
         )
     status_badge.short_description = 'Status'
-    
+
     def journal_entry_link(self, obj):
         if obj.journal_entry:
             url = reverse('admin:accounting_journalentry_change', args=[obj.journal_entry.id])
@@ -289,7 +289,7 @@ class PaymentAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
     readonly_fields = ('created_at',)
     autocomplete_fields = ['customer', 'supplier', 'journal_entry', 'reconciled_by', 'created_by']
-    
+
     fieldsets = (
         ('Payment Information', {
             'fields': ('payment_type', 'date', 'amount', 'reference')
@@ -309,7 +309,7 @@ class PaymentAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     def party_display(self, obj):
         if obj.customer:
             return f"Customer: {obj.customer.name}"
@@ -317,7 +317,7 @@ class PaymentAdmin(admin.ModelAdmin):
             return f"Supplier: {obj.supplier.name}"
         return "-"
     party_display.short_description = 'Party'
-    
+
     def amount_display(self, obj):
         """Display amount with color coding - FIXED"""
         try:
@@ -334,13 +334,13 @@ class PaymentAdmin(admin.ModelAdmin):
         except (TypeError, ValueError):
             return str(obj.amount)
     amount_display.short_description = 'Amount'
-    
+
     def reconciled_badge(self, obj):
         if obj.reconciled_at:
             return format_html('<span style="color: green;">✓ Reconciled</span>')
         return format_html('<span style="color: orange;">⏳ Pending</span>')
     reconciled_badge.short_description = 'Reconciliation'
-    
+
     def journal_entry_link(self, obj):
         if obj.journal_entry:
             url = reverse('admin:accounting_journalentry_change', args=[obj.journal_entry.id])
@@ -356,7 +356,7 @@ class ReconciliationAuditLogAdmin(admin.ModelAdmin):
     search_fields = ('document_number', 'notes')
     readonly_fields = ('reconciled_at',)
     autocomplete_fields = ['payment', 'reconciled_by']
-    
+
     fieldsets = (
         ('Audit Information', {
             'fields': ('payment', 'reconciled_by', 'reconciled_at', 'action')
@@ -365,3 +365,41 @@ class ReconciliationAuditLogAdmin(admin.ModelAdmin):
             'fields': ('document_number', 'amount_applied', 'remaining_after', 'notes')
         }),
     )
+
+
+@admin.register(FiscalPeriod)
+class FiscalPeriodAdmin(admin.ModelAdmin):
+    list_display = ('name', 'company', 'period_type', 'start_date', 'end_date', 'status_badge', 'closing_balance', 'closed_at')
+    list_filter = ('company', 'period_type', 'is_open', 'is_closed', 'start_date')
+    search_fields = ('name', 'company__name', 'notes')
+    date_hierarchy = 'start_date'
+    readonly_fields = ('created_at', 'updated_at', 'closing_balance', 'total_debits', 'total_credits')
+    autocomplete_fields = ['company', 'closed_by']
+
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'company', 'period_type', 'start_date', 'end_date')
+        }),
+        ('Status', {
+            'fields': ('is_open', 'is_closed', 'closed_at', 'closed_by')
+        }),
+        ('Financial Summary', {
+            'fields': ('total_debits', 'total_credits', 'closing_balance'),
+            'classes': ('collapse',)
+        }),
+        ('Additional Info', {
+            'fields': ('notes',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def status_badge(self, obj):
+        if obj.is_closed:
+            return format_html('<span style="color: red;">Closed</span>')
+        elif obj.is_open:
+            return format_html('<span style="color: green;">Open</span>')
+        return format_html('<span style="color: orange;">Pending</span>')
+    status_badge.short_description = 'Status'

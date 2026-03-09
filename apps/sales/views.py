@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.db.models import Q, Sum
 
 from .models import (
     SalesOrder, SalesOrderLine,
@@ -15,6 +16,22 @@ from .models import (
 from apps.company.models import Customer
 from apps.core.models import Item, Unit
 from apps.inventory.models import Warehouse
+from apps.company.models import Company
+
+
+def _current_company(request):
+    company_id = request.session.get('current_company_id')
+    if not company_id:
+        return None
+    return Company.objects.filter(id=company_id, is_active=True).first()
+
+
+def _scope(qs, company, include_legacy=False):
+    if company is None:
+        return qs.none()
+    if include_legacy:
+        return qs.filter(Q(company=company) | Q(company__isnull=True))
+    return qs.filter(company=company)
 
 # =========================================================
 # DASHBOARD
@@ -22,11 +39,16 @@ from apps.inventory.models import Warehouse
 
 @login_required
 def dashboard(request):
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     context = {
-        "orders": SalesOrder.objects.count(),
-        "invoices": SalesInvoice.objects.count(),
-        "shipments": SalesShipment.objects.count(),
-        "total_revenue": SalesInvoice.objects.filter(status='paid').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        "orders": _scope(SalesOrder.objects.all(), company).count(),
+        "invoices": _scope(SalesInvoice.objects.all(), company).count(),
+        "shipments": _scope(SalesShipment.objects.all(), company).count(),
+        "total_revenue": _scope(SalesInvoice.objects.filter(status='paid'), company).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     }
     return render(request, "sales/dashboard.html", context)
 
@@ -36,16 +58,23 @@ def dashboard(request):
 
 @login_required
 def order_list(request):
-    orders = SalesOrder.objects.select_related("customer").order_by("-id")
+    company = _current_company(request)
+    orders = _scope(SalesOrder.objects.select_related("customer"), company).order_by("-id")
     return render(request, "sales/order_list.html", {"orders": orders})
 
 @login_required
 def order_create(request):
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     if request.method == "POST":
         customer_id = request.POST.get("customer")
-        customer = get_object_or_404(Customer, id=customer_id)
+        customer = get_object_or_404(Customer, id=customer_id, company=company)
         
         order = SalesOrder.objects.create(
+            company=company,
             customer=customer,
             order_date=request.POST.get("order_date", timezone.now().date()),
             discount_percent=Decimal(request.POST.get("discount_percent", 0)),
@@ -55,12 +84,13 @@ def order_create(request):
         messages.success(request, f"Sales order {order.order_number} created.")
         return redirect("sales:order_detail", order_id=order.id)
 
-    customers = Customer.objects.all()
+    customers = Customer.objects.filter(company=company)
     return render(request, "sales/order_create.html", {"customers": customers})
 
 @login_required
 def order_detail(request, order_id):
-    order = get_object_or_404(SalesOrder.objects.select_related("customer", "created_by"), id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.select_related("customer", "created_by"), company), id=order_id)
     lines = order.lines.select_related("item", "unit")
     invoices = order.invoices.all()
     shipments = order.shipments.all()
@@ -73,7 +103,8 @@ def order_detail(request, order_id):
 
 @login_required
 def order_confirm(request, order_id):
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     order.status = "confirmed"
     order.save(update_fields=["status"])
     messages.success(request, "Order confirmed.")
@@ -81,6 +112,11 @@ def order_confirm(request, order_id):
 
 @login_required
 def invoice_create(request):
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     if request.method == "POST":
         # Handle form submission
         customer_id = request.POST.get("customer")
@@ -91,12 +127,13 @@ def invoice_create(request):
         payment_method = request.POST.get("payment_method", "credit")
         notes = request.POST.get("notes", "")
         
-        customer = get_object_or_404(Customer, id=customer_id)
+        customer = get_object_or_404(Customer, id=customer_id, company=company)
         sales_order = None
         if sales_order_id:
-            sales_order = get_object_or_404(SalesOrder, id=sales_order_id)
+            sales_order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=sales_order_id)
         
         invoice = SalesInvoice.objects.create(
+            company=company,
             customer=customer,
             sales_order=sales_order,
             invoice_date=invoice_date,
@@ -115,10 +152,11 @@ def invoice_create(request):
         
         for i in range(len(items)):
             if items[i]:  # Skip empty lines
-                item = get_object_or_404(Item, id=items[i])
+                item = get_object_or_404(_scope(Item.objects.all(), company, include_legacy=True), id=items[i])
                 unit = get_object_or_404(Unit, id=units[i]) if units[i] else None
                 
                 SalesInvoiceLine.objects.create(
+                    company=company,
                     invoice=invoice,
                     item=item,
                     quantity=Decimal(quantities[i]),
@@ -135,10 +173,10 @@ def invoice_create(request):
             return redirect("sales:invoice_detail", invoice_id=invoice.id)
     
     # GET request - show form
-    customers = Customer.objects.all()
-    sales_orders = SalesOrder.objects.filter(status__in=['confirmed', 'processing', 'shipped']).select_related('customer')
-    items = Item.objects.all()
-    units = Unit.objects.all()
+    customers = Customer.objects.filter(company=company)
+    sales_orders = _scope(SalesOrder.objects.filter(status__in=['confirmed', 'processing', 'shipped']).select_related('customer'), company)
+    items = _scope(Item.objects.all(), company, include_legacy=True)
+    units = _scope(Unit.objects.all(), company, include_legacy=True)
     
     context = {
         "customers": customers,
@@ -157,7 +195,8 @@ def invoice_create(request):
 
 @login_required
 def create_invoice_from_order(request, order_id):
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     if order.status == "cancelled":
         messages.error(request, "Cannot invoice a cancelled order.")
         return redirect("sales:order_detail", order_id=order.id)
@@ -176,12 +215,14 @@ def create_invoice_from_order(request, order_id):
 
 @login_required
 def invoice_list(request):
-    invoices = SalesInvoice.objects.select_related("customer").order_by("-id")
+    company = _current_company(request)
+    invoices = _scope(SalesInvoice.objects.select_related("customer"), company).order_by("-id")
     return render(request, "sales/invoice_list.html", {"invoices": invoices, "today": timezone.now().date()})
 
 @login_required
 def invoice_detail(request, invoice_id):
-    invoice = get_object_or_404(SalesInvoice, id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=invoice_id)
     return render(request, "sales/invoice_detail.html", {
         "invoice": invoice, 
         "lines": invoice.lines.all(),
@@ -190,7 +231,8 @@ def invoice_detail(request, invoice_id):
 
 @login_required
 def print_invoice_view(request, invoice_id):
-    invoice = get_object_or_404(SalesInvoice.objects.select_related('customer'), id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.select_related('customer'), company), id=invoice_id)
     lines = invoice.lines.all()
     
     return render(request, "sales/invoice_print.html", {
@@ -203,11 +245,13 @@ def print_invoice_view(request, invoice_id):
 
 @login_required
 def create_shipment(request, order_id):
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     # Note: Warehouse selection usually happens in a form; defaulting for brevity
-    warehouse = Warehouse.objects.first() 
+    warehouse = Warehouse.objects.filter(company=company).first()
     
     shipment = SalesShipment.objects.create(
+        company=company,
         sales_order=order,
         warehouse=warehouse,
         shipment_date=timezone.now().date()
@@ -216,6 +260,7 @@ def create_shipment(request, order_id):
     # Optionally auto-populate shipment lines from order lines
     for line in order.lines.all():
         SalesShipmentLine.objects.create(
+            company=company,
             shipment=shipment,
             sales_order_line=line,
             quantity=line.quantity
@@ -226,20 +271,20 @@ def create_shipment(request, order_id):
 
 @login_required
 def shipment_ship(request, shipment_id):
-    shipment = get_object_or_404(SalesShipment, id=shipment_id)
+    company = _current_company(request)
+    shipment = get_object_or_404(_scope(SalesShipment.objects.all(), company), id=shipment_id)
     shipment.status = "shipped"
     shipment.save() # This triggers the inventory movement logic in the model
     messages.success(request, "Shipment has left the warehouse. Inventory updated.")
     return redirect("sales:shipment_detail", shipment_id=shipment.id)
-from django.db.models import Sum
-
 @login_required
 def customer_history(request, customer_id):
-    customer = get_object_or_404(Customer, id=customer_id)
+    company = _current_company(request)
+    customer = get_object_or_404(Customer, id=customer_id, company=company)
     
     # Get all related records
     orders = customer.sales_orders.all().order_by('-order_date')
-    invoices = SalesInvoice.objects.filter(customer=customer).order_by('-invoice_date')
+    invoices = _scope(SalesInvoice.objects.filter(customer=customer), company).order_by('-invoice_date')
     
     # Financial Summary
     total_invoiced = invoices.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
@@ -263,12 +308,14 @@ def customer_history(request, customer_id):
 
 @login_required
 def payment_create(request, invoice_id):
-    invoice = get_object_or_404(SalesInvoice, id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=invoice_id)
     if request.method == "POST":
         amount = Decimal(request.POST.get("amount"))
         method = request.POST.get("payment_method")
         
         SalesPayment.objects.create(
+            company=company,
             invoice=invoice,
             amount=amount,
             payment_method=method,
@@ -285,18 +332,20 @@ def payment_create(request, invoice_id):
 
 @login_required
 def export_orders(request):
+    company = _current_company(request)
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="orders_{timezone.now().date()}.csv"'
     writer = csv.writer(response)
     writer.writerow(["Order Number", "Customer", "Date", "Status", "Total"])
     
-    for o in SalesOrder.objects.all():
+    for o in _scope(SalesOrder.objects.all(), company):
         writer.writerow([o.order_number, o.customer.name, o.order_date, o.get_status_display(), o.total_amount])
     return response
 
 @login_required
 def order_edit(request, order_id):
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     
     if request.method == "POST":
         customer_id = request.POST.get("customer")
@@ -309,7 +358,7 @@ def order_edit(request, order_id):
         messages.success(request, "Order updated successfully.")
         return redirect("sales:order_detail", order_id=order.id)
 
-    customers = Customer.objects.all()
+    customers = Customer.objects.filter(company=company)
     return render(request, "sales/order_edit.html", {
         "order": order,
         "customers": customers
@@ -320,7 +369,8 @@ def order_edit(request, order_id):
 
 @login_required
 def order_cancel(request, order_id):
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     order.status = "cancelled"
     order.save(update_fields=["status"])
     messages.success(request, "Order has been cancelled.")
@@ -332,7 +382,8 @@ def order_cancel(request, order_id):
 
 @login_required
 def invoice_send(request, invoice_id):
-    invoice = get_object_or_404(SalesInvoice, id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=invoice_id)
     invoice.status = "sent"
     invoice.save(update_fields=["status"])
     messages.success(request, "Invoice marked as sent.")
@@ -340,7 +391,8 @@ def invoice_send(request, invoice_id):
 
 @login_required
 def invoice_cancel(request, invoice_id):
-    invoice = get_object_or_404(SalesInvoice, id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=invoice_id)
     invoice.status = "cancelled"
     invoice.save(update_fields=["status"])
     messages.success(request, "Invoice has been cancelled.")
@@ -352,12 +404,14 @@ def invoice_cancel(request, invoice_id):
 
 @login_required
 def shipment_list(request):
-    shipments = SalesShipment.objects.select_related("sales_order", "warehouse").order_by("-id")
+    company = _current_company(request)
+    shipments = _scope(SalesShipment.objects.select_related("sales_order", "warehouse"), company).order_by("-id")
     return render(request, "sales/shipment_list.html", {"shipments": shipments})
 
 @login_required
 def shipment_detail(request, shipment_id):
-    shipment = get_object_or_404(SalesShipment, id=shipment_id)
+    company = _current_company(request)
+    shipment = get_object_or_404(_scope(SalesShipment.objects.all(), company), id=shipment_id)
     return render(request, "sales/shipment_detail.html", {
         "shipment": shipment,
         "lines": shipment.lines.all()
@@ -365,7 +419,8 @@ def shipment_detail(request, shipment_id):
 
 @login_required
 def shipment_deliver(request, shipment_id):
-    shipment = get_object_or_404(SalesShipment, id=shipment_id)
+    company = _current_company(request)
+    shipment = get_object_or_404(_scope(SalesShipment.objects.all(), company), id=shipment_id)
     shipment.status = "delivered"
     # Note: If you added a delivered_at field to the model, uncomment below:
     # shipment.delivered_at = timezone.now()
@@ -379,13 +434,15 @@ def shipment_deliver(request, shipment_id):
 
 @login_required
 def payment_list(request):
-    payments = SalesPayment.objects.select_related("invoice__customer").order_by("-id")
+    company = _current_company(request)
+    payments = _scope(SalesPayment.objects.select_related("invoice__customer"), company).order_by("-id")
     return render(request, "sales/payment_list.html", {"payments": payments})
 
 
 @login_required
 def ajax_item_price(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
+    company = _current_company(request)
+    item = get_object_or_404(_scope(Item.objects.all(), company, include_legacy=True), id=item_id)
     # Assuming Item model has a base_price field
     return JsonResponse({"price": float(getattr(item, 'price', 0))})
 @login_required
@@ -394,7 +451,8 @@ def get_sales_order_details(request):
     AJAX view to fetch order lines for client-side processing.
     """
     order_id = request.GET.get("order_id")
-    order = get_object_or_404(SalesOrder, id=order_id)
+    company = _current_company(request)
+    order = get_object_or_404(_scope(SalesOrder.objects.all(), company), id=order_id)
     lines = order.lines.select_related("item", "unit")
 
     data = {
@@ -417,7 +475,8 @@ def get_sales_order_details(request):
 @login_required
 def get_invoice_details(request):
     invoice_id = request.GET.get("invoice_id")
-    invoice = get_object_or_404(SalesInvoice, id=invoice_id)
+    company = _current_company(request)
+    invoice = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=invoice_id)
     remaining = float(invoice.remaining_amount)
     status = "Fully Paid" if invoice.is_fully_paid else "Partial"
     return JsonResponse({
@@ -433,7 +492,8 @@ def ajax_order_lines(request, order_id):
     """
     Returns a JSON list of lines for a specific Sales Order.
     """
-    lines = SalesOrderLine.objects.filter(order_id=order_id).select_related("item")
+    company = _current_company(request)
+    lines = _scope(SalesOrderLine.objects.filter(order_id=order_id).select_related("item"), company)
     
     data = []
     for line in lines:
@@ -451,7 +511,8 @@ def ajax_item_price(request, item_id, customer_id=None):
     Fetches the price of an item for the UI. 
     Customer ID is optional if you implement customer-specific pricing later.
     """
-    item = get_object_or_404(Item, id=item_id)
+    company = _current_company(request)
+    item = get_object_or_404(_scope(Item.objects.all(), company, include_legacy=True), id=item_id)
     # Using getattr as a safety net in case the field name varies
     price = getattr(item, 'price', 0) 
     return JsonResponse({"price": float(price)})

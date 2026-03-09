@@ -4,6 +4,11 @@
 {% block content %}
 
 <h1>Plumpy ERP Dashboard</h1>
+{% if current_company_name %}
+<p style="margin: 8px 0 20px 0; color: #4b5563;">
+    Working Company: <strong>{{ current_company_name }}</strong>
+</p>
+{% endif %}
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; margin: 20px 0;">
 
@@ -33,12 +38,24 @@
     <!-- Production Overview -->
     <div style="border: 2px solid #007bff; padding: 20px; border-radius: 8px; background: #f0f8ff;">
         <h2 style="margin-top:0; color: #007bff;">Production Overview</h2>
+        <div style="margin-bottom: 10px;">
+            <a href="{% url 'production:production_run_list' %}" style="margin-right: 10px;">All Runs</a>
+            <a href="{% url 'production:bom_list' %}" style="margin-right: 10px;">All BOMs</a>
+            {% if request.user.is_staff %}
+            <a href="{% url 'company:scope_audit' %}">Scope Audit</a>
+            {% endif %}
+        </div>
         <p><strong>Active BOMs:</strong> {{ active_boms.count }}</p>
 
         <h3>Planned Runs</h3>
         {% if planned_runs %}
             <ul>{% for run in planned_runs %}
-                <li>Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }} ({{ run.start_date|date:"d M Y" }})</li>
+                <li>
+                    <a href="{% url 'production:production_run_detail' run.id %}">
+                        Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }}
+                    </a>
+                    ({{ run.start_date|date:"d M Y" }})
+                </li>
             {% endfor %}</ul>
         {% else %}
             <p>No planned runs</p>
@@ -47,7 +64,11 @@
         <h3>In Progress</h3>
         {% if in_progress_runs %}
             <ul>{% for run in in_progress_runs %}
-                <li>Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }}</li>
+                <li>
+                    <a href="{% url 'production:production_run_detail' run.id %}">
+                        Run #{{ run.id }} – {{ run.product }} × {{ run.planned_quantity }}
+                    </a>
+                </li>
             {% endfor %}</ul>
         {% else %}
             <p>No runs in progress</p>
@@ -73,7 +94,15 @@
                     <td>{{ m.item.code }} – {{ m.item.name }}</td>
                     <td>{{ m.quantity|floatformat:2 }}</td>
                     <td>{{ m.get_movement_type_display }}</td>
-                    <td>{% if m.production_run %}Run #{{ m.production_run.id }}{% else %}—{% endif %}</td>
+                    <td>
+                        {% if m.production_run %}
+                            <a href="{% url 'production:production_run_detail' m.production_run.id %}">
+                                Run #{{ m.production_run.id }}
+                            </a>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                     <td>{{ m.created_by.username|default:"—" }}</td>
                 </tr>
                 {% endfor %}

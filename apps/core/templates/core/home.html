@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Plumpy ERP - Select Company{% endblock %}
+
+{% block extra_css %}
+<style>
+.hero-section {
+    background: linear-gradient(130deg, #0f2a5f 0%, #1a4ca3 45%, #2f7dd6 100%);
+    color: white;
+    padding: 54px 0;
+    margin-bottom: 26px;
+    border-radius: 18px;
+    box-shadow: 0 18px 35px rgba(17, 53, 112, 0.25);
+}
+.company-stats {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 18px;
+}
+.company-card {
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+    cursor: pointer;
+    border: 1px solid #d7e1ef;
+    border-radius: 16px;
+    overflow: hidden;
+}
+.company-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 30px rgba(20, 38, 68, 0.12);
+    border-color: #7ea7df;
+}
+.company-logo {
+    max-width: 84px;
+    max-height: 84px;
+    object-fit: contain;
+}
+.card-title {
+    font-size: 20px;
+    margin-bottom: 6px;
+}
+.company-subtle {
+    color: #5d6f86;
+    font-size: 13px;
+}
+.section-head {
+    margin: 0 0 8px;
+    font-size: 29px;
+    letter-spacing: 0.2px;
+}
+.section-kicker {
+    color: #6a7e97;
+    margin: 0 0 20px;
+}
+.empty-state {
+    padding: 26px;
+    text-align: center;
+    border: 1px dashed #b9c8db;
+    border-radius: 14px;
+    background: #f8fbff;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- HERO -->
+<div class="hero-section">
+<div class="row align-items-center">
+
+<div class="col-lg-8">
+<h1 class="display-4 fw-bold mb-4">
+Welcome to Plumpy ERP
+</h1>
+
+<p class="lead mb-4">
+Comprehensive ERP platform for manufacturing and distribution companies.
+Select a company below to continue.
+</p>
+
+<div class="company-stats">
+<div class="row text-center">
+
+<div class="col-md-3">
+<h3 class="mb-1">{{ companies|length }}</h3>
+<small>Active Companies</small>
+</div>
+
+<div class="col-md-3">
+<h3 class="mb-1">12</h3>
+<small>Modules</small>
+</div>
+
+<div class="col-md-3">
+<h3 class="mb-1">100%</h3>
+<small>Integrated</small>
+</div>
+
+<div class="col-md-3">
+<h3 class="mb-1">24/7</h3>
+<small>Support</small>
+</div>
+
+</div>
+</div>
+</div>
+
+<div class="col-lg-4 text-center">
+<img src="{% static 'images/erp-logo.png' %}" class="img-fluid" style="max-width:200px;">
+</div>
+
+</div>
+</div>
+
+<!-- SECTION TITLE -->
+
+<div class="row mb-5">
+<div class="col-12 text-center">
+
+<h2 class="section-head">Select Your Company</h2>
+
+<p class="section-kicker">
+Choose the company you want to work with.
+</p>
+
+</div>
+</div>
+
+<!-- COMPANY GRID -->
+
+<div class="row g-4">
+
+{% for company in companies %}
+
+<div class="col-lg-4 col-md-6">
+
+<div class="card company-card h-100"
+     data-company-id="{{ company.id }}"
+     data-company-name="{{ company.name|escapejs }}">
+
+<div class="card-body text-center p-4">
+
+{% if company.logo %}
+<img src="{{ company.logo.url }}" class="company-logo mb-3">
+{% else %}
+<div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+style="width:80px;height:80px;font-size:2rem;">
+<i class="bi bi-building"></i>
+</div>
+{% endif %}
+
+<h5 class="card-title">{{ company.name }}</h5>
+
+{% if company.legal_name and company.legal_name != company.name %}
+<p class="company-subtle">{{ company.legal_name }}</p>
+{% endif %}
+
+<div class="mb-3">
+<span class="badge bg-info me-1">
+{{ company.base_currency|default:'ETB' }}
+</span>
+
+{% if company.city %}
+<small class="text-muted">
+{{ company.city }}, {{ company.country|default:'Ethiopia' }}
+</small>
+{% endif %}
+</div>
+
+<div class="row text-center small">
+
+<div class="col-6">
+<strong>{{ company.branch_count }}</strong><br>
+<span class="text-muted">Branches</span>
+</div>
+
+<div class="col-6">
+<strong>{{ company.customer_count }}</strong><br>
+<span class="text-muted">Customers</span>
+</div>
+
+</div>
+</div>
+
+<div class="card-footer bg-light text-center">
+
+<button class="btn btn-primary btn-sm w-100 select-company-btn"
+data-company-id="{{ company.id }}"
+data-company-name="{{ company.name|escapejs }}"
+type="button">
+
+<i class="bi bi-door-open me-2"></i>
+Open Company
+
+</button>
+
+</div>
+
+</div>
+</div>
+
+{% empty %}
+
+<div class="col-12 text-center py-5">
+<div class="empty-state">
+<h4 class="text-muted">No Companies Found</h4>
+
+{% if user.is_staff %}
+
+<a href="{% url 'company:create' %}" class="btn btn-primary mt-3">
+Create First Company
+</a>
+
+{% endif %}
+</div>
+</div>
+
+{% endfor %}
+
+</div>
+
+<form style="display:none">
+{% csrf_token %}
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+function submitCompanySelection(companyId) {
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
+
+    return fetch(`/api/set-company/${companyId}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": csrfToken,
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    }).then(response => response.json());
+}
+
+function selectCompany(companyId, companyName) {
+    if (window.confirm(`Open company "${companyName}"?`)) {
+        submitCompanySelection(companyId)
+            .then(data => {
+                if (data.success) {
+                    window.location.href = "{% url 'core:dashboard' %}";
+                } else {
+                    alert("Error selecting company");
+                }
+            })
+            .catch(() => {
+                alert("Error selecting company");
+            });
+    }
+}
+
+// Make it available for inline onclick handlers
+window.selectCompany = selectCompany;
+
+// Main initialization when DOM is ready
+document.addEventListener("DOMContentLoaded", function() {
+    // Attach handlers without relying on inline JS.
+    const cards = document.querySelectorAll(".company-card");
+    cards.forEach(function(card) {
+        card.addEventListener("click", function(e) {
+            if (e.target.closest(".select-company-btn")) return;
+            const id = this.dataset.companyId;
+            const name = this.dataset.companyName;
+            selectCompany(id, name);
+        });
+    });
+
+    const buttons = document.querySelectorAll(".select-company-btn");
+    buttons.forEach(function(btn) {
+        btn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            const id = this.dataset.companyId;
+            const name = this.dataset.companyName;
+            selectCompany(id, name);
+        });
+    });
+});
+</script>
+
+{% endblock %}

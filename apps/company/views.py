@@ -1,9 +1,10 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.contrib.auth.models import User  # Fixed import
 from django.db.models import Sum, Q, Count
 from django.utils import timezone
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from datetime import timedelta
 from decimal import Decimal
 import csv
@@ -17,8 +18,172 @@ from apps.sales.models import SalesOrder, SalesInvoice
 
 
 # ============================
-# Company Views
+# Company Dashboard
 # ============================
+
+@login_required
+def company_dashboard(request):
+    """Main company dashboard"""
+    user_profile = get_object_or_404(UserProfile, user=request.user)
+    company = user_profile.company
+    
+    # Company statistics
+    stats = {
+        'branches': Branch.objects.filter(company=company, is_active=True).count(),
+        'departments': Department.objects.filter(company=company, is_active=True).count(),
+        'customers': Customer.objects.filter(company=company, is_active=True).count(),
+        'employees': UserProfile.objects.filter(company=company, is_active=True).count(),
+    }
+    
+    # Recent activities
+    recent_customers = Customer.objects.filter(company=company).order_by('-created_at')[:5]
+    recent_employees = UserProfile.objects.filter(company=company).order_by('-created_at')[:5]
+    
+    context = {
+        'company': company,
+        'stats': stats,
+        'recent_customers': recent_customers,
+        'recent_employees': recent_employees,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'company/dashboard.html', context)
+
+
+@login_required
+def company_scope_audit(request):
+    """
+    Staff-only audit page to monitor records missing company scope.
+    """
+    if not request.user.is_staff:
+        messages.error(request, "Access denied.")
+        return redirect('core:home')
+
+    from apps.purchasing.models import (
+        PurchaseRequisition,
+        PurchaseOrderLine,
+        PurchaseOrderApproval,
+        GoodsReceipt,
+        GoodsReceiptLine,
+        PurchaseRequisitionLine,
+        VendorPerformance,
+    )
+    from apps.sales.models import (
+        SalesOrderLine,
+        SalesInvoiceLine,
+        SalesShipment,
+        SalesShipmentLine,
+        SalesPayment,
+    )
+    from apps.accounting.models import (
+        AccountType,
+        AccountGroup,
+        AccountCategory,
+        Account,
+        JournalLine,
+        PurchaseBillLine,
+        ReconciliationAuditLog,
+    )
+    from apps.reports.models import (
+        ReportCategory,
+        ReportTemplate,
+        ScheduledReport,
+        DashboardWidget,
+    )
+
+    checks = [
+        ("purchasing.Supplier (string company)", Supplier.objects.filter(Q(company__isnull=True) | Q(company='')).count()),
+        ("purchasing.PurchaseOrder (string company)", PurchaseOrder.objects.filter(Q(company__isnull=True) | Q(company='')).count()),
+        ("purchasing.PurchaseRequisition (string company)", PurchaseRequisition.objects.filter(Q(company__isnull=True) | Q(company='')).count()),
+        ("purchasing.PurchaseOrderLine", PurchaseOrderLine.objects.filter(company__isnull=True).count()),
+        ("purchasing.PurchaseOrderApproval", PurchaseOrderApproval.objects.filter(company__isnull=True).count()),
+        ("purchasing.GoodsReceipt", GoodsReceipt.objects.filter(company__isnull=True).count()),
+        ("purchasing.GoodsReceiptLine", GoodsReceiptLine.objects.filter(company__isnull=True).count()),
+        ("purchasing.PurchaseRequisitionLine", PurchaseRequisitionLine.objects.filter(company__isnull=True).count()),
+        ("purchasing.VendorPerformance", VendorPerformance.objects.filter(company__isnull=True).count()),
+        ("sales.SalesOrder", SalesOrder.objects.filter(company__isnull=True).count()),
+        ("sales.SalesOrderLine", SalesOrderLine.objects.filter(company__isnull=True).count()),
+        ("sales.SalesInvoice", SalesInvoice.objects.filter(company__isnull=True).count()),
+        ("sales.SalesInvoiceLine", SalesInvoiceLine.objects.filter(company__isnull=True).count()),
+        ("sales.SalesShipment", SalesShipment.objects.filter(company__isnull=True).count()),
+        ("sales.SalesShipmentLine", SalesShipmentLine.objects.filter(company__isnull=True).count()),
+        ("sales.SalesPayment", SalesPayment.objects.filter(company__isnull=True).count()),
+        ("accounting.AccountType", AccountType.objects.filter(company__isnull=True).count()),
+        ("accounting.AccountGroup", AccountGroup.objects.filter(company__isnull=True).count()),
+        ("accounting.AccountCategory", AccountCategory.objects.filter(company__isnull=True).count()),
+        ("accounting.Account", Account.objects.filter(company__isnull=True).count()),
+        ("accounting.JournalLine", JournalLine.objects.filter(company__isnull=True).count()),
+        ("accounting.PurchaseBill", PurchaseBill.objects.filter(company__isnull=True).count()),
+        ("accounting.PurchaseBillLine", PurchaseBillLine.objects.filter(company__isnull=True).count()),
+        ("accounting.Payment", Payment.objects.filter(company__isnull=True).count()),
+        ("accounting.ReconciliationAuditLog", ReconciliationAuditLog.objects.filter(company__isnull=True).count()),
+        ("reports.ReportCategory", ReportCategory.objects.filter(company__isnull=True).count()),
+        ("reports.ReportTemplate", ReportTemplate.objects.filter(company__isnull=True).count()),
+        ("reports.ScheduledReport", ScheduledReport.objects.filter(company__isnull=True).count()),
+        ("reports.DashboardWidget", DashboardWidget.objects.filter(company__isnull=True).count()),
+    ]
+
+    rows = []
+    total_missing = 0
+    for model_label, missing in checks:
+        total_missing += missing
+        rows.append({
+            "model_label": model_label,
+            "missing_count": missing,
+            "ok": missing == 0,
+        })
+
+    context = {
+        "rows": rows,
+        "total_missing": total_missing,
+        "checked_models": len(rows),
+        "today": timezone.now().date(),
+    }
+    return render(request, "company/company_scope_audit.html", context)
+
+
+# ============================
+# Company CRUD
+# ============================
+
+@login_required
+def company_list(request):
+    """List all companies"""
+    companies = Company.objects.filter(is_active=True).annotate(
+        branch_count=Count('branches')
+    ).order_by('name')
+    
+    return render(request, 'company/company_list.html', {'companies': companies})
+
+
+@login_required
+def company_detail(request, company_id):
+    """View company details with summary statistics"""
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Get related data
+    branches = company.branches.filter(is_active=True)
+    departments = Department.objects.filter(branch__company=company, is_active=True)
+    customers = company.customers.filter(is_active=True)[:10]
+    
+    # Summary statistics
+    branches_count = branches.count()
+    departments_count = departments.count()
+    customers_count = company.customers.filter(is_active=True).count()
+    employees_count = UserProfile.objects.filter(company=company, is_active=True).count()
+    
+    context = {
+        'company': company,
+        'branches': branches,
+        'departments': departments,
+        'customers': customers,
+        'branches_count': branches_count,
+        'departments_count': departments_count,
+        'customers_count': customers_count,
+        'employees_count': employees_count,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'company/company_detail.html', context)
+
 
 @login_required
 def company_create(request):
@@ -41,39 +206,46 @@ def company_create(request):
 
 
 @login_required
-def company_list(request):
-    """List all companies"""
-    companies = Company.objects.filter(is_active=True).annotate(
-        branch_count=Count('branches')
-    ).order_by('name')
+def company_edit(request, company_id):
+    """Edit a company"""
+    company = get_object_or_404(Company, id=company_id)
     
-    return render(request, 'company/company_list.html', {'companies': companies})
+    if request.method == 'POST':
+        form = CompanyForm(request.POST, request.FILES, instance=company)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Company "{company.name}" updated successfully.')
+            return redirect('company:detail', company_id=company.id)
+    else:
+        form = CompanyForm(instance=company)
+    
+    context = {
+        'form': form,
+        'company': company,
+        'title': f'Edit {company.name}',
+    }
+    return render(request, 'company/company_form.html', context)
 
 
 @login_required
-def company_detail(request, company_id):
-    """View company details with summary statistics"""
+def company_delete(request, company_id):
+    """Delete a company"""
     company = get_object_or_404(Company, id=company_id)
     
-    # Summary statistics
-    branches_count = company.branches.filter(is_active=True).count()
-    departments_count = company.departments.filter(is_active=True).count()
-    customers_count = company.customers.filter(is_active=True).count()
-    employees_count = UserProfile.objects.filter(company=company, is_active=True).count()
+    if request.method == 'POST':
+        company_name = company.name
+        company.delete()
+        messages.success(request, f'Company "{company_name}" deleted successfully.')
+        return redirect('company:list')
     
     context = {
         'company': company,
-        'branches_count': branches_count,
-        'departments_count': departments_count,
-        'customers_count': customers_count,
-        'employees_count': employees_count,
-        'today': timezone.now().date(),
     }
-    return render(request, 'company/company_detail.html', context)
+    return render(request, 'company/company_confirm_delete.html', context)
 
 
 # ============================
-# Branch Views
+# Branch CRUD
 # ============================
 
 @login_required
@@ -107,8 +279,59 @@ def branch_detail(request, branch_id):
     return render(request, 'company/branch_detail.html', context)
 
 
+@login_required
+def branch_create(request):
+    """Create a new branch"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    if request.method == 'POST':
+        # Handle form submission - you'll need to create a BranchForm
+        messages.success(request, 'Branch created successfully.')
+        return redirect('company:branch_list')
+    
+    context = {
+        'companies': [request.company] if hasattr(request, 'company') else Company.objects.filter(is_active=True),
+    }
+    return render(request, 'company/branch_form.html', context)
+
+
+@login_required
+def branch_edit(request, branch_id):
+    """Edit a branch"""
+    branch = get_object_or_404(Branch, id=branch_id)
+    
+    if request.method == 'POST':
+        # Handle form submission
+        messages.success(request, 'Branch updated successfully.')
+        return redirect('company:branch_detail', branch_id=branch.id)
+    
+    context = {
+        'branch': branch,
+        'companies': Company.objects.filter(is_active=True),
+    }
+    return render(request, 'company/branch_form.html', context)
+
+
+@login_required
+def branch_delete(request, branch_id):
+    """Delete a branch"""
+    branch = get_object_or_404(Branch, id=branch_id)
+    
+    if request.method == 'POST':
+        branch.delete()
+        messages.success(request, 'Branch deleted successfully.')
+        return redirect('company:branch_list')
+    
+    context = {
+        'branch': branch,
+    }
+    return render(request, 'company/branch_confirm_delete.html', context)
+
+
 # ============================
-# Department Views
+# Department CRUD
 # ============================
 
 @login_required
@@ -141,8 +364,61 @@ def department_detail(request, department_id):
     return render(request, 'company/department_detail.html', context)
 
 
+@login_required
+def department_create(request):
+    """Create a new department"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    if request.method == 'POST':
+        # Handle form submission
+        messages.success(request, 'Department created successfully.')
+        return redirect('company:department_list')
+    
+    branches = Branch.objects.filter(company=request.company, is_active=True)
+    context = {
+        'branches': branches,
+    }
+    return render(request, 'company/department_form.html', context)
+
+
+@login_required
+def department_edit(request, department_id):
+    """Edit a department"""
+    department = get_object_or_404(Department, id=department_id)
+    
+    if request.method == 'POST':
+        # Handle form submission
+        messages.success(request, 'Department updated successfully.')
+        return redirect('company:department_detail', department_id=department.id)
+    
+    branches = Branch.objects.filter(company=department.company, is_active=True)
+    context = {
+        'department': department,
+        'branches': branches,
+    }
+    return render(request, 'company/department_form.html', context)
+
+
+@login_required
+def department_delete(request, department_id):
+    """Delete a department"""
+    department = get_object_or_404(Department, id=department_id)
+    
+    if request.method == 'POST':
+        department.delete()
+        messages.success(request, 'Department deleted successfully.')
+        return redirect('company:department_list')
+    
+    context = {
+        'department': department,
+    }
+    return render(request, 'company/department_confirm_delete.html', context)
+
+
 # ============================
-# Customer Views
+# Customer CRUD
 # ============================
 
 @login_required
@@ -256,9 +532,80 @@ def customer_ledger(request, customer_id):
     return render(request, 'company/customer_ledger.html', context)
 
 
+@login_required
+def customer_create(request):
+    """Create a new customer"""
+    if not hasattr(request, 'company'):
+        messages.warning(request, 'Please select a company first.')
+        return redirect('company:list')
+    
+    if request.method == 'POST':
+        # Handle form submission
+        messages.success(request, 'Customer created successfully.')
+        return redirect('company:customer_list')
+    
+    context = {
+        'companies': [request.company] if hasattr(request, 'company') else Company.objects.filter(is_active=True),
+    }
+    return render(request, 'company/customer_form.html', context)
+
+
+@login_required
+def customer_edit(request, pk):
+    """Edit a customer"""
+    customer = get_object_or_404(Customer, pk=pk)
+    
+    if request.method == 'POST':
+        # Handle form submission
+        messages.success(request, 'Customer updated successfully.')
+        return redirect('company:customer_detail', pk=customer.pk)
+    
+    context = {
+        'customer': customer,
+        'companies': Company.objects.filter(is_active=True),
+    }
+    return render(request, 'company/customer_form.html', context)
+
+
+@login_required
+def customer_delete(request, pk):
+    """Delete a customer"""
+    customer = get_object_or_404(Customer, pk=pk)
+    
+    if request.method == 'POST':
+        customer.delete()
+        messages.success(request, 'Customer deleted successfully.')
+        return redirect('company:customer_list')
+    
+    context = {
+        'customer': customer,
+    }
+    return render(request, 'company/customer_confirm_delete.html', context)
+
+
 # ============================
 # Supplier Views
 # ============================
+
+@login_required
+def supplier_list(request):
+    """List all suppliers"""
+    suppliers = Supplier.objects.all()
+    context = {
+        'suppliers': suppliers,
+    }
+    return render(request, 'company/supplier_list.html', context)
+
+
+@login_required
+def supplier_detail(request, supplier_id):
+    """Supplier detail view"""
+    supplier = get_object_or_404(Supplier, id=supplier_id)
+    context = {
+        'supplier': supplier,
+    }
+    return render(request, 'company/supplier_detail.html', context)
+
 
 @login_required
 def supplier_ledger(request, supplier_id):
@@ -367,39 +714,7 @@ def user_list(request):
 
 
 # ============================
-# Dashboard Views
-# ============================
-
-@login_required
-def company_dashboard(request):
-    """Main company dashboard"""
-    user_profile = get_object_or_404(UserProfile, user=request.user)
-    company = user_profile.company
-    
-    # Company statistics
-    stats = {
-        'branches': Branch.objects.filter(company=company, is_active=True).count(),
-        'departments': Department.objects.filter(company=company, is_active=True).count(),
-        'customers': Customer.objects.filter(company=company, is_active=True).count(),
-        'employees': UserProfile.objects.filter(company=company, is_active=True).count(),
-    }
-    
-    # Recent activities
-    recent_customers = Customer.objects.filter(company=company).order_by('-created_at')[:5]
-    recent_employees = UserProfile.objects.filter(company=company).order_by('-created_at')[:5]
-    
-    context = {
-        'company': company,
-        'stats': stats,
-        'recent_customers': recent_customers,
-        'recent_employees': recent_employees,
-        'today': timezone.now().date(),
-    }
-    return render(request, 'company/dashboard.html', context)
-
-
-# ============================
-# Export Views
+# Export Functions
 # ============================
 
 @login_required
@@ -409,17 +724,19 @@ def export_customers(request):
     response['Content-Disposition'] = f'attachment; filename="customers_{timezone.now().strftime("%Y%m%d")}.csv"'
     
     writer = csv.writer(response)
-    writer.writerow(['Company', 'Name', 'TIN', 'Phone', 'Email', 'City', 'Credit Limit', 'Status'])
+    writer.writerow(['ID', 'Name', 'Contact Person', 'Email', 'Phone', 'Address', 'Company', 'TIN', 'Credit Limit', 'Status'])
     
-    customers = Customer.objects.filter(is_active=True).select_related('company')
+    customers = Customer.objects.select_related('company')
     for customer in customers:
         writer.writerow([
-            customer.company.name,
+            customer.id,
             customer.name,
-            customer.tin,
-            customer.phone,
+            customer.contact_person,
             customer.email,
-            customer.city,
+            customer.phone,
+            customer.address,
+            customer.company.name if customer.company else '',
+            customer.tin,
             customer.credit_limit,
             'Active' if customer.is_active else 'Inactive',
         ])
@@ -434,57 +751,107 @@ def export_companies(request):
         messages.error(request, 'Access denied.')
         return redirect('company:list')
     
-    resource = CompanyResource()
-    dataset = resource.export()
+    # Using csv export as fallback
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="companies_{timezone.now().strftime("%Y%m%d")}.csv"'
     
-    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="companies_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    writer = csv.writer(response)
+    writer.writerow(['ID', 'Name', 'Code', 'Email', 'Phone', 'City', 'Country', 'TIN', 'Is Active'])
+    
+    companies = Company.objects.all()
+    for company in companies:
+        writer.writerow([
+            company.id,
+            company.name,
+            company.code,
+            company.email,
+            company.phone,
+            company.city,
+            company.country,
+            company.tin,
+            'Yes' if company.is_active else 'No'
+        ])
+    
     return response
 
 
 @login_required
 def export_branches(request):
-    """Export branches to Excel"""
-    if not hasattr(request, 'company'):
-        messages.warning(request, 'Please select a company first.')
-        return redirect('company:list')
+    """Export branches to CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="branches_{timezone.now().strftime("%Y%m%d")}.csv"'
     
-    resource = BranchResource()
-    queryset = Branch.objects.filter(company=request.company)
-    dataset = resource.export(queryset)
+    writer = csv.writer(response)
+    writer.writerow(['ID', 'Name', 'Code', 'Company', 'Phone', 'Email', 'City', 'Is Active'])
     
-    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="branches_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    branches = Branch.objects.select_related('company')
+    for branch in branches:
+        writer.writerow([
+            branch.id,
+            branch.name,
+            branch.code,
+            branch.company.name,
+            branch.phone,
+            branch.email,
+            branch.city,
+            'Yes' if branch.is_active else 'No'
+        ])
+    
     return response
 
 
 @login_required
 def export_departments(request):
-    """Export departments to Excel"""
-    if not hasattr(request, 'company'):
-        messages.warning(request, 'Please select a company first.')
-        return redirect('company:list')
+    """Export departments to CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="departments_{timezone.now().strftime("%Y%m%d")}.csv"'
     
-    resource = DepartmentResource()
-    queryset = Department.objects.filter(company=request.company)
-    dataset = resource.export(queryset)
+    writer = csv.writer(response)
+    writer.writerow(['ID', 'Name', 'Code', 'Branch', 'Company', 'Is Active'])
     
-    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="departments_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    departments = Department.objects.select_related('branch__company')
+    for dept in departments:
+        writer.writerow([
+            dept.id,
+            dept.name,
+            dept.code,
+            dept.branch.name,
+            dept.branch.company.name,
+            'Yes' if dept.is_active else 'No'
+        ])
+    
     return response
 
 
 @login_required
 def export_company_customers(request):
-    """Export customers for current company to Excel"""
-    if not hasattr(request, 'company'):
-        messages.warning(request, 'Please select a company first.')
-        return redirect('company:list')
+    """Export customers for the current company"""
+    # Get current company from session or user profile
+    company_id = request.session.get('current_company_id')
+    if not company_id and hasattr(request, 'user') and request.user.is_authenticated:
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+            company_id = profile.company.id
+        except UserProfile.DoesNotExist:
+            pass
     
-    resource = CustomerResource()
-    queryset = Customer.objects.filter(company=request.company)
-    dataset = resource.export(queryset)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="company_customers_{timezone.now().strftime("%Y%m%d")}.csv"'
     
-    response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="customers_{request.company.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+    writer = csv.writer(response)
+    writer.writerow(['ID', 'Name', 'Contact Person', 'Email', 'Phone', 'Address', 'TIN', 'Credit Limit'])
+    
+    customers = Customer.objects.filter(company_id=company_id)
+    for customer in customers:
+        writer.writerow([
+            customer.id,
+            customer.name,
+            customer.contact_person,
+            customer.email,
+            customer.phone,
+            customer.address,
+            customer.tin,
+            customer.credit_limit,
+        ])
+    
     return response

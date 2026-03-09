@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Close Fiscal Period - {{ period.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <h4 class="alert-heading">
+                            <i class="bi bi-exclamation-triangle me-2"></i>Close Fiscal Period
+                        </h4>
+                        <p class="mb-0">
+                            You are about to close the fiscal period <strong>"{{ period.name }}"</strong> 
+                            ({{ period.start_date|date:"M d, Y" }} - {{ period.end_date|date:"M d, Y" }}).
+                        </p>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 class="mb-1">
+                                <i class="bi bi-lock me-2 text-warning"></i>{{ period.name }}
+                            </h2>
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-building me-2"></i>{{ current_company.name }}
+                            </p>
+                        </div>
+                        <div>
+                            <a href="{% url 'accounting:fiscal_period_detail' period.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Closing Confirmation -->
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="bi bi-info-circle me-2"></i>Period Closing Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6>Period Details</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Period Name:</strong></td>
+                                    <td>{{ period.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Type:</strong></td>
+                                    <td>{{ period.get_period_type_display }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Start Date:</strong></td>
+                                    <td>{{ period.start_date|date:"M d, Y" }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>End Date:</strong></td>
+                                    <td>{{ period.end_date|date:"M d, Y" }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Financial Summary</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Opening Balance:</strong></td>
+                                    <td class="text-end">{{ period.opening_balance|floatformat:2 }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Debits:</strong></td>
+                                    <td class="text-end text-success">{{ period.total_debits|floatformat:2 }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Credits:</strong></td>
+                                    <td class="text-end text-danger">{{ period.total_credits|floatformat:2 }}</td>
+                                </tr>
+                                <tr class="table-active">
+                                    <td><strong>Closing Balance:</strong></td>
+                                    <td class="text-end"><strong>{{ period.closing_balance|floatformat:2 }}</strong></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-lightbulb me-2"></i>What happens when you close this period?</h6>
+                        <ul class="mb-0">
+                            <li>The period will be marked as closed and no further transactions can be posted to it</li>
+                            <li>Financial summaries will be finalized and locked</li>
+                            <li>The closing balance will become the opening balance for the next period</li>
+                            <li>This action cannot be undone</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-danger">
+                        <h6><i class="bi bi-exclamation-triangle me-2"></i>Important Warning</h6>
+                        <p class="mb-0">
+                            Make sure all transactions for this period have been properly reviewed and posted.
+                            Once closed, the period cannot be reopened and no changes can be made to the financial data.
+                        </p>
+                    </div>
+
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'accounting:fiscal_period_detail' period.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="bi bi-lock me-2"></i>Close Fiscal Period
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

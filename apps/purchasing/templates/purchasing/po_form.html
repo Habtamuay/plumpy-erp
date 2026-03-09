@@ -322,7 +322,7 @@
                                                         data-price="{{ item.unit_cost|default:0 }}" 
                                                         data-unit="{{ item.unit.id }}"
                                                         data-unit-abbr="{{ item.unit.abbreviation }}"
-                                                        {% if line.item.id == item.id %}selected{% endif %}>
+                                                        {% if line.item_obj and line.item_obj.id == item.id %}selected{% endif %}>
                                                         {{ item.code }} - {{ item.name }}
                                                     </option>
                                                     {% endfor %}
@@ -336,7 +336,7 @@
                                                 <select name="unit" class="form-select form-select-sm unit-select" required>
                                                     <option value="">--</option>
                                                     {% for unit in units %}
-                                                    <option value="{{ unit.id }}" {% if line.unit.id == unit.id %}selected{% endif %}>
+                                                    <option value="{{ unit.id }}" {% if line.unit_obj and line.unit_obj.id == unit.id %}selected{% endif %}>
                                                         {{ unit.abbreviation }}
                                                     </option>
                                                     {% endfor %}
@@ -389,7 +389,7 @@
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold">Withholding Tax (2%):</td>
+                                        <td colspan="5" class="text-end fw-bold" id="withholdingTaxLabel">Withholding Tax (3% if taxable base > 20,000 ETB):</td>
                                         <td class="fw-bold text-danger"><span id="withholdingTax">0.00</span></td>
                                         <td></td>
                                     </tr>
@@ -436,7 +436,7 @@
                                     <strong>Ethiopian Tax System Information:</strong>
                                     <ul class="mb-0 mt-1">
                                         <li>VAT is calculated at 15% for taxable items (standard rate)</li>
-                                        <li>Withholding tax at 2% applies to local purchases from registered suppliers when currency is ETB</li>
+                                        <li>Withholding tax is 3% and applies only when taxable base is above 20,000 ETB (ETB transactions)</li>
                                         <li>Tax-exempt items should be marked with 0% VAT</li>
                                         <li>Tourism-related items may use 10% VAT rate</li>
                                     </ul>
@@ -459,7 +459,7 @@
                         <textarea class="form-control" id="terms" name="terms" rows="4">{% if po %}{{ po.terms }}{% else %}1. Delivery must be made within the agreed timeframe.
 2. Quality must meet specified standards.
 3. VAT at 15% will be applied as per Ethiopian tax law.
-4. Withholding tax at 2% will be deducted where applicable.
+4. Withholding tax at 3% applies only if taxable base exceeds 20,000 ETB.
 5. Payment will be processed after receipt of valid tax invoice.
 6. Goods must be accompanied by a valid tax invoice and delivery note.
 7. Any discrepancies must be reported within 48 hours of receipt.{% endif %}</textarea>
@@ -653,6 +653,31 @@
     // Initialize everything when document is ready
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DOM fully loaded');
+
+        function initItemSelect2($elements) {
+            if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+            $elements.select2({
+                theme: 'bootstrap-5',
+                placeholder: '-- Select item --',
+                allowClear: true,
+                width: '100%',
+                tags: true,
+                createTag: function(params) {
+                    const term = $.trim(params.term);
+                    if (!term) {
+                        return null;
+                    }
+                    return {
+                        id: 'new:' + term,
+                        text: 'Create new item: ' + term,
+                        newTag: true
+                    };
+                },
+                insertTag: function(data, tag) {
+                    data.unshift(tag);
+                }
+            });
+        }
         
         // Initialize Select2 for supplier
         if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
@@ -664,12 +689,7 @@
             });
             
             // Initialize Select2 for existing item selects
-            $('.item-select').select2({
-                theme: 'bootstrap-5',
-                placeholder: '-- Select item --',
-                allowClear: true,
-                width: '100%'
-            });
+            initItemSelect2($('.item-select'));
         } else {
             console.error('jQuery or Select2 not loaded');
         }
@@ -900,12 +920,7 @@
             
             // Reinitialize Select2 for the new row
             if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-                $(addedRow).find('.item-select').select2({
-                    theme: 'bootstrap-5',
-                    placeholder: '-- Select item --',
-                    allowClear: true,
-                    width: '100%'
-                });
+                initItemSelect2($(addedRow).find('.item-select'));
             }
             
             // Attach event listeners to the new row
@@ -998,7 +1013,7 @@
         }
         
         if (itemSelect) {
-            itemSelect.addEventListener('change', function() {
+            const onItemChange = function() {
                 const selectedOption = this.options[this.selectedIndex];
                 const unitPrice = selectedOption.dataset.price || 0;
                 const unitId = selectedOption.dataset.unit || '';
@@ -1017,8 +1032,16 @@
                 }
                 
                 calculateLineTotal(row);
-            });
+            };
+
+            itemSelect.addEventListener('change', onItemChange);
+            if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                $(itemSelect).on('select2:select select2:clear', onItemChange);
+            }
         }
+
+        // Ensure row subtotal is calculated on first render.
+        calculateLineTotal(row);
     }
     
     // Function to attach calculation listeners to all rows
@@ -1071,14 +1094,14 @@
     
     // Function to calculate grand total
     function calculateGrandTotal() {
-        let subtotal = 0;
+        let subtotalBeforeVat = 0;
         let taxTotal = 0;
-        let withholdingBase = 0;
         
         document.querySelectorAll('.order-line-row').forEach(row => {
             const quantityInput = row.querySelector('.quantity-input');
             const unitPriceInput = row.querySelector('.unit-price-input');
             const taxRateSelect = row.querySelector('.tax-rate-input');
+            const lineSubtotalInput = row.querySelector('.line-subtotal');
             
             if (!quantityInput || !unitPriceInput || !taxRateSelect) return;
             
@@ -1087,27 +1110,33 @@
             const taxRate = parseFloat(taxRateSelect.value) || 0;
             
             const lineSubtotal = quantity * unitPrice;
-            subtotal += lineSubtotal;
-            taxTotal += lineSubtotal * (taxRate / 100);
-            withholdingBase += lineSubtotal;
+            const lineVat = lineSubtotal * (taxRate / 100);
+            const lineTotal = lineSubtotal + lineVat;
+
+            subtotalBeforeVat += lineSubtotal;
+            taxTotal += lineVat;
+
+            if (lineSubtotalInput) {
+                lineSubtotalInput.value = lineTotal.toFixed(2);
+            }
         });
         
         const shipping = parseFloat(document.getElementById('shipping_cost')?.value) || 0;
         const discount = parseFloat(document.getElementById('discount')?.value) || 0;
         
-        // Calculate withholding tax at 2% for local purchases (if currency is ETB)
+        // Ethiopian WHT rule: 3% only if taxable base is above 20,000 ETB
         const currency = document.getElementById('currency')?.value || 'ETB';
-        const withholdingTax = (currency === 'ETB') ? withholdingBase * 0.02 : 0;
+        const withholdingTax = (currency === 'ETB' && subtotalBeforeVat > 20000) ? subtotalBeforeVat * 0.03 : 0;
         
-        const grandTotal = subtotal + taxTotal + shipping - discount - withholdingTax;
+        const grandTotal = subtotalBeforeVat + taxTotal + shipping - discount - withholdingTax;
         
         // Update display
-        document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+        document.getElementById('subtotal').textContent = subtotalBeforeVat.toFixed(2);
         document.getElementById('taxTotal').textContent = taxTotal.toFixed(2);
         document.getElementById('withholdingTax').textContent = withholdingTax.toFixed(2);
         document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
         
-        console.log('Totals updated:', {subtotal, taxTotal, withholdingTax, grandTotal});
+        console.log('Totals updated:', {subtotalBeforeVat, taxTotal, withholdingTax, grandTotal});
     }
     
     // Form validation before submit

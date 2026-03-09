@@ -4,9 +4,14 @@ from . import views
 app_name = 'core'
 
 urlpatterns = [
+    # Home page
+    path('', views.home, name='home'),
+    
+    # API endpoints
+    path('api/set-company/<int:company_id>/', views.set_company, name='set_company'),
+    
     # Dashboard
-    path('', views.core_dashboard, name='dashboard'),
-    path('dashboard/', views.core_dashboard, name='dashboard'),
+    path('dashboard/', views.dashboard, name='dashboard'),
     
     # Item URLs
     path('items/', views.item_list, name='item_list'),

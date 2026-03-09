@@ -6,6 +6,7 @@ from django.http import HttpResponse, JsonResponse
 from datetime import timedelta, datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
+from collections import defaultdict
 import json
 import csv
 
@@ -14,8 +15,99 @@ from .resources import (
     ConsumptionReportResource, StockSummaryResource, 
     LowStockResource, StockTransactionResource
 )
-from apps.production.models import ProductionRun, BOMLine
+from apps.production.models import ProductionRun, BOMLine, InventoryMovement
 from apps.core.models import Item
+
+
+# ============================
+# Helpers
+# ============================
+
+def _company_id(request):
+    return request.session.get('current_company_id')
+
+
+def _scoped(qs, company_id):
+    """Scope querysets to current company while still allowing legacy NULL company rows."""
+    if not company_id:
+        return qs
+    return qs.filter(Q(company_id=company_id) | Q(company__isnull=True))
+
+
+def _ensure_current_stock_seed(company_id):
+    """
+    Backfill CurrentStock rows for legacy data where beginning balances were saved
+    on Item.current_stock but CurrentStock rows were never created.
+    """
+    existing_qs = _scoped(CurrentStock.objects.all(), company_id)
+    if existing_qs.exists():
+        return
+
+    # 1) Try seed from item-level beginning balances.
+    item_qs = Item.objects.filter(is_active=True, current_stock__gt=0)
+    if company_id:
+        item_qs = item_qs.filter(Q(company_id=company_id) | Q(company__isnull=True))
+
+    wh_qs = Warehouse.objects.filter(is_active=True)
+    if company_id:
+        wh_qs = wh_qs.filter(Q(company_id=company_id) | Q(company__isnull=True))
+    warehouse = wh_qs.order_by('id').first()
+
+    if not warehouse:
+        warehouse = Warehouse.objects.create(
+            name='Main Warehouse',
+            code=f"MAIN-{company_id or 'GEN'}",
+            warehouse_type='raw',
+            is_active=True,
+            company_id=company_id
+        )
+
+    for item in item_qs:
+        CurrentStock.objects.create(
+            item=item,
+            warehouse=warehouse,
+            lot=None,
+            quantity=item.current_stock,
+            company_id=item.company_id or company_id
+        )
+
+    if _scoped(CurrentStock.objects.all(), company_id).exists():
+        return
+
+    # 2) Fallback: derive balances from historical stock transactions.
+    tx_qs = _scoped(
+        StockTransaction.objects.select_related('item', 'warehouse_from', 'warehouse_to', 'lot').order_by('transaction_date', 'id'),
+        company_id
+    )
+    if not tx_qs.exists():
+        return
+
+    balances = defaultdict(lambda: Decimal('0'))
+    for tx in tx_qs:
+        qty = tx.quantity or Decimal('0')
+        if qty == 0:
+            continue
+
+        if tx.transaction_type in ['receipt', 'return'] and tx.warehouse_to:
+            balances[(tx.item_id, tx.warehouse_to_id, tx.lot_id)] += qty
+        elif tx.transaction_type in ['issue', 'scrap', 'adjustment', 'return_supplier', 'sample'] and tx.warehouse_from:
+            balances[(tx.item_id, tx.warehouse_from_id, tx.lot_id)] -= qty
+        elif tx.transaction_type == 'transfer':
+            if tx.warehouse_from:
+                balances[(tx.item_id, tx.warehouse_from_id, tx.lot_id)] -= qty
+            if tx.warehouse_to:
+                balances[(tx.item_id, tx.warehouse_to_id, tx.lot_id)] += qty
+
+    for (item_id, warehouse_id, lot_id), qty in balances.items():
+        if qty == 0 or not warehouse_id:
+            continue
+        CurrentStock.objects.create(
+            item_id=item_id,
+            warehouse_id=warehouse_id,
+            lot_id=lot_id,
+            quantity=qty,
+            company_id=company_id
+        )
 
 
 # ============================
@@ -26,19 +118,26 @@ from apps.core.models import Item
 def dashboard(request):
     """Main inventory dashboard"""
     today = timezone.now().date()
+    company_id = _company_id(request)
+    _ensure_current_stock_seed(company_id)
+    current_stock_qs = _scoped(CurrentStock.objects.all(), company_id)
+    warehouse_qs = _scoped(Warehouse.objects.filter(is_active=True), company_id)
+    lot_qs = _scoped(Lot.objects.filter(is_active=True), company_id)
+    tx_qs = _scoped(StockTransaction.objects.all(), company_id)
+    item_qs = _scoped(Item.objects.filter(is_active=True), company_id)
     
     # Calculate key metrics
-    total_stock_value = CurrentStock.objects.aggregate(
+    total_stock_value = current_stock_qs.aggregate(
         total=Sum(F('quantity') * F('item__unit_cost'))
     )['total'] or 0
     
-    low_stock_count = CurrentStock.objects.filter(
+    low_stock_count = current_stock_qs.filter(
         Q(quantity__lt=F('item__minimum_stock')) |
         Q(quantity__lte=F('item__reorder_point'))
     ).count()
     
     # Stock by warehouse
-    stock_by_warehouse = CurrentStock.objects.values(
+    stock_by_warehouse = current_stock_qs.values(
         'warehouse__name', 'warehouse__code'
     ).annotate(
         total_qty=Sum('quantity'),
@@ -46,11 +145,11 @@ def dashboard(request):
     ).order_by('-total_value')[:5]
     
     context = {
-        'warehouse_count': Warehouse.objects.filter(is_active=True).count(),
-        'active_lots': Lot.objects.filter(is_active=True).count(),
-        'recent_transactions': StockTransaction.objects.all()[:10],
+        'warehouse_count': warehouse_qs.count(),
+        'active_lots': lot_qs.count(),
+        'recent_transactions': tx_qs[:10],
         'total_stock_value': total_stock_value,
-        'total_items': Item.objects.filter(is_active=True).count(),
+        'total_items': item_qs.count(),
         'total_low_items': low_stock_count,
         'stock_by_warehouse': stock_by_warehouse,
         'today': today,
@@ -229,9 +328,11 @@ def transaction_detail(request, transaction_id):
 @login_required
 def current_stock(request):
     """View current stock levels with filters"""
-    stock_items = CurrentStock.objects.select_related(
+    company_id = _company_id(request)
+    _ensure_current_stock_seed(company_id)
+    stock_items = _scoped(CurrentStock.objects.select_related(
         'item', 'warehouse', 'lot', 'item__unit'
-    ).all().order_by('item__code', 'warehouse__name')
+    ).all(), company_id).order_by('item__code', 'warehouse__name')
     
     # Filter by warehouse
     warehouse_id = request.GET.get('warehouse')
@@ -259,7 +360,7 @@ def current_stock(request):
     
     context = {
         'stock_items': stock_items,
-        'warehouses': Warehouse.objects.filter(is_active=True),
+        'warehouses': _scoped(Warehouse.objects.filter(is_active=True), company_id),
         'categories': Item.ITEM_CATEGORY,
         'total_value': total_value,
         'today': timezone.now().date(),
@@ -274,9 +375,14 @@ def current_stock(request):
 @login_required
 def stock_summary(request):
     """Stock summary report with totals by item and expiry information"""
+    company_id = _company_id(request)
+    _ensure_current_stock_seed(company_id)
+    current_stock_qs = _scoped(CurrentStock.objects.all(), company_id)
+    lot_qs = _scoped(Lot.objects.filter(is_active=True), company_id)
+
     # All current stock grouped by item
     stock_by_item = (
-        CurrentStock.objects
+        current_stock_qs
         .values('item__code', 'item__name', 'item__unit__abbreviation', 'item__category')
         .annotate(
             total_qty=Sum('quantity'),
@@ -287,19 +393,15 @@ def stock_summary(request):
 
     # Near expiry (90 days or less) and expired
     today = timezone.now().date()
-    near_expiry_lots = Lot.objects.filter(
+    near_expiry_lots = lot_qs.filter(
         expiry_date__lte=today + timedelta(days=90),
-        expiry_date__gte=today,
-        is_active=True
+        expiry_date__gte=today
     ).select_related('item').order_by('expiry_date')
 
-    expired_lots = Lot.objects.filter(
-        expiry_date__lt=today,
-        is_active=True
-    ).select_related('item').order_by('expiry_date')
+    expired_lots = lot_qs.filter(expiry_date__lt=today).select_related('item').order_by('expiry_date')
     
     # Stock by warehouse
-    stock_by_warehouse = CurrentStock.objects.values(
+    stock_by_warehouse = current_stock_qs.values(
         'warehouse__name', 'warehouse__code'
     ).annotate(
         total_qty=Sum('quantity'),
@@ -309,7 +411,7 @@ def stock_summary(request):
     # Handle export
     if request.GET.get('export') == 'excel':
         resource = StockSummaryResource()
-        dataset = resource.export(CurrentStock.objects.select_related('item', 'warehouse', 'lot').all())
+        dataset = resource.export(current_stock_qs.select_related('item', 'warehouse', 'lot'))
         
         response = HttpResponse(
             dataset.xlsx,
@@ -334,70 +436,141 @@ def consumption_vs_bom(request):
     Report comparing actual consumption vs BOM standard consumption
     for completed production runs within a date range.
     """
+    company_id = _company_id(request)
+
     # Default: last 30 days
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
 
     # Optional filters from GET params
-    product_code = request.GET.get('product', 'FIN-PNUT')
+    requested_product = (request.GET.get('product') or '').strip()
     date_from = request.GET.get('from', start_date.strftime('%Y-%m-%d'))
     date_to = request.GET.get('to', end_date.strftime('%Y-%m-%d'))
 
     try:
         start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
         end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
-    except:
-        pass  # fallback to defaults
+    except ValueError:
+        pass
 
-    # Get product item
-    product_item = Item.objects.filter(code=product_code).first()
+    # Build selectable finished products from DB (not hardcoded codes)
+    product_choices = _scoped(
+        Item.objects.filter(category='finished', is_active=True).order_by('name', 'code'),
+        company_id
+    )
+
+    # Resolve product by id or code (case-insensitive), then fallback to first finished product
+    product_item = None
+    if requested_product:
+        if requested_product.isdigit():
+            product_item = product_choices.filter(id=int(requested_product)).first()
+        if not product_item:
+            product_item = product_choices.filter(code__iexact=requested_product).first()
+        if not product_item:
+            product_item = product_choices.filter(name__iexact=requested_product).first()
     if not product_item:
-        return render(request, 'inventory/consumption_vs_bom.html', {'error': 'Product not found'})
+        product_item = product_choices.first()
 
-    # Filter production runs by status='completed' and date range
-    production_runs = ProductionRun.objects.filter(
-        product=product_item,
-        status='completed',
-        end_date__date__range=[start_date, end_date]
+    if not product_item:
+        return render(request, 'inventory/consumption_vs_bom.html', {
+            'error': 'No finished products found.',
+            'no_data': True,
+            'report_rows': [],
+            'product_choices': product_choices,
+            'selected_product': requested_product,
+            'period_from': start_date,
+            'period_to': end_date,
+            'total_produced_kg': Decimal('0.00'),
+            'total_expected': Decimal('0.00'),
+            'total_actual': Decimal('0.00'),
+            'total_variance_qty': Decimal('0.00'),
+            'total_variance_pct': Decimal('0.00'),
+            'bom_version': '',
+        })
+
+    # Use product code as stable selected value for template
+    selected_product = product_item.code
+
+    # Filter production runs by status + product + date range.
+    # Some completed runs may not have end_date set, so fallback to start_date.
+    production_runs = _scoped(
+        ProductionRun.objects.filter(status='completed'),
+        company_id
+    ).filter(
+        Q(product=product_item) | Q(bom__product=product_item)
+    ).filter(
+        Q(end_date__date__range=[start_date, end_date]) |
+        Q(end_date__isnull=True, start_date__date__range=[start_date, end_date])
     )
 
     total_produced_kg = production_runs.aggregate(total=Sum('actual_quantity'))['total'] or Decimal('0')
 
-    # Get BOM (latest active version)
-    bom = product_item.boms.filter(is_active=True).order_by('-version').first()
-    if not bom:
-        return render(request, 'inventory/consumption_vs_bom.html', {'error': 'No active BOM found'})
+    # Get active BOMs by type (raw/formula + packing)
+    formula_bom = product_item.boms.filter(is_active=True, bom_type='formula').order_by('-version').first()
+    packing_bom = product_item.boms.filter(is_active=True, bom_type='packing').order_by('-version').first()
+    active_boms = [b for b in [formula_bom, packing_bom] if b]
+
+    if not active_boms:
+        return render(request, 'inventory/consumption_vs_bom.html', {
+            'error': f'No active BOM found for {product_item.code}.',
+            'no_data': True,
+            'product': product_item,
+            'product_choices': product_choices,
+            'selected_product': selected_product,
+            'period_from': start_date,
+            'period_to': end_date,
+            'report_rows': [],
+            'total_produced_kg': Decimal('0.00'),
+            'total_expected': Decimal('0.00'),
+            'total_actual': Decimal('0.00'),
+            'total_variance_qty': Decimal('0.00'),
+            'total_variance_pct': Decimal('0.00'),
+            'bom_version': '',
+        })
 
     # Build report rows
     report_rows = []
-    for line in bom.lines.all():
-        component = line.component
+    for bom in active_boms:
+        for line in bom.lines.select_related('component', 'component__unit').all():
+            component = line.component
 
-        # Theoretical / standard consumption (incl. wastage)
-        std_qty_per_kg = line.quantity_per_kg * (Decimal('1') + line.wastage_percentage / Decimal('100'))
-        expected_total = total_produced_kg * std_qty_per_kg
+            # Theoretical / standard consumption (incl. wastage)
+            std_qty_per_kg = line.quantity_per_kg * (Decimal('1') + line.wastage_percentage / Decimal('100'))
+            expected_total = total_produced_kg * std_qty_per_kg
 
-        # Actual issued quantity from transactions linked to these Production Runs
-        actual_issued = StockTransaction.objects.filter(
-            item=component,
-            transaction_type='issue',
-            production_run__in=production_runs
-        ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            # Actual issued quantity from stock transactions
+            actual_issued_tx = _scoped(StockTransaction.objects.filter(
+                item=component,
+                transaction_type='issue',
+                production_run__in=production_runs
+            ), company_id).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
 
-        variance_qty = actual_issued - expected_total
-        variance_pct = (variance_qty / expected_total * 100) if expected_total > 0 else Decimal('0')
+            # Fallback to production movements if transaction-based issue is empty
+            # Production completion currently logs 'out_production' as negative quantities.
+            actual_issued_mv = _scoped(InventoryMovement.objects.filter(
+                item=component,
+                movement_type='out_production',
+                production_run__in=production_runs
+            ), company_id).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+            actual_issued_mv = abs(actual_issued_mv)
 
-        report_rows.append({
-            'component_code': component.code,
-            'component_name': component.name,
-            'unit': component.unit.abbreviation,
-            'std_qty_per_kg': line.quantity_per_kg,
-            'wastage_pct': line.wastage_percentage,
-            'expected_total': expected_total.quantize(Decimal('0.00')),
-            'actual_issued': actual_issued.quantize(Decimal('0.00')),
-            'variance_qty': variance_qty.quantize(Decimal('0.00')),
-            'variance_pct': variance_pct.quantize(Decimal('0.00')),
-        })
+            actual_issued = actual_issued_tx if actual_issued_tx > 0 else actual_issued_mv
+
+            variance_qty = actual_issued - expected_total
+            variance_pct = (variance_qty / expected_total * 100) if expected_total > 0 else Decimal('0')
+
+            report_rows.append({
+                'bom_type': bom.bom_type,
+                'component_code': component.code,
+                'component_name': component.name,
+                'unit': component.unit.abbreviation,
+                'std_qty_per_kg': line.quantity_per_kg,
+                'wastage_pct': line.wastage_percentage,
+                'expected_total': expected_total.quantize(Decimal('0.00')),
+                'actual_issued': actual_issued.quantize(Decimal('0.00')),
+                'variance_qty': variance_qty.quantize(Decimal('0.00')),
+                'variance_pct': variance_pct.quantize(Decimal('0.00')),
+            })
 
     # Calculate totals
     total_expected = sum(row['expected_total'] for row in report_rows) if report_rows else Decimal('0')
@@ -405,8 +578,10 @@ def consumption_vs_bom(request):
     total_variance_qty = sum(row['variance_qty'] for row in report_rows) if report_rows else Decimal('0')
     total_variance_pct = (total_variance_qty / total_expected * 100) if total_expected > 0 else Decimal('0')
 
+    export_format = request.GET.get('export')
+
     # Handle Excel export
-    if request.GET.get('export') == 'excel':
+    if export_format == 'excel':
         resource = ConsumptionReportResource()
         
         dataset = resource.export(
@@ -426,30 +601,102 @@ def consumption_vs_bom(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
-    # Prepare data for charts (JSON)
-    chart_data = {
-        'labels': [row['component_name'] for row in report_rows],
-        'codes': [row['component_code'] for row in report_rows],
-        'expected': [float(row['expected_total']) for row in report_rows],
-        'actual': [float(row['actual_issued']) for row in report_rows],
-        'variance_pct': [float(row['variance_pct']) for row in report_rows],
-        'variance_kg': [float(row['variance_qty']) for row in report_rows],
-    }
+    # Handle PDF export (server-side, no browser JS dependency)
+    if export_format == 'pdf':
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.pdfgen import canvas
+        except ImportError:
+            return HttpResponse(
+                "PDF export is unavailable because reportlab is not installed.",
+                status=500,
+                content_type='text/plain'
+            )
+
+        response = HttpResponse(content_type='application/pdf')
+        filename = f"consumption_vs_bom_{product_item.code}_{timezone.now().strftime('%Y%m%d_%H%M')}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        page_size = landscape(A4)
+        pdf = canvas.Canvas(response, pagesize=page_size)
+        width, height = page_size
+
+        # Header
+        y = height - 35
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(30, y, "Consumption vs BOM Standard Report")
+        y -= 18
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(30, y, f"Product: {product_item.name} ({product_item.code})")
+        y -= 14
+        pdf.drawString(30, y, f"Period: {start_date.strftime('%d %b %Y')} - {end_date.strftime('%d %b %Y')}")
+        y -= 14
+        pdf.drawString(30, y, f"BOM Version: {' + '.join([f'{b.get_bom_type_display()} v{b.version}' for b in active_boms])}")
+        y -= 14
+        pdf.drawString(30, y, f"Total Production: {total_produced_kg.quantize(Decimal('0.00'))} kg")
+        y -= 20
+
+        # Table header
+        headers = ["Type", "Component", "Std/kg", "Wast%", "Expected", "Actual", "Var(kg)", "Var(%)"]
+        col_x = [30, 95, 290, 350, 410, 485, 560, 640]
+        pdf.setFont("Helvetica-Bold", 9)
+        for i, h in enumerate(headers):
+            pdf.drawString(col_x[i], y, h)
+        y -= 12
+        pdf.line(25, y + 8, width - 25, y + 8)
+        pdf.setFont("Helvetica", 8)
+
+        # Table rows
+        for row in report_rows:
+            if y < 40:
+                pdf.showPage()
+                y = height - 35
+                pdf.setFont("Helvetica-Bold", 9)
+                for i, h in enumerate(headers):
+                    pdf.drawString(col_x[i], y, h)
+                y -= 12
+                pdf.line(25, y + 8, width - 25, y + 8)
+                pdf.setFont("Helvetica", 8)
+
+            row_type = "Raw" if row.get('bom_type') == 'formula' else "Packing"
+            pdf.drawString(col_x[0], y, row_type)
+            pdf.drawString(col_x[1], y, f"{row['component_code']} {row['component_name'][:28]}")
+            pdf.drawRightString(col_x[3] - 6, y, f"{row['std_qty_per_kg']:.6f}")
+            pdf.drawRightString(col_x[4] - 6, y, f"{row['wastage_pct']:.1f}")
+            pdf.drawRightString(col_x[5] - 6, y, f"{row['expected_total']:.2f}")
+            pdf.drawRightString(col_x[6] - 6, y, f"{row['actual_issued']:.2f}")
+            pdf.drawRightString(col_x[7] - 6, y, f"{row['variance_qty']:.2f}")
+            pdf.drawRightString(width - 30, y, f"{row['variance_pct']:.1f}")
+            y -= 11
+
+        # Totals
+        y -= 5
+        pdf.line(25, y + 8, width - 25, y + 8)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(30, y - 3, "TOTAL")
+        pdf.drawRightString(col_x[5] - 6, y - 3, f"{total_expected.quantize(Decimal('0.00'))}")
+        pdf.drawRightString(col_x[6] - 6, y - 3, f"{total_actual.quantize(Decimal('0.00'))}")
+        pdf.drawRightString(col_x[7] - 6, y - 3, f"{total_variance_qty.quantize(Decimal('0.00'))}")
+        pdf.drawRightString(width - 30, y - 3, f"{total_variance_pct.quantize(Decimal('0.00'))}")
+
+        pdf.showPage()
+        pdf.save()
+        return response
 
     context = {
         'product': product_item,
+        'selected_product': selected_product,
+        'product_choices': product_choices,
         'total_produced_kg': total_produced_kg.quantize(Decimal('0.00')),
         'period_from': start_date,
         'period_to': end_date,
         'report_rows': report_rows,
-        'bom_version': bom.version,
+        'bom_version': " + ".join([f"{b.get_bom_type_display()} v{b.version}" for b in active_boms]),
         'no_data': total_produced_kg == 0,
-        'product_codes': Item.objects.filter(category='finished').values_list('code', flat=True),
         'total_expected': total_expected.quantize(Decimal('0.00')),
         'total_actual': total_actual.quantize(Decimal('0.00')),
         'total_variance_qty': total_variance_qty.quantize(Decimal('0.00')),
         'total_variance_pct': total_variance_pct.quantize(Decimal('0.00')),
-        'chart_data_json': json.dumps(chart_data, default=str),
     }
 
     return render(request, 'inventory/consumption_vs_bom.html', context)
@@ -458,7 +705,9 @@ def consumption_vs_bom(request):
 @login_required
 def low_stock_alerts(request):
     """View for low stock and reorder alerts"""
-    low_stock_items = CurrentStock.objects.select_related('item', 'warehouse', 'lot').filter(
+    company_id = _company_id(request)
+    _ensure_current_stock_seed(company_id)
+    low_stock_items = _scoped(CurrentStock.objects.select_related('item', 'warehouse', 'lot'), company_id).filter(
         Q(quantity__lt=F('item__minimum_stock')) |
         Q(quantity__lte=F('item__reorder_point'))
     ).order_by('item__code', 'warehouse__name')
@@ -529,14 +778,18 @@ def low_stock_widget(request):
 def inventory_analytics(request):
     """Inventory analytics dashboard with charts"""
     today = timezone.now().date()
+    company_id = _company_id(request)
+    _ensure_current_stock_seed(company_id)
+    current_stock_qs = _scoped(CurrentStock.objects.all(), company_id)
+    lot_qs = _scoped(Lot.objects.filter(is_active=True), company_id)
     
     # Total stock value
-    total_stock_value = CurrentStock.objects.aggregate(
+    total_stock_value = current_stock_qs.aggregate(
         total=Sum(F('quantity') * F('item__unit_cost'))
     )['total'] or 0
     
     # Stock by category
-    stock_by_category = CurrentStock.objects.values(
+    stock_by_category = current_stock_qs.values(
         'item__category'
     ).annotate(
         total_qty=Sum('quantity'),
@@ -544,20 +797,19 @@ def inventory_analytics(request):
     ).order_by('item__category')
     
     # Near expiry lots
-    near_expiry = Lot.objects.filter(
+    near_expiry = lot_qs.filter(
         expiry_date__lte=today + timedelta(days=90),
-        expiry_date__gte=today,
-        is_active=True
+        expiry_date__gte=today
     ).select_related('item').order_by('expiry_date')[:10]
     
     # Low stock alerts count
-    low_stock_count = CurrentStock.objects.filter(
+    low_stock_count = current_stock_qs.filter(
         Q(quantity__lt=F('item__minimum_stock')) |
         Q(quantity__lte=F('item__reorder_point'))
     ).count()
     
     # Top warehouses by value
-    top_warehouses = CurrentStock.objects.values(
+    top_warehouses = current_stock_qs.values(
         'warehouse__name'
     ).annotate(
         total_value=Sum(F('quantity') * F('item__unit_cost'))
@@ -571,7 +823,7 @@ def inventory_analytics(request):
         'total_stock_value': total_stock_value,
         'stock_by_category': stock_by_category,
         'near_expiry': near_expiry,
-        'expired_count': Lot.objects.filter(expiry_date__lt=today, is_active=True).count(),
+        'expired_count': lot_qs.filter(expiry_date__lt=today).count(),
         'low_stock_count': low_stock_count,
         'top_warehouses': top_warehouses,
         'today': today,

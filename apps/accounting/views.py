@@ -10,25 +10,43 @@ import json
 
 from .models import (
     Account, JournalEntry, PurchaseBill, Payment,  # Removed SalesInvoice from here
-    AccountType, AccountGroup, AccountCategory, ReconciliationAuditLog
+    AccountType, AccountGroup, AccountCategory, ReconciliationAuditLog, FiscalPeriod
 )
 from .resources import ARAgingResource, APAgingResource
-from apps.company.models import Customer
+from apps.company.models import Customer, Company
 from apps.purchasing.models import Supplier
 from apps.sales.models import SalesInvoice  # Import SalesInvoice from sales app
+
+
+def _current_company(request):
+    company_id = request.session.get('current_company_id')
+    if not company_id:
+        return None
+    return Company.objects.filter(id=company_id, is_active=True).first()
+
+
+def _scope(qs, company):
+    if company is None:
+        return qs.none()
+    return qs.filter(company=company)
 
 
 @login_required
 def dashboard(request):
     """Enhanced Accounting Dashboard with key metrics and charts"""
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     today = timezone.now().date()
     
     # AR Summary - using SalesInvoice from sales app
-    ar_invoices = SalesInvoice.objects.filter(status__in=['posted', 'partial', 'overdue'])
+    ar_invoices = _scope(SalesInvoice.objects.filter(status__in=['posted', 'partial', 'overdue']), company)
     total_ar_outstanding = ar_invoices.aggregate(total=Sum('total_amount'))['total'] or 0
     
     # AP Summary
-    ap_bills = PurchaseBill.objects.filter(status__in=['posted', 'partial', 'overdue'])
+    ap_bills = _scope(PurchaseBill.objects.filter(status__in=['posted', 'partial', 'overdue']), company)
     total_ap_outstanding = ap_bills.aggregate(total=Sum('total_amount'))['total'] or 0
     
     # Overdue amounts
@@ -36,15 +54,15 @@ def dashboard(request):
     overdue_ap_amount = ap_bills.filter(due_date__lt=today).aggregate(total=Sum('total_amount'))['total'] or 0
     
     # Cash balance (assuming account code 1010 for cash)
-    cash_account = Account.objects.filter(code='1010').first()
+    cash_account = _scope(Account.objects.filter(code='1010'), company).first()
     cash_balance = cash_account.current_balance if cash_account else 0
     
     # Monthly revenue (current month)
     month_start = today.replace(day=1)
-    monthly_revenue = SalesInvoice.objects.filter(
+    monthly_revenue = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'paid'],
         invoice_date__gte=month_start
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
+    ), company).aggregate(total=Sum('total_amount'))['total'] or 0
     
     # AR Aging buckets
     ar_current = ar_invoices.filter(due_date__gte=today).aggregate(total=Sum('total_amount'))['total'] or 0
@@ -83,12 +101,12 @@ def dashboard(request):
     ).aggregate(total=Sum('total_amount'))['total'] or 0
     
     # Recent journal entries
-    recent_journal_entries = JournalEntry.objects.filter(
+    recent_journal_entries = _scope(JournalEntry.objects.filter(
         is_posted=True
-    ).select_related('created_by').order_by('-entry_date')[:10]
+    ), company).select_related('created_by').order_by('-entry_date')[:10]
     
     # Top customers
-    top_customers = SalesInvoice.objects.values(
+    top_customers = _scope(SalesInvoice.objects.all(), company).values(
         'customer__name'
     ).annotate(
         total_invoiced=Sum('total_amount')
@@ -122,63 +140,68 @@ def dashboard(request):
 @login_required
 def ar_dashboard(request):
     """Accounts Receivable Dashboard with aging analysis"""
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     today = timezone.now().date()
     
     # Outstanding invoices from sales app
-    outstanding_invoices = SalesInvoice.objects.filter(
+    outstanding_invoices = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'partial']
-    ).select_related('customer')
+    ), company).select_related('customer')
     
     # Summary stats
     total_outstanding = outstanding_invoices.aggregate(
         total=Sum('total_amount')
     )['total'] or 0
     
-    overdue_count = SalesInvoice.objects.filter(
+    overdue_count = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         due_date__lt=today
-    ).count()
+    ), company).count()
     
-    overdue_amount = SalesInvoice.objects.filter(
+    overdue_amount = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         due_date__lt=today
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
+    ), company).aggregate(total=Sum('total_amount'))['total'] or 0
     
     # Aging buckets
     aging_buckets = {
-        'current': SalesInvoice.objects.filter(
+        'current': _scope(SalesInvoice.objects.filter(
             status__in=['posted', 'partial'],
             due_date__gte=today
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '1_30': SalesInvoice.objects.filter(
+        '1_30': _scope(SalesInvoice.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today,
             due_date__gte=today - timedelta(days=30)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '31_60': SalesInvoice.objects.filter(
+        '31_60': _scope(SalesInvoice.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=30),
             due_date__gte=today - timedelta(days=60)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '61_90': SalesInvoice.objects.filter(
+        '61_90': _scope(SalesInvoice.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=60),
             due_date__gte=today - timedelta(days=90)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '90_plus': SalesInvoice.objects.filter(
+        '90_plus': _scope(SalesInvoice.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=90)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
     }
     
     # Recent payments
-    recent_payments = Payment.objects.filter(
+    recent_payments = _scope(Payment.objects.filter(
         payment_type='customer'
-    ).select_related('customer').order_by('-date')[:10]
+    ), company).select_related('customer').order_by('-date')[:10]
     
     context = {
         'total_outstanding': total_outstanding,
@@ -196,63 +219,68 @@ def ar_dashboard(request):
 @login_required
 def ap_dashboard(request):
     """Accounts Payable Dashboard with aging analysis"""
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     today = timezone.now().date()
     
     # Outstanding bills
-    outstanding_bills = PurchaseBill.objects.filter(
+    outstanding_bills = _scope(PurchaseBill.objects.filter(
         status__in=['posted', 'partial']
-    ).select_related('supplier')
+    ), company).select_related('supplier')
     
     # Summary stats
     total_outstanding = outstanding_bills.aggregate(
         total=Sum('total_amount')
     )['total'] or 0
     
-    overdue_count = PurchaseBill.objects.filter(
+    overdue_count = _scope(PurchaseBill.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         due_date__lt=today
-    ).count()
+    ), company).count()
     
-    overdue_amount = PurchaseBill.objects.filter(
+    overdue_amount = _scope(PurchaseBill.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         due_date__lt=today
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
+    ), company).aggregate(total=Sum('total_amount'))['total'] or 0
     
     # Aging buckets
     aging_buckets = {
-        'current': PurchaseBill.objects.filter(
+        'current': _scope(PurchaseBill.objects.filter(
             status__in=['posted', 'partial'],
             due_date__gte=today
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '1_30': PurchaseBill.objects.filter(
+        '1_30': _scope(PurchaseBill.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today,
             due_date__gte=today - timedelta(days=30)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '31_60': PurchaseBill.objects.filter(
+        '31_60': _scope(PurchaseBill.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=30),
             due_date__gte=today - timedelta(days=60)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '61_90': PurchaseBill.objects.filter(
+        '61_90': _scope(PurchaseBill.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=60),
             due_date__gte=today - timedelta(days=90)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
         
-        '90_plus': PurchaseBill.objects.filter(
+        '90_plus': _scope(PurchaseBill.objects.filter(
             status__in=['posted', 'partial', 'overdue'],
             due_date__lt=today - timedelta(days=90)
-        ).aggregate(total=Sum('total_amount'))['total'] or 0,
+        ), company).aggregate(total=Sum('total_amount'))['total'] or 0,
     }
     
     # Recent payments
-    recent_payments = Payment.objects.filter(
+    recent_payments = _scope(Payment.objects.filter(
         payment_type='supplier'
-    ).select_related('supplier').order_by('-date')[:10]
+    ), company).select_related('supplier').order_by('-date')[:10]
     
     context = {
         'total_outstanding': total_outstanding,
@@ -273,9 +301,9 @@ def ar_aging_report(request):
     today = timezone.now().date()
     
     # Get all AR invoices from sales app
-    invoices = SalesInvoice.objects.filter(
+    invoices = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'partial', 'overdue']
-    ).select_related('customer').order_by('due_date')
+    ), company).select_related('customer').order_by('due_date')
     
     # Calculate aging buckets
     aging_buckets = {
@@ -321,9 +349,9 @@ def ap_aging_report(request):
     today = timezone.now().date()
     
     # Get all AP bills
-    bills = PurchaseBill.objects.filter(
+    bills = _scope(PurchaseBill.objects.filter(
         status__in=['posted', 'partial', 'overdue']
-    ).select_related('supplier').order_by('due_date')
+    ), company).select_related('supplier').order_by('due_date')
     
     # Calculate aging buckets
     aging_buckets = {
@@ -366,7 +394,8 @@ def ap_aging_report(request):
 @login_required
 def trial_balance(request):
     """Trial Balance report"""
-    accounts = Account.objects.filter(is_active=True).select_related(
+    company = _current_company(request)
+    accounts = _scope(Account.objects.filter(is_active=True), company).select_related(
         'account_type', 'account_group', 'account_category'
     ).order_by('code')
     
@@ -387,7 +416,8 @@ def trial_balance(request):
 @login_required
 def chart_of_accounts(request):
     """Chart of Accounts view with hierarchy"""
-    account_types = AccountType.objects.filter(is_active=True).prefetch_related(
+    company = _current_company(request)
+    account_types = _scope(AccountType.objects.filter(is_active=True), company).prefetch_related(
         'groups__categories__accounts'
     ).order_by('code_prefix')
     
@@ -402,6 +432,7 @@ def chart_of_accounts(request):
 @login_required
 def general_ledger(request):
     """General Ledger view with filters"""
+    company = _current_company(request)
     account_id = request.GET.get('account')
     from_date = request.GET.get('from', (timezone.now().date() - timedelta(days=30)).strftime('%Y-%m-%d'))
     to_date = request.GET.get('to', timezone.now().date().strftime('%Y-%m-%d'))
@@ -413,15 +444,15 @@ def general_ledger(request):
         from_date = timezone.now().date() - timedelta(days=30)
         to_date = timezone.now().date()
     
-    journal_entries = JournalEntry.objects.filter(
+    journal_entries = _scope(JournalEntry.objects.filter(
         is_posted=True,
         entry_date__range=[from_date, to_date]
-    ).select_related('created_by').prefetch_related('lines__account').order_by('entry_date', 'id')
+    ), company).select_related('created_by').prefetch_related('lines__account').order_by('entry_date', 'id')
     
     if account_id:
         journal_entries = journal_entries.filter(lines__account_id=account_id).distinct()
     
-    accounts = Account.objects.filter(is_active=True).order_by('code')
+    accounts = _scope(Account.objects.filter(is_active=True), company).order_by('code')
     
     context = {
         'journal_entries': journal_entries,
@@ -438,22 +469,23 @@ def general_ledger(request):
 @login_required
 def payment_reconciliation(request):
     """Payment reconciliation screen"""
+    company = _current_company(request)
     today = timezone.now().date()
     cutoff = today - timedelta(days=90)
 
-    ar_invoices = SalesInvoice.objects.filter(
+    ar_invoices = _scope(SalesInvoice.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         invoice_date__gte=cutoff
-    ).select_related('customer').order_by('due_date')
+    ), company).select_related('customer').order_by('due_date')
 
-    ap_bills = PurchaseBill.objects.filter(
+    ap_bills = _scope(PurchaseBill.objects.filter(
         status__in=['posted', 'partial', 'overdue'],
         bill_date__gte=cutoff
-    ).select_related('supplier').order_by('due_date')
+    ), company).select_related('supplier').order_by('due_date')
 
-    recent_payments = Payment.objects.filter(
+    recent_payments = _scope(Payment.objects.filter(
         date__gte=cutoff
-    ).select_related('customer', 'supplier').order_by('-date')[:20]
+    ), company).select_related('customer', 'supplier').order_by('-date')[:20]
 
     tab = request.GET.get('tab', 'ar')
 
@@ -471,7 +503,8 @@ def payment_reconciliation(request):
 @login_required
 def reconcile_payment(request, payment_id):
     """Reconcile a payment against invoices or bills"""
-    payment = get_object_or_404(Payment, id=payment_id)
+    company = _current_company(request)
+    payment = get_object_or_404(_scope(Payment.objects.all(), company), id=payment_id)
 
     if request.method == 'POST':
         doc_type = request.POST.get('doc_type')  # 'invoice' or 'bill'
@@ -484,10 +517,10 @@ def reconcile_payment(request, payment_id):
             return redirect('accounting:reconcile_payment', payment_id=payment.id)
 
         if doc_type == 'invoice':
-            doc = get_object_or_404(SalesInvoice, id=doc_id, customer=payment.customer)
+            doc = get_object_or_404(_scope(SalesInvoice.objects.all(), company), id=doc_id, customer=payment.customer)
             remaining = doc.total_amount - (doc.paid_amount or 0)
         else:
-            doc = get_object_or_404(PurchaseBill, id=doc_id, supplier=payment.supplier)
+            doc = get_object_or_404(_scope(PurchaseBill.objects.all(), company), id=doc_id, supplier=payment.supplier)
             remaining = doc.total_amount - (doc.paid_amount or 0)
 
         if amount_applied > remaining:
@@ -531,15 +564,15 @@ def reconcile_payment(request, payment_id):
 
     # GET: show available documents
     if payment.payment_type == 'customer':
-        docs = SalesInvoice.objects.filter(
+        docs = _scope(SalesInvoice.objects.filter(
             customer=payment.customer, 
             status__in=['posted', 'partial']
-        ).order_by('due_date')
+        ), company).order_by('due_date')
     else:
-        docs = PurchaseBill.objects.filter(
+        docs = _scope(PurchaseBill.objects.filter(
             supplier=payment.supplier, 
             status__in=['posted', 'partial']
-        ).order_by('due_date')
+        ), company).order_by('due_date')
 
     context = {
         'payment': payment,
@@ -568,8 +601,9 @@ def payment_entry(request):
             date = timezone.now().date()
 
         if payment_type == 'customer':
-            party = get_object_or_404(Customer, id=party_id)
+            party = get_object_or_404(Customer, id=party_id, company=company)
             payment = Payment.objects.create(
+                company=company,
                 payment_type='customer',
                 customer=party,
                 date=date,
@@ -580,8 +614,9 @@ def payment_entry(request):
             )
             messages.success(request, f"Receipt of {amount} ETB from {party.name} recorded successfully.")
         else:
-            party = get_object_or_404(Supplier, id=party_id)
+            party = get_object_or_404(Supplier, id=party_id, company=company.name)
             payment = Payment.objects.create(
+                company=company,
                 payment_type='supplier',
                 supplier=party,
                 date=date,
@@ -594,8 +629,8 @@ def payment_entry(request):
 
         return redirect('accounting:payment_reconciliation')
 
-    customers = Customer.objects.filter(is_active=True).order_by('name')
-    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+    customers = Customer.objects.filter(is_active=True, company=company).order_by('name')
+    suppliers = Supplier.objects.filter(is_active=True, company=company.name).order_by('name')
 
     context = {
         'customers': customers,
@@ -603,3 +638,116 @@ def payment_entry(request):
         'today': timezone.now().date(),
     }
     return render(request, 'accounting/payment_entry.html', context)
+
+
+# ============================
+# Fiscal Period Views
+# ============================
+
+@login_required
+def fiscal_period_list(request):
+    """List all fiscal periods for the current company"""
+    if not hasattr(request, 'company') or not request.company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+    
+    periods = FiscalPeriod.objects.filter(company=request.company).order_by('-start_date')
+    
+    context = {
+        'periods': periods,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'accounting/fiscal_period_list.html', context)
+
+
+@login_required
+def fiscal_period_create(request):
+    """Create a new fiscal period"""
+    if not hasattr(request, 'company') or not request.company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        period_type = request.POST.get('period_type')
+        start_date = request.POST.get('start_date')
+        end_date = request.POST.get('end_date')
+        notes = request.POST.get('notes', '')
+        
+        try:
+            period = FiscalPeriod.objects.create(
+                company=request.company,
+                name=name,
+                period_type=period_type,
+                start_date=start_date,
+                end_date=end_date,
+                notes=notes,
+                created_by=request.user
+            )
+            messages.success(request, f"Fiscal period '{period.name}' created successfully.")
+            return redirect('accounting:fiscal_period_list')
+        except Exception as e:
+            messages.error(request, f"Error creating fiscal period: {str(e)}")
+    
+    context = {
+        'today': timezone.now().date(),
+    }
+    return render(request, 'accounting/fiscal_period_form.html', context)
+
+
+@login_required
+def fiscal_period_detail(request, period_id):
+    """View fiscal period details"""
+    if not hasattr(request, 'company') or not request.company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+    
+    period = get_object_or_404(FiscalPeriod, id=period_id, company=request.company)
+    
+    # Get journal entries for this period
+    journal_entries = JournalEntry.objects.filter(
+        company=request.company,
+        entry_date__range=(period.start_date, period.end_date),
+        is_posted=True
+    ).order_by('-entry_date')[:20]
+    
+    context = {
+        'period': period,
+        'journal_entries': journal_entries,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'accounting/fiscal_period_detail.html', context)
+
+
+@login_required
+def fiscal_period_close(request, period_id):
+    """Close a fiscal period"""
+    if not hasattr(request, 'company') or not request.company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+    
+    period = get_object_or_404(FiscalPeriod, id=period_id, company=request.company)
+    
+    if request.method == 'POST':
+        if period.close_period(request.user):
+            messages.success(request, f"Fiscal period '{period.name}' has been closed successfully.")
+        else:
+            messages.error(request, f"Failed to close fiscal period '{period.name}'.")
+        return redirect('accounting:fiscal_period_detail', period_id=period.id)
+    
+    context = {
+        'period': period,
+    }
+    return render(request, 'accounting/fiscal_period_close.html', context)
+    company = _current_company(request)
+    if company is None:
+        return redirect('core:home')
+
+    company = _current_company(request)
+    if company is None:
+        return redirect('core:home')
+
+    company = _current_company(request)
+    if company is None:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')

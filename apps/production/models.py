@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils.html import format_html
 from decimal import Decimal
 
 from apps.core.models import Item, Unit, CompanyModel
@@ -57,7 +58,7 @@ class BOM(CompanyModel):
         max_digits=10,
         decimal_places=4,
         default=1000.0000,
-        help_text="Base quantity (usually 1000kg)",
+        help_text="Base quantity (1000 kg)",
     )
 
     base_uom = models.ForeignKey(

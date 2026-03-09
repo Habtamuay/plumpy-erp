@@ -168,6 +168,99 @@ class Account(CompanyModel):
         return level
 
 
+class FiscalPeriod(CompanyModel):
+    """
+    Accounting Fiscal Period for a company
+    Defines the accounting periods for financial reporting
+    """
+    company = models.ForeignKey('company.Company', on_delete=models.CASCADE, related_name='fiscal_periods')
+    name = models.CharField(max_length=100, help_text="Period name (e.g., '2024 Q1', 'January 2024')")
+    period_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('monthly', 'Monthly'),
+            ('quarterly', 'Quarterly'),
+            ('yearly', 'Yearly'),
+            ('custom', 'Custom'),
+        ],
+        default='monthly'
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_open = models.BooleanField(default=True, help_text="Whether the period is open for transactions")
+    is_closed = models.BooleanField(default=False, help_text="Whether the period has been closed")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='closed_periods')
+    
+    # Financial summary (calculated when period is closed)
+    opening_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    closing_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_debits = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_credits = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = "Fiscal Period"
+        verbose_name_plural = "Fiscal Periods"
+        unique_together = ['company', 'start_date', 'end_date']
+        indexes = [
+            models.Index(fields=['company', 'is_open']),
+            models.Index(fields=['company', 'start_date', 'end_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.name} ({self.start_date} to {self.end_date})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.start_date >= self.end_date:
+            raise ValidationError("End date must be after start date")
+        if self.is_closed and not self.closed_at:
+            raise ValidationError("Closed periods must have a closed_at timestamp")
+
+    def close_period(self, user):
+        """Close the fiscal period"""
+        if self.is_closed:
+            return False
+        
+        # Calculate final balances
+        from .models import JournalLine
+        debits = JournalLine.objects.filter(
+            journal_entry__company=self.company,
+            journal_entry__entry_date__range=(self.start_date, self.end_date),
+            debit__gt=0
+        ).aggregate(total=models.Sum('debit'))['total'] or 0
+        
+        credits = JournalLine.objects.filter(
+            journal_entry__company=self.company,
+            journal_entry__entry_date__range=(self.start_date, self.end_date),
+            credit__gt=0
+        ).aggregate(total=models.Sum('credit'))['total'] or 0
+        
+        self.total_debits = debits
+        self.total_credits = credits
+        self.closing_balance = self.opening_balance + debits - credits
+        self.is_closed = True
+        self.is_open = False
+        self.closed_at = timezone.now()
+        self.closed_by = user
+        self.save()
+        return True
+
+    @property
+    def status(self):
+        if self.is_closed:
+            return "Closed"
+        elif self.is_open:
+            return "Open"
+        else:
+            return "Locked"
+
+
 class JournalEntry(CompanyModel):
     """Journal Entry header"""
     company = models.ForeignKey('company.Company', on_delete=models.PROTECT, related_name='journal_entries')

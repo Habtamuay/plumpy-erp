@@ -10,11 +10,10 @@ from django.views.generic import RedirectView
 urlpatterns = [
     # Admin site
     path('admin/', admin.site.urls),
+    path('favicon.ico', RedirectView.as_view(url='/static/images/erp-logo.png', permanent=True)),
     
     # App URLs
-    path('', RedirectView.as_view(url='/dashboard/'), name='home'),  # Redirect root to dashboard
-    path('', include('apps.core.urls')),  # No namespace
-    
+    path('', include('apps.core.urls')),  # Root includes core urls
     
     # Core modules
     path('company/', include('apps.company.urls')),

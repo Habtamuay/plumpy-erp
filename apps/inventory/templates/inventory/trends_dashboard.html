@@ -51,9 +51,16 @@
     </div>
 </div>
 
-<!-- Chart.js Script -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    if (typeof Chart === 'undefined') {
+        const ids = ['inventoryValueChart', 'productionChart', 'consumptionChart'];
+        ids.forEach((id) => {
+            const wrap = document.getElementById(id)?.parentNode;
+            if (wrap) {
+                wrap.innerHTML = '<div class="alert alert-warning mb-0">Charts are unavailable in this browser session.</div>';
+            }
+        });
+    } else {
     // Data from Django
     const labels = {{ labels_json|safe }};
     const inventoryValues = {{ inventory_value_json|safe }};
@@ -171,6 +178,7 @@
             }
         }
     });
+    }
 </script>
 
 {% endblock %}

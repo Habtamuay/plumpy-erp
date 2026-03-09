@@ -26,6 +26,9 @@
                         <h2 class="mb-1"><i class="fas fa-shopping-cart me-2"></i>Purchase Orders</h2>
                         <p class="text-muted mb-0">
                             <i class="fas fa-list me-2"></i>Manage and track all purchase orders
+                            {% if request.session.current_company_name %}
+                                <span class="ms-2">| Company: <strong>{{ request.session.current_company_name }}</strong></span>
+                            {% endif %}
                         </p>
                     </div>
                     <div>
@@ -229,9 +232,14 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {{ po.expected_date|date:"Y-m-d"|default:"-" }}
-                                        {% if po.expected_date %}
-                                        <br><small class="text-muted">{{ po.expected_date|timeuntil }}</small>
+                                        {% if po.expected_delivery_date %}
+                                            {{ po.expected_delivery_date|date:"Y-m-d" }}
+                                            <br><small class="text-muted">{{ po.expected_delivery_date|timeuntil }}</small>
+                                        {% elif po.requisition and po.requisition.required_date %}
+                                            {{ po.requisition.required_date|date:"Y-m-d" }}
+                                            <br><small class="text-muted">From Requisition</small>
+                                        {% else %}
+                                            -
                                         {% endif %}
                                     </td>
                                     <td>

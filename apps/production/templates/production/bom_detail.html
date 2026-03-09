@@ -1,0 +1,341 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}BOM Details - {{ bom.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .component-row:hover {
+        background-color: #f8f9fa;
+    }
+    .cost-positive { color: #28a745; }
+    .cost-negative { color: #dc3545; }
+    .total-row {
+        font-weight: bold;
+        background-color: #e9ecef;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-file-text me-2 text-primary"></i>Bill of Materials
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-info-circle me-2"></i>{{ bom.name }} (v{{ bom.version }})
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge fs-6 me-2 {% if bom.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if bom.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                        <a href="{% url 'production:bom_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to BOM List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOM Information -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>BOM Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 30%;">Product:</th>
+                            <td>
+                                <strong>{{ bom.product.name }}</strong>
+                                <br><small class="text-muted">{{ bom.product.code }}</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Version:</th>
+                            <td>{{ bom.version }}</td>
+                        </tr>
+                        <tr>
+                            <th>Type:</th>
+                            <td>{{ bom.get_bom_type_display }}</td>
+                        </tr>
+                        <tr>
+                            <th>Base Quantity:</th>
+                            <td>1000 kg</td>
+                        </tr>
+                        <tr>
+                            <th>Yield Percent:</th>
+                            <td>{{ bom.yield_percent|floatformat:1 }}%</td>
+                        </tr>
+                        <tr>
+                            <th>Effective From:</th>
+                            <td>{{ bom.effective_from|date:"Y-m-d" }}</td>
+                        </tr>
+                        {% if bom.effective_to %}
+                        <tr>
+                            <th>Effective To:</th>
+                            <td>{{ bom.effective_to|date:"Y-m-d" }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <th>Components:</th>
+                            <td>{{ lines|length }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-calculator me-2"></i>Cost Summary</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 50%;">Total Material Cost (per 1000 kg):</th>
+                            <td class="text-end fw-bold">{{ total_cost|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td class="text-end">
+                                {% if bom.is_current %}
+                                <span class="badge bg-success">Current</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Not Current</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Description -->
+    {% if bom.description %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Description</h5>
+                </div>
+                <div class="card-body">
+                    {{ bom.description|linebreaks }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Components Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Components</h5>
+                    <span class="badge bg-primary">{{ lines|length }} items</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Category</th>
+                                    <th class="text-end">Quantity</th>
+                                    <th>Unit</th>
+                                    <th class="text-end">Waste %</th>
+                                    <th class="text-end">Unit Cost</th>
+                                    <th class="text-end">Line Cost</th>
+                                    <th>% of Total</th>
+                                    <th>Critical</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for line in lines %}
+                                <tr class="component-row">
+                                    <td>{{ line.sequence }}</td>
+                                    <td><strong>{{ line.component.code }}</strong></td>
+                                    <td>{{ line.component.name }}</td>
+                                    <td>{{ line.component.get_category_display }}</td>
+                                    <td class="text-end">{{ line.quantity_per_base|floatformat:3 }}</td>
+                                    <td>{{ line.unit.abbreviation }}</td>
+                                    <td class="text-end">{{ line.wastage_percentage|floatformat:1 }}%</td>
+                                    <td class="text-end">{{ line.component.unit_cost|floatformat:2 }}</td>
+                                    <td class="text-end fw-bold">{{ line.cost_per_base|floatformat:2 }}</td>
+                                    <td class="text-end">{{ line.cost_percentage|floatformat:1 }}%</td>
+                                    <td class="text-center">
+                                        {% if line.is_critical %}
+                                        <span class="badge bg-danger">Yes</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="11" class="text-center py-5">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <h5 class="text-muted">No components found</h5>
+                                        <p>This BOM has no components defined.</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="total-row">
+                                    <th colspan="8" class="text-end">Total Material Cost:</th>
+                                    <th class="text-end">{{ total_cost|floatformat:2 }} ETB</th>
+                                    <th colspan="2"></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Breakdown Chart (Optional) -->
+    {% if lines %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Cost Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <canvas id="costChart" height="300"></canvas>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Top Components by Cost</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    {% for line in lines|dictsortreversed:"cost_per_base"|slice:":5" %}
+                                    <tr>
+                                        <td>{{ line.component.code }}</td>
+                                        <td class="text-end">{{ line.cost_per_base|floatformat:2 }}</td>
+                                        <td class="text-end">{{ line.cost_percentage|floatformat:1 }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Notes -->
+    {% if bom.notes %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-sticky-note me-2"></i>Notes</h5>
+                </div>
+                <div class="card-body">
+                    {{ bom.notes|linebreaks }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Timestamps -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-muted small">
+                    <i class="bi bi-clock"></i> Created: {{ bom.created_at|date:"Y-m-d H:i:s" }}
+                    {% if bom.created_by %} by {{ bom.created_by.get_full_name|default:bom.created_by.username }}{% endif %} |
+                    <i class="bi bi-pencil-square"></i> Last Updated: {{ bom.updated_at|date:"Y-m-d H:i:s" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if lines %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get top 8 components by cost
+        const sortedLines = {{ lines|dictsortreversed:"cost_per_base"|slice:":8"|safe }};
+        
+        const labels = sortedLines.map(line => line.component.code);
+        const data = sortedLines.map(line => line.cost_per_base);
+        const totalCost = {{ total_cost|floatformat:2 }};
+        
+        // If there are more than 8 components, add an "Others" category
+        {% if lines|length > 8 %}
+            const otherCost = {{ total_cost|floatformat:2 }} - data.reduce((a, b) => a + b, 0);
+            labels.push('Others');
+            data.push(otherCost);
+        {% endif %}
+        
+        const ctx = document.getElementById('costChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        '#4361ee', '#06d6a0', '#ffb703', '#ef476f',
+                        '#8338ec', '#3a86ff', '#fb5607', '#ff006e',
+                        '#6c757d'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 12 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.raw;
+                                const percentage = ((value / totalCost) * 100).toFixed(1);
+                                return `${context.label}: ${value.toFixed(2)} ETB (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endif %}
+{% endblock %}

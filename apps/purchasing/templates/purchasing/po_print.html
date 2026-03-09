@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Order {{ po.po_number }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #1f2937;
+            margin: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #d1d5db;
+            padding-bottom: 10px;
+        }
+        .company h2 {
+            margin: 0 0 6px 0;
+        }
+        .company p, .meta p {
+            margin: 2px 0;
+            font-size: 13px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .section {
+            margin-top: 18px;
+        }
+        .section h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 8px;
+            font-size: 13px;
+        }
+        th {
+            background: #f3f4f6;
+            text-align: left;
+        }
+        .text-end {
+            text-align: right;
+        }
+        .totals th, .totals td {
+            font-weight: 600;
+        }
+        .strong-row th, .strong-row td {
+            font-size: 15px;
+            font-weight: 700;
+        }
+        @media print {
+            body { margin: 10mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company">
+            <h2>{{ company_name|default:"Company" }}</h2>
+            <p>{{ company_address|default:"" }}</p>
+            <p>{{ company_phone|default:"" }}</p>
+            <p>{{ company_email|default:"" }}</p>
+            <p>Tax ID: {{ company_tax_id|default:"" }}</p>
+        </div>
+        <div class="meta">
+            <h1>Purchase Order</h1>
+            <p><strong>PO #:</strong> {{ po.po_number }}</p>
+            <p><strong>Date:</strong> {{ po.order_date|date:"Y-m-d" }}</p>
+            <p><strong>Expected Date:</strong> {{ po.expected_delivery_date|date:"Y-m-d"|default:"-" }}</p>
+            <p><strong>Status:</strong> {{ po.get_status_display }}</p>
+            <p><strong>Currency:</strong> {{ po.currency }}</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Supplier</h3>
+        <p><strong>{{ po.supplier.name }}</strong> ({{ po.supplier.code }})</p>
+        <p>{{ po.supplier.address|default:"" }}</p>
+        <p>{{ po.supplier.phone|default:"" }} | {{ po.supplier.email|default:"" }}</p>
+    </div>
+
+    <div class="section">
+        <h3>Order Items</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th class="text-end">Quantity</th>
+                    <th>Unit</th>
+                    <th class="text-end">Unit Price</th>
+                    <th class="text-end">Tax %</th>
+                    <th class="text-end">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr>
+                    <td>{{ line.item }}</td>
+                    <td class="text-end">{{ line.quantity_ordered|floatformat:2 }}</td>
+                    <td>{% if line.unit_obj %}{{ line.unit_obj.abbreviation }}{% else %}{{ line.unit }}{% endif %}</td>
+                    <td class="text-end">{{ line.unit_price|floatformat:2 }}</td>
+                    <td class="text-end">{{ line.tax_rate|floatformat:1 }}%</td>
+                    <td class="text-end">{{ line.subtotal|floatformat:2 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-end">No lines found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="totals">
+                <tr>
+                    <th colspan="5" class="text-end">Subtotal Before VAT</th>
+                    <td class="text-end">{{ subtotal|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <th colspan="5" class="text-end">15% VAT</th>
+                    <td class="text-end">{{ tax_total|floatformat:2 }}</td>
+                </tr>
+                {% if po.shipping_cost > 0 %}
+                <tr>
+                    <th colspan="5" class="text-end">Shipping</th>
+                    <td class="text-end">{{ po.shipping_cost|floatformat:2 }}</td>
+                </tr>
+                {% endif %}
+                {% if po.discount > 0 %}
+                <tr>
+                    <th colspan="5" class="text-end">Discount</th>
+                    <td class="text-end">-{{ po.discount|floatformat:2 }}</td>
+                </tr>
+                {% endif %}
+                <tr class="strong-row">
+                    <th colspan="5" class="text-end">Grand Total</th>
+                    <td class="text-end">{{ grand_total|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <th colspan="5" class="text-end">WHT (3%)</th>
+                    <td class="text-end">-{{ withholding_tax|floatformat:2 }}</td>
+                </tr>
+                <tr class="strong-row">
+                    <th colspan="5" class="text-end">Net Grand Total Amt</th>
+                    <td class="text-end">{{ net_grand_total|floatformat:2 }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    {% if po.notes %}
+    <div class="section">
+        <h3>Notes</h3>
+        <p>{{ po.notes|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+
+    <script>
+        window.addEventListener('load', function () {
+            window.print();
+        });
+    </script>
+</body>
+</html>

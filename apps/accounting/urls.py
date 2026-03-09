@@ -25,4 +25,10 @@ urlpatterns = [
     path('payment-entry/', views.payment_entry, name='payment_entry'),
     path('reconciliation/', views.payment_reconciliation, name='payment_reconciliation'),
     path('reconcile/<int:payment_id>/', views.reconcile_payment, name='reconcile_payment'),
+    
+    # Fiscal Periods
+    path('fiscal-periods/', views.fiscal_period_list, name='fiscal_period_list'),
+    path('fiscal-periods/create/', views.fiscal_period_create, name='fiscal_period_create'),
+    path('fiscal-periods/<int:period_id>/', views.fiscal_period_detail, name='fiscal_period_detail'),
+    path('fiscal-periods/<int:period_id>/close/', views.fiscal_period_close, name='fiscal_period_close'),
 ]

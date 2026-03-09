@@ -15,12 +15,6 @@
     <!-- Font Awesome (optional, as backup) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
-    <!-- Chart.js for analytics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Chart.js Zoom Plugin (for interactive charts) -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-    
     <!-- jsPDF & html2canvas for PDF exports -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -145,6 +139,22 @@
         </button>
         
         <div class="w-100"></div>
+        
+        {% if user.is_authenticated and request.session.current_company_name %}
+        <div class="navbar-nav">
+            <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle px-3 text-white" href="#" id="companyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-building me-1"></i>
+                    {{ request.session.current_company_name }}
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="companyDropdown">
+                    <li><a class="dropdown-item" href="{% url 'core:home' %}">
+                        <i class="bi bi-arrow-repeat me-2"></i>Switch Company
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
         
         <div class="navbar-nav">
             <div class="nav-item text-nowrap">

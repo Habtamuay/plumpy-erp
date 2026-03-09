@@ -32,9 +32,19 @@
                         <a href="{% url 'purchasing:supplier_dashboard' %}" class="btn btn-outline-primary">
                             <i class="bi bi-speedometer2 me-2"></i>Dashboard
                         </a>
-                        <a href="{% url 'purchasing:export_suppliers' %}" class="btn btn-outline-success">
-                            <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export
-                        </a>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportAll('excel')">
+                                    <i class="bi bi-file-earmark-excel me-2 text-success"></i>Export Excel
+                                </a></li>
+                                <li><a class="dropdown-item" href="javascript:void(0)" onclick="exportAll('pdf')">
+                                    <i class="bi bi-file-earmark-pdf me-2 text-danger"></i>Export PDF
+                                </a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -179,7 +189,7 @@
                                     <td>{{ supplier.phone|default:"-" }}</td>
                                     <td>{{ supplier.tax_id|default:"-" }}</td>
                                     <td>
-                                        {% if supplier.vat_registered %}
+                                        {% if supplier.tax_id or supplier.tin %}
                                         <span class="badge bg-success">Yes</span>
                                         {% else %}
                                         <span class="badge bg-secondary">No</span>
@@ -318,40 +328,7 @@
             info: false,
             ordering: true,
             responsive: true,
-            dom: 'Bfrtip',
-            buttons: [
-                {
-                    extend: 'copy',
-                    text: '<i class="bi bi-files"></i> Copy',
-                    className: 'btn btn-sm btn-outline-secondary'
-                },
-                {
-                    extend: 'excel',
-                    text: '<i class="bi bi-file-earmark-excel"></i> Excel',
-                    className: 'btn btn-sm btn-outline-success',
-                    filename: 'suppliers_{{ now|date:"Ymd" }}',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'pdf',
-                    text: '<i class="bi bi-file-earmark-pdf"></i> PDF',
-                    className: 'btn btn-sm btn-outline-danger',
-                    filename: 'suppliers_{{ now|date:"Ymd" }}',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'print',
-                    text: '<i class="bi bi-printer"></i> Print',
-                    className: 'btn btn-sm btn-outline-secondary',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                }
-            ],
+            dom: 'frtip',
             columnDefs: [
                 { orderable: false, targets: [8] } // Actions column not sortable
             ]
@@ -359,12 +336,19 @@
     });
 
     // Export functions
+    function exportAll(format) {
+        const params = new URLSearchParams(window.location.search);
+        params.delete('page');
+        params.set('format', format);
+        window.location.href = "{% url 'purchasing:export_suppliers' %}?" + params.toString();
+    }
+
     function exportToExcel() {
-        $('#suppliersTable').DataTable().button('.buttons-excel').trigger();
+        exportAll('excel');
     }
 
     function exportToPDF() {
-        $('#suppliersTable').DataTable().button('.buttons-pdf').trigger();
+        exportAll('pdf');
     }
 
     function printTable() {

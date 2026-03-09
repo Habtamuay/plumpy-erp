@@ -1,0 +1,394 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Production Run {{ run.id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .status-planned { background-color: #17a2b8; color: white; }
+    .status-in_progress { background-color: #ffc107; color: black; }
+    .status-completed { background-color: #28a745; color: white; }
+    .status-cancelled { background-color: #dc3545; color: white; }
+    
+    .summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .variance-positive { color: #dc3545; font-weight: bold; }
+    .variance-negative { color: #28a745; font-weight: bold; }
+    .variance-zero { color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-gear-wide-connected me-2 text-primary"></i>Production Run #{{ run.id }}
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-calendar me-2"></i>Started: {{ run.start_date|date:"F j, Y H:i" }}
+                            {% if run.end_date %} | Completed: {{ run.end_date|date:"F j, Y H:i" }}{% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="status-badge 
+                            {% if run.status == 'planned' %}status-planned
+                            {% elif run.status == 'in_progress' %}status-in_progress
+                            {% elif run.status == 'completed' %}status-completed
+                            {% elif run.status == 'cancelled' %}status-cancelled
+                            {% endif %} fs-6 me-2">
+                            {{ run.get_status_display }}
+                        </span>
+                        <a href="{% url 'production:production_run_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="btn-group" role="group">
+                        {% if run.status == 'planned' %}
+                        <a href="{% url 'production:start_run' %}?run_id={{ run.id }}" class="btn btn-primary">
+                            <i class="bi bi-play-fill me-2"></i>Start Run
+                        </a>
+                        <a href="{% url 'production:cancel_run' run.id %}" class="btn btn-danger">
+                            <i class="bi bi-x-circle me-2"></i>Cancel
+                        </a>
+                        {% endif %}
+                        
+                        {% if run.status == 'in_progress' %}
+                        <a href="{% url 'production:complete_run' run.id %}" class="btn btn-success">
+                            <i class="bi bi-check-circle me-2"></i>Complete Run
+                        </a>
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                            <i class="bi bi-printer me-2"></i>Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run Information -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Run Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 40%;">Product:</th>
+                            <td>
+                                <strong>{{ run.product.name }}</strong>
+                                <br><small class="text-muted">{{ run.product.code }}</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>BOM Version:</th>
+                            <td>
+                                {% if run.bom %}
+                                <a href="{% url 'production:bom_detail' run.bom.id %}">{{ run.bom.name|default:run.bom.version }}</a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Planned Quantity:</th>
+                            <td>{{ run.planned_quantity|floatformat:2 }} kg</td>
+                        </tr>
+                        <tr>
+                            <th>Actual Quantity:</th>
+                            <td>
+                                {% if run.actual_quantity %}
+                                    <strong>{{ run.actual_quantity|floatformat:2 }} kg</strong>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Yield:</th>
+                            <td>
+                                {% if run.actual_quantity %}
+                                    {{ run.yield_percentage|floatformat:1 }}%
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Started By:</th>
+                            <td>{{ run.created_by.get_full_name|default:run.created_by.username }}</td>
+                        </tr>
+                        <tr>
+                            <th>Warehouse:</th>
+                            <td>{{ run.warehouse.name|default:'Not specified' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-calculator me-2"></i>Cost Summary</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 40%;">Standard Material Cost:</th>
+                            <td class="text-end">{{ run.standard_material_cost|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Actual Material Cost:</th>
+                            <td class="text-end">{{ run.actual_material_cost|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Cost Variance:</th>
+                            <td class="text-end 
+                                {% if run.cost_variance < 0 %}variance-negative
+                                {% elif run.cost_variance > 0 %}variance-positive
+                                {% else %}variance-zero{% endif %}">
+                                {{ run.cost_variance|floatformat:2 }} ETB
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Variance Percentage:</th>
+                            <td class="text-end 
+                                {% if run.variance_percentage < 0 %}variance-negative
+                                {% elif run.variance_percentage > 0 %}variance-positive
+                                {% else %}variance-zero{% endif %}">
+                                {% if run.variance_percentage %}{{ run.variance_percentage|floatformat:1 }}%{% else %}0.0%{% endif %}
+                            </td>
+                        </tr>
+                        {% if variance %}
+                        <tr class="table-active">
+                            <th colspan="2" class="text-center">Detailed Cost Variance</th>
+                        </tr>
+                        <tr>
+                            <th>Material Price Variance:</th>
+                            <td class="text-end">{{ variance.material_price_variance|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Material Usage Variance:</th>
+                            <td class="text-end">{{ variance.material_usage_variance|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Labor Variance:</th>
+                            <td class="text-end">{{ variance.labor_variance|floatformat:2 }} ETB</td>
+                        </tr>
+                        <tr>
+                            <th>Overhead Variance:</th>
+                            <td class="text-end">{{ variance.overhead_variance|floatformat:2 }} ETB</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Material Requirements -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Material Requirements</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Component</th>
+                                    <th>Required (kg)</th>
+                                    <th>With Waste (kg)</th>
+                                    <th>Unit</th>
+                                    <th>Available</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for req in material_requirements %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ req.component.name }}</strong>
+                                        <br><small class="text-muted">{{ req.component.code }}</small>
+                                    </td>
+                                    <td class="text-end">{{ req.required|floatformat:2 }}</td>
+                                    <td class="text-end">{{ req.required_with_wastage|floatformat:2 }}</td>
+                                    <td>{{ req.unit.abbreviation|default:'kg' }}</td>
+                                    <td class="text-end">{{ req.available|floatformat:2 }}</td>
+                                    <td>
+                                        {% if req.available >= req.required_with_wastage %}
+                                        <span class="badge bg-success">Sufficient</span>
+                                        {% elif req.available >= req.required %}
+                                        <span class="badge bg-warning">Partial</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Shortage</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <p class="text-muted mb-0">No material requirements found</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Movements -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Inventory Movements</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date/Time</th>
+                                    <th>Type</th>
+                                    <th>Item</th>
+                                    <th class="text-end">Quantity</th>
+                                    <th>Unit</th>
+                                    <th>From/To</th>
+                                    <th>Reference</th>
+                                    <th>Created By</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for movement in movements %}
+                                <tr>
+                                    <td>{{ movement.created_at|date:"Y-m-d H:i" }}</td>
+                                    <td>
+                                        {% if movement.movement_type == 'issue' or movement.movement_type == 'out_production' %}
+                                        <span class="badge bg-warning">Consumed</span>
+                                        {% elif movement.movement_type == 'receipt' or movement.movement_type == 'in_production' %}
+                                        <span class="badge bg-success">Produced</span>
+                                        {% elif movement.movement_type == 'transfer' %}
+                                        <span class="badge bg-info">Transfer</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ movement.movement_type }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ movement.item.name }}</td>
+                                    <td class="text-end">{{ movement.quantity|floatformat:2 }}</td>
+                                    <td>{{ movement.item.unit.abbreviation|default:'kg' }}</td>
+                                    <td>
+                                        {% if movement.from_warehouse %}
+                                        From: {{ movement.from_warehouse.name }}
+                                        {% endif %}
+                                        {% if movement.to_warehouse %}
+                                        To: {{ movement.to_warehouse.name }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ movement.reference|default:'-' }}</td>
+                                    <td>{{ movement.created_by.get_full_name|default:movement.created_by.username }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4">
+                                        <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+                                        <p class="text-muted mb-0">No inventory movements found</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    {% if run.notes %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-sticky-note me-2"></i>Notes</h5>
+                </div>
+                <div class="card-body">
+                    {{ run.notes|linebreaks }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Timestamps -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-muted small">
+                    <i class="bi bi-clock"></i> Created: {{ run.created_at|date:"Y-m-d H:i:s" }} | 
+                    <i class="bi bi-pencil-square"></i> Last Updated: {{ run.updated_at|date:"Y-m-d H:i:s" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Styles -->
+<style media="print">
+    .btn-group, .btn, .navbar, footer, .no-print {
+        display: none !important;
+    }
+    .card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+    .status-badge {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh for in-progress runs (optional)
+    {% if run.status == 'in_progress' %}
+    // setTimeout(function() { location.reload(); }, 60000); // Refresh every minute
+    {% endif %}
+</script>
+{% endblock %}

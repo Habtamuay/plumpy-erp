@@ -11,11 +11,13 @@ class CompanyMiddleware(MiddlewareMixin):
     """
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        # Skip middleware for certain URLs
+        # Skip middleware for URLs that must work without a selected company
         exempt_urls = [
             '/admin/',
             '/accounts/',
             '/api/',
+            reverse('core:home'),
+            reverse('company:create'),
         ]
 
         if any(request.path.startswith(url) for url in exempt_urls):
@@ -35,28 +37,14 @@ class CompanyMiddleware(MiddlewareMixin):
             except Company.DoesNotExist:
                 # Company doesn't exist or inactive, clear session
                 request.session.pop('current_company_id', None)
+                request.session.pop('current_company_name', None)
                 current_company_id = None
 
-        # If no company set, try to get user's default company
+        # If no company is selected, send user to company selector page
         if not current_company_id:
-            # Try to get from user profile
-            if hasattr(request.user, 'userprofile') and request.user.userprofile.company:
-                company = request.user.userprofile.company
-                request.company = company
-                request.session['current_company_id'] = company.id
-            else:
-                # Get first active company as default
-                try:
-                    company = Company.objects.filter(is_active=True).first()
-                    if company:
-                        request.company = company
-                        request.session['current_company_id'] = company.id
-                    else:
-                        # No companies exist, redirect to company creation
-                        if request.path not in ['/company/create/', '/accounts/login/', '/accounts/logout/'] and not request.path.startswith('/admin/'):
-                            return redirect('company:create')
-                except Company.DoesNotExist:
-                    if request.path not in ['/company/create/', '/accounts/login/', '/accounts/logout/'] and not request.path.startswith('/admin/'):
-                        return redirect('company:create')
+            has_company = Company.objects.filter(is_active=True).exists()
+            if not has_company:
+                return redirect('company:create')
+            return redirect('core:home')
 
         return None

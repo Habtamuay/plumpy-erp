@@ -1,0 +1,104 @@
+{% extends "reports/base_report.html" %}
+
+{% block report_title %}Stock Aging Analysis{% endblock %}
+
+{% block report_content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Filter Options</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">As of Date</label>
+                            <input type="date" name="as_of_date" class="form-control" value="{{ as_of_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Warehouse</label>
+                            <select name="warehouse" class="form-select">
+                                <option value="">All Warehouses</option>
+                                {% for wh in warehouses %}
+                                <option value="{{ wh.id }}" {% if warehouse_id == wh.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ wh.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select">
+                                <option value="">All Categories</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat.id }}" {% if category_id == cat.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ cat.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">Apply Filters</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Stock Aging by Product</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th class="text-end">0-30 Days</th>
+                                    <th class="text-end">31-60 Days</th>
+                                    <th class="text-end">61-90 Days</th>
+                                    <th class="text-end">90+ Days</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in aging_data %}
+                                <tr>
+                                    <td>{{ item.name }}</td>
+                                    <td>{{ item.category|default:'-' }}</td>
+                                    <td class="text-end">{{ item.bucket_0_30|floatformat:0 }}</td>
+                                    <td class="text-end">{{ item.bucket_31_60|floatformat:0 }}</td>
+                                    <td class="text-end">{{ item.bucket_61_90|floatformat:0 }}</td>
+                                    <td class="text-end">{{ item.bucket_90_plus|floatformat:0 }}</td>
+                                    <td class="text-end"><strong>{{ item.total|floatformat:0 }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center">No aging data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-dark">
+                                    <th colspan="2">Totals</th>
+                                    <th class="text-end">{{ totals.bucket_0_30|floatformat:0 }}</th>
+                                    <th class="text-end">{{ totals.bucket_31_60|floatformat:0 }}</th>
+                                    <th class="text-end">{{ totals.bucket_61_90|floatformat:0 }}</th>
+                                    <th class="text-end">{{ totals.bucket_90_plus|floatformat:0 }}</th>
+                                    <th class="text-end">{{ totals.total|floatformat:0 }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

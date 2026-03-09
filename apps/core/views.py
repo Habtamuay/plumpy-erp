@@ -1,10 +1,12 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib import messages
+from django.db import models
 from django.db.models import Q, Sum, Count, F
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
+from django.views.decorators.http import require_POST
 from datetime import timedelta
 from decimal import Decimal
 import csv
@@ -16,6 +18,37 @@ from apps.production.models import ProductionRun, BOM
 from apps.purchasing.models import PurchaseOrder
 from apps.sales.models import SalesOrder, SalesInvoice
 from apps.accounting.models import Account
+from apps.company.models import Company
+
+
+# ============================
+# Home/Landing Page
+# ============================
+
+def home(request):
+    """Landing page to select company"""
+    if not request.user.is_authenticated:
+        return redirect('admin:login')
+
+    # Always show the company selector on home.
+    companies = Company.objects.filter(is_active=True).annotate(
+        branch_count=Count('branches', distinct=True),
+        customer_count=Count('customers', distinct=True)
+    ).order_by('name')
+    return render(request, 'core/home.html', {'companies': companies})
+
+
+@login_required
+@require_POST
+def set_company(request, company_id):
+    """API endpoint to set current company in session"""
+    try:
+        company = Company.objects.get(id=company_id, is_active=True)
+        request.session['current_company_id'] = company.id
+        request.session['current_company_name'] = company.name
+        return JsonResponse({"success": True})
+    except Company.DoesNotExist:
+        return JsonResponse({"success": False}, status=404)
 
 
 # ============================
@@ -23,54 +56,82 @@ from apps.accounting.models import Account
 # ============================
 
 @login_required
-def core_dashboard(request):
+def dashboard(request):
     """Main core module dashboard"""
+    company_id = request.session.get('current_company_id')
+    
+    if not company_id:
+        return redirect('core:home')
+
+    # Purchasing models use a string `company` field, not FK `company_id`.
+    company_name = request.session.get('current_company_name')
+    if not company_name:
+        company_name = Company.objects.filter(id=company_id).values_list('name', flat=True).first()
+    
     today = timezone.now().date()
     
     # Item statistics
-    total_items = Item.objects.filter(is_active=True).count()
-    items_by_category = Item.objects.filter(is_active=True).values('category').annotate(
+    total_items = Item.objects.filter(is_active=True, company_id=company_id).count()
+    items_by_category = Item.objects.filter(is_active=True, company_id=company_id).values('category').annotate(
         count=Count('id')
     ).order_by('category')
     
     # Stock value
-    total_stock_value = CurrentStock.objects.aggregate(
+    total_stock_value = CurrentStock.objects.filter(
+        item__company_id=company_id
+    ).aggregate(
         total=Sum(F('quantity') * F('item__unit_cost'))
     )['total'] or 0
     
     # Low stock items
     low_stock_items = CurrentStock.objects.filter(
-        Q(quantity__lt=F('item__minimum_stock')) |
-        Q(quantity__lte=F('item__reorder_point'))
+        item__company_id=company_id,
+        quantity__lt=F('item__minimum_stock')
     ).count()
     
     # Recent items
-    recent_items = Item.objects.filter(is_active=True).order_by('-created_at')[:5]
+    recent_items = Item.objects.filter(is_active=True, company_id=company_id).order_by('-created_at')[:5]
     
     # Inventory stats
-    warehouse_count = Warehouse.objects.filter(is_active=True).count()
-    active_lots = Lot.objects.filter(is_active=True).count()
+    warehouse_count = Warehouse.objects.filter(is_active=True, company_id=company_id).count()
+    active_lots = Lot.objects.filter(is_active=True, company_id=company_id).count()
     near_expiry_count = Lot.objects.filter(
         expiry_date__lte=today + timedelta(days=90),
         expiry_date__gte=today,
-        is_active=True
+        is_active=True,
+        company_id=company_id
     ).count()
     
     # Recent transactions
-    recent_transactions = StockTransaction.objects.select_related(
+    recent_transactions = StockTransaction.objects.filter(
+        item__company_id=company_id
+    ).select_related(
         'item'
     ).order_by('-transaction_date')[:10]
     
     # Production stats
-    active_production_runs = ProductionRun.objects.filter(status='in_progress').count()
-    planned_runs = ProductionRun.objects.filter(status='planned').count()
-    completed_runs = ProductionRun.objects.filter(status='completed').count()
-    in_progress_runs = ProductionRun.objects.filter(status='in_progress').count()
-    active_boms = BOM.objects.filter(is_active=True).count()
+    active_production_runs = ProductionRun.objects.filter(
+        status='in_progress',
+        company_id=company_id
+    ).count()
+    planned_runs = ProductionRun.objects.filter(
+        status='planned',
+        company_id=company_id
+    ).count()
+    completed_runs = ProductionRun.objects.filter(
+        status='completed',
+        company_id=company_id
+    ).count()
+    in_progress_runs = ProductionRun.objects.filter(
+        status='in_progress',
+        company_id=company_id
+    ).count()
+    active_boms = BOM.objects.filter(is_active=True, company_id=company_id).count()
     
     # Active production runs list with calculated percentages
     active_runs = ProductionRun.objects.filter(
-        status__in=['planned', 'in_progress']
+        status__in=['planned', 'in_progress'],
+        company_id=company_id
     ).select_related('product').order_by('-start_date')[:5]
     
     # Calculate percentages in the view
@@ -83,24 +144,36 @@ def core_dashboard(request):
             run.progress_percentage_int = 0
     
     # Purchasing stats
-    pending_pos = PurchaseOrder.objects.filter(status__in=['draft', 'approved', 'ordered']).count()
-    received_pos = PurchaseOrder.objects.filter(status='received').count()
+    pending_pos = PurchaseOrder.objects.filter(
+        status__in=['draft', 'approved', 'ordered'],
+        company=company_name
+    ).count()
+    received_pos = PurchaseOrder.objects.filter(
+        status='received',
+        company=company_name
+    ).count()
     overdue_deliveries = PurchaseOrder.objects.filter(
         expected_delivery_date__lt=today,
-        status__in=['ordered', 'partial']
+        status__in=['ordered', 'partial'],
+        company=company_name
     ).count()
     
     # Sales stats
     monthly_sales = SalesInvoice.objects.filter(
         invoice_date__month=today.month,
         invoice_date__year=today.year,
-        status__in=['posted', 'paid']
+        status__in=['posted', 'paid'],
+        company_id=company_id
     ).aggregate(total=Sum('total_amount'))['total'] or 0
     
-    pending_orders = SalesOrder.objects.filter(status__in=['confirmed', 'processing']).count()
+    pending_orders = SalesOrder.objects.filter(
+        status__in=['confirmed', 'processing'],
+        company_id=company_id
+    ).count()
     overdue_invoices = SalesInvoice.objects.filter(
         due_date__lt=today,
-        status__in=['posted', 'partial']
+        status__in=['posted', 'partial'],
+        company_id=company_id
     ).count()
     
     # Total alerts count
@@ -120,7 +193,10 @@ def core_dashboard(request):
         })
     
     # Add recent production runs
-    for run in ProductionRun.objects.filter(status='completed').order_by('-end_date')[:3]:
+    for run in ProductionRun.objects.filter(
+        status='completed',
+        company_id=company_id
+    ).order_by('-end_date')[:3]:
         recent_activities.append({
             'description': f"Production completed - {run.product.code if run.product else 'N/A'}",
             'details': f"{run.actual_quantity or 0} kg produced",
@@ -129,7 +205,10 @@ def core_dashboard(request):
         })
     
     # Add recent purchase orders
-    for po in PurchaseOrder.objects.filter(status='received').order_by('-updated_at')[:2]:
+    for po in PurchaseOrder.objects.filter(
+        status='received',
+        company=company_name
+    ).order_by('-updated_at')[:2]:
         recent_activities.append({
             'description': f"PO Received - {po.po_number}",
             'details': f"From {po.supplier.name if po.supplier else 'N/A'}",
@@ -183,16 +262,23 @@ def core_dashboard(request):
     return render(request, 'core/dashboard.html', context)
 
 
-# ... rest of the core views (item_list, item_detail, etc.) ...
-
 # ============================
 # Item Views
 # ============================
 
+def _item_scope_queryset(company_id):
+    """Items visible to current company, including legacy unassigned records."""
+    return Item.objects.filter(Q(company_id=company_id) | Q(company__isnull=True))
+
 @login_required
 def item_list(request):
     """List all items with filtering and search"""
-    items = Item.objects.filter(is_active=True).select_related('unit').order_by('code')
+    company_id = request.session.get('current_company_id')
+    
+    # Include legacy shell-created items that may not have company assigned yet.
+    items = _item_scope_queryset(company_id).filter(
+        is_active=True
+    ).select_related('unit').order_by('code')
     
     # Search
     search_query = request.GET.get('q', '').strip()
@@ -244,7 +330,11 @@ def item_list(request):
 @login_required
 def item_detail(request, item_id):
     """View item details with transaction history"""
-    item = get_object_or_404(Item.objects.select_related('unit'), id=item_id)
+    company_id = request.session.get('current_company_id')
+    item = get_object_or_404(
+        _item_scope_queryset(company_id).select_related('unit'),
+        id=item_id
+    )
     
     # Get stock transactions
     transactions = StockTransaction.objects.filter(
@@ -259,18 +349,21 @@ def item_detail(request, item_id):
     # Get BOMs where this item is used
     boms_as_component = BOM.objects.filter(
         lines__component=item,
-        is_active=True
+        is_active=True,
+        company_id=company_id
     ).distinct().select_related('product')
     
     # Get BOMs where this item is the product
     boms_as_product = BOM.objects.filter(
         product=item,
-        is_active=True
+        is_active=True,
+        company_id=company_id
     )
     
     # Production runs
     production_runs = ProductionRun.objects.filter(
-        product=item
+        product=item,
+        company_id=company_id
     ).order_by('-start_date')[:10]
     
     # Statistics
@@ -303,10 +396,13 @@ def item_detail(request, item_id):
 @permission_required('core.add_item', raise_exception=True)
 def item_create(request):
     """Create a new item"""
+    company_id = request.session.get('current_company_id')
+    
     if request.method == 'POST':
         # Process form data
         try:
             item = Item(
+                company_id=company_id,
                 code=request.POST.get('code'),
                 peach_code=request.POST.get('peach_code', ''),
                 name=request.POST.get('name'),
@@ -345,7 +441,8 @@ def item_create(request):
 @permission_required('core.change_item', raise_exception=True)
 def item_edit(request, item_id):
     """Edit an existing item"""
-    item = get_object_or_404(Item, id=item_id)
+    company_id = request.session.get('current_company_id')
+    item = get_object_or_404(_item_scope_queryset(company_id), id=item_id)
     
     if request.method == 'POST':
         try:
@@ -388,7 +485,8 @@ def item_edit(request, item_id):
 @permission_required('core.delete_item', raise_exception=True)
 def item_delete(request, item_id):
     """Delete an item (soft delete by deactivating)"""
-    item = get_object_or_404(Item, id=item_id)
+    company_id = request.session.get('current_company_id')
+    item = get_object_or_404(_item_scope_queryset(company_id), id=item_id)
     
     if request.method == 'POST':
         item.is_active = False
@@ -479,11 +577,14 @@ def unit_edit(request, unit_id):
 @login_required
 def ajax_search_items(request):
     """AJAX endpoint for item search (used in autocomplete)"""
+    company_id = request.session.get('current_company_id')
     query = request.GET.get('q', '')
     items = Item.objects.filter(
         Q(code__icontains=query) |
-        Q(name__icontains=query)
-    ).filter(is_active=True)[:20]
+        Q(name__icontains=query),
+        is_active=True,
+        company_id=company_id
+    )[:20]
     
     results = []
     for item in items:
@@ -502,7 +603,8 @@ def ajax_search_items(request):
 @login_required
 def ajax_item_detail(request, item_id):
     """AJAX endpoint to get item details"""
-    item = get_object_or_404(Item, id=item_id)
+    company_id = request.session.get('current_company_id')
+    item = get_object_or_404(_item_scope_queryset(company_id), id=item_id)
     
     data = {
         'id': item.id,
@@ -527,6 +629,8 @@ def ajax_item_detail(request, item_id):
 @login_required
 def export_items(request):
     """Export items to CSV"""
+    company_id = request.session.get('current_company_id')
+    
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="items_{timezone.now().strftime("%Y%m%d")}.csv"'
     
@@ -538,7 +642,7 @@ def export_items(request):
         'Status', 'Created At'
     ])
     
-    items = Item.objects.filter(is_active=True).select_related('unit')
+    items = Item.objects.filter(is_active=True, company_id=company_id).select_related('unit')
     for item in items:
         writer.writerow([
             item.code,
@@ -588,10 +692,12 @@ def export_units(request):
 @permission_required('core.change_item', raise_exception=True)
 def bulk_item_update(request):
     """Bulk update items (prices, reorder levels, etc.)"""
+    company_id = request.session.get('current_company_id')
+    
     if request.method == 'POST':
         action = request.POST.get('action')
         item_ids = request.POST.getlist('item_ids')
-        items = Item.objects.filter(id__in=item_ids)
+        items = Item.objects.filter(id__in=item_ids, company_id=company_id)
         
         if action == 'update_cost':
             new_cost = Decimal(request.POST.get('new_cost', 0))
@@ -617,7 +723,7 @@ def bulk_item_update(request):
     
     # GET - show bulk update form
     item_ids = request.GET.getlist('item_ids')
-    items = Item.objects.filter(id__in=item_ids)
+    items = Item.objects.filter(id__in=item_ids, company_id=company_id)
     
     context = {
         'items': items,

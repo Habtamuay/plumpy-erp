@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ branch.name }} - Branch Details{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">
+            <i class="bi bi-diagram-3 me-2"></i>{{ branch.name }}
+        </h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'company:list' %}">Companies</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'company:detail' branch.company.id %}">{{ branch.company.name }}</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'company:branch_list' %}">Branches</a></li>
+                <li class="breadcrumb-item active">{{ branch.name }}</li>
+            </ol>
+        </nav>
+    </div>
+    <div>
+        <a href="{% url 'admin:company_branch_change' branch.id %}" class="btn btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+    </div>
+</div>
+
+<!-- Branch Info Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Branch Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Name:</th>
+                        <td><strong>{{ branch.name }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Code:</th>
+                        <td>{{ branch.code }}</td>
+                    </tr>
+                    <tr>
+                        <th>Company:</th>
+                        <td><a href="{% url 'company:detail' branch.company.id %}">{{ branch.company.name }}</a></td>
+                    </tr>
+                    <tr>
+                        <th>Type:</th>
+                        <td>
+                            {% if branch.is_main %}
+                            <span class="badge bg-primary">Main Branch</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Branch Office</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td>
+                            {% if branch.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-geo-alt me-2 text-primary"></i>Location & Contact</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 120px;">Address:</th>
+                        <td>{{ branch.address|linebreaks }}</td>
+                    </tr>
+                    <tr>
+                        <th>City:</th>
+                        <td>{{ branch.city }}</td>
+                    </tr>
+                    <tr>
+                        <th>Country:</th>
+                        <td>{{ branch.country }}</td>
+                    </tr>
+                    <tr>
+                        <th>Phone:</th>
+                        <td>{{ branch.phone|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th>Email:</th>
+                        <td>{{ branch.email|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Departments and Employees -->
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-diagram-3 me-2 text-primary"></i>Departments</h5>
+            </div>
+            <div class="card-body">
+                {% if departments %}
+                <div class="list-group list-group-flush">
+                    {% for department in departments %}
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">{{ department.name }}</h6>
+                            <small>{{ department.code }}</small>
+                        </div>
+                        <small class="text-muted">{{ department.description|truncatechars:50 }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No departments assigned to this branch.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-people me-2 text-primary"></i>Employees</h5>
+            </div>
+            <div class="card-body">
+                {% if employees %}
+                <div class="list-group list-group-flush">
+                    {% for employee in employees %}
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">{{ employee.user.get_full_name|default:employee.user.username }}</h6>
+                            <small>{{ employee.job_title|default:"—" }}</small>
+                        </div>
+                        <small class="text-muted">{{ employee.role|title }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No employees assigned to this branch.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

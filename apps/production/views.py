@@ -19,56 +19,85 @@ from .forms import StartProductionRunForm, CompleteProductionRunForm, MaterialTr
 @login_required
 def dashboard(request):
     """Main production dashboard with key metrics and summaries"""
+    company_id = request.session.get('current_company_id')
+    company_name = request.session.get('current_company_name')
+    if not company_id:
+        messages.warning(request, 'Please select a company first.')
+        return redirect('core:home')
+
     today = timezone.now().date()
     
     # Stock alerts
     low_stock = Item.objects.filter(
+        Q(company_id=company_id) | Q(company__isnull=True),
         current_stock__lte=F('minimum_stock'),
         current_stock__gt=0,
         is_active=True
     ).select_related('unit').order_by('current_stock')[:10]
 
     out_of_stock = Item.objects.filter(
+        Q(company_id=company_id) | Q(company__isnull=True),
         current_stock=0,
         is_active=True
     ).select_related('unit')[:5]
 
     # BOM statistics
-    active_boms = BOM.objects.filter(is_active=True).select_related('product').order_by('-effective_from')[:10]
-    total_boms = BOM.objects.filter(is_active=True).count()
+    active_boms = BOM.objects.filter(
+        is_active=True,
+        company_id=company_id
+    ).select_related('product').order_by('-effective_from')[:10]
+    total_boms = BOM.objects.filter(is_active=True, company_id=company_id).count()
 
     # Production runs
-    recent_runs = ProductionRun.objects.select_related('product', 'bom').order_by('-start_date')[:10]
-    planned_runs = ProductionRun.objects.filter(status='planned').select_related('product').order_by('start_date')[:5]
-    in_progress = ProductionRun.objects.filter(status='in_progress').select_related('product').order_by('-start_date')[:5]
+    recent_runs = ProductionRun.objects.filter(
+        company_id=company_id
+    ).select_related('product', 'bom').order_by('-start_date')[:10]
+    planned_runs = ProductionRun.objects.filter(
+        status='planned',
+        company_id=company_id
+    ).select_related('product').order_by('start_date')[:5]
+    in_progress = ProductionRun.objects.filter(
+        status='in_progress',
+        company_id=company_id
+    ).select_related('product').order_by('-start_date')[:5]
     completed_today = ProductionRun.objects.filter(
         status='completed',
+        company_id=company_id,
         end_date__date=today
     ).count()
 
     # Recent stock movements
     recent_movements = InventoryMovement.objects.select_related(
         'item', 'production_run', 'created_by'
+    ).filter(
+        Q(production_run__company_id=company_id) | Q(item__company_id=company_id)
     ).order_by('-created_at')[:15]
 
     # Statistics
     stats = {
-        'total_items': Item.objects.filter(is_active=True).count(),
+        'total_items': Item.objects.filter(
+            Q(company_id=company_id) | Q(company__isnull=True),
+            is_active=True
+        ).count(),
         'total_boms': total_boms,
-        'total_completed': ProductionRun.objects.filter(status='completed').count(),
-        'total_planned': ProductionRun.objects.filter(status='planned').count(),
-        'total_in_progress': ProductionRun.objects.filter(status='in_progress').count(),
+        'total_completed': ProductionRun.objects.filter(status='completed', company_id=company_id).count(),
+        'total_planned': ProductionRun.objects.filter(status='planned', company_id=company_id).count(),
+        'total_in_progress': ProductionRun.objects.filter(status='in_progress', company_id=company_id).count(),
         'completed_today': completed_today,
-        'total_movements': InventoryMovement.objects.count(),
+        'total_movements': InventoryMovement.objects.filter(
+            Q(production_run__company_id=company_id) | Q(item__company_id=company_id)
+        ).count(),
     }
 
     context = {
+        'current_company_name': company_name,
         'low_stock': low_stock,
         'out_of_stock': out_of_stock,
         'active_boms': active_boms,
         'recent_runs': recent_runs,
         'planned_runs': planned_runs,
         'in_progress': in_progress,
+        'in_progress_runs': in_progress,
         'recent_movements': recent_movements,
         'stats': stats,
         'today': today,
@@ -149,6 +178,14 @@ def production_run_detail(request, pk):
 @login_required
 def start_production_run(request):
     """Start a new production run"""
+    # remove stale/invalid material requirements from prior attempts
+    if 'material_requirements' in request.session:
+        try:
+            json.dumps(request.session['material_requirements'])
+        except TypeError:
+            # previous value contained non-serializable data (e.g. Decimal)
+            del request.session['material_requirements']
+    
     if request.method == 'POST':
         form = StartProductionRunForm(request.POST, user=request.user)
         if form.is_valid():
@@ -159,7 +196,26 @@ def start_production_run(request):
                 
                 # Store material requirements in session for display
                 if hasattr(form, 'material_requirements'):
-                    request.session['material_requirements'] = form.material_requirements
+                    # Convert components to serializable dicts before storing in session
+                    serializable = []
+                    for req in form.material_requirements:
+                        # Helper to normalize numbers so JSON can handle them
+                        def norm(val):
+                            if val is None:
+                                return None
+                            if isinstance(val, Decimal):
+                                return float(val)
+                            return val
+                        serializable.append({
+                            'component_id': req['component'].id if hasattr(req['component'], 'id') else None,
+                            'component_name': str(req['component']),
+                            'required': norm(req.get('required')),
+                            'required_with_wastage': norm(req.get('required_with_wastage')),
+                            'unit': req.get('unit').abbreviation if req.get('unit') else None,
+                            'available': norm(req.get('available')),
+                            'wastage': norm(req.get('wastage')),
+                        })
+                    request.session['material_requirements'] = serializable
                 
                 messages.success(
                     request, 
@@ -311,11 +367,36 @@ def bom_detail(request, pk):
     # Calculate total cost
     total_cost = bom.total_material_cost_per_base
     
+    # Create a list of dictionaries for lines with additional calculated fields
+    lines_data = []
+    for line in bom.lines.all().order_by('sequence'):
+        # Calculate cost per base
+        cost_per_base = line.quantity_per_base * (line.component.unit_cost or 0)
+        
+        # Calculate percentage
+        if total_cost and total_cost > 0:
+            cost_percentage = (cost_per_base / total_cost) * 100
+        else:
+            cost_percentage = 0
+        
+        lines_data.append({
+            'sequence': line.sequence,
+            'component': line.component,
+            'unit': line.unit,
+            'quantity_per_base': line.quantity_per_base,
+            'wastage_percentage': line.wastage_percentage,
+            'is_critical': line.is_critical,
+            'notes': line.notes,
+            'cost_per_base': cost_per_base,
+            'cost_percentage': cost_percentage,
+        })
+    
     context = {
         'bom': bom,
-        'lines': bom.lines.all().order_by('sequence'),
+        'lines': lines_data,  # Use the list of dictionaries instead of the queryset
         'total_cost': total_cost,
     }
+    
     return render(request, 'production/bom_detail.html', context)
 
 

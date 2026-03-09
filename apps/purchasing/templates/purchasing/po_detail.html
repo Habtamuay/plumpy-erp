@@ -196,10 +196,10 @@
                             <tbody>
                                 {% for line in lines %}
                                 <tr>
-                                    <td>{{ line.item.code }}</td>
-                                    <td>{{ line.item.name }}</td>
-                                    <td class="text-end">{{ line.quantity|floatformat:2 }}</td>
-                                    <td>{{ line.unit.abbreviation|default:'-' }}</td>
+                                    <td>{% if line.item_obj %}{{ line.item_obj.code }}{% else %}{{ line.item }}{% endif %}</td>
+                                    <td>{% if line.item_obj %}{{ line.item_obj.name }}{% else %}{{ line.item }}{% endif %}</td>
+                                    <td class="text-end">{{ line.quantity_ordered|floatformat:2 }}</td>
+                                    <td>{% if line.unit_obj %}{{ line.unit_obj.abbreviation }}{% else %}{{ line.unit }}{% endif %}</td>
                                     <td class="text-end">${{ line.unit_price|floatformat:2 }}</td>
                                     <td class="text-end">{{ line.tax_rate|floatformat:1 }}%</td>
                                     <td class="text-end">${{ line.subtotal|floatformat:2 }}</td>
@@ -208,11 +208,11 @@
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="6" class="text-end">Subtotal:</th>
+                                    <th colspan="6" class="text-end">Subtotal Before VAT:</th>
                                     <th class="text-end">${{ subtotal|floatformat:2 }}</th>
                                 </tr>
                                 <tr>
-                                    <th colspan="6" class="text-end">Tax Total:</th>
+                                    <th colspan="6" class="text-end">15% VAT:</th>
                                     <th class="text-end">${{ tax_total|floatformat:2 }}</th>
                                 </tr>
                                 {% if po.shipping_cost > 0 %}
@@ -230,6 +230,14 @@
                                 <tr>
                                     <th colspan="6" class="text-end h5 mb-0">Grand Total:</th>
                                     <th class="text-end h5 mb-0">${{ grand_total|floatformat:2 }}</th>
+                                </tr>
+                                <tr>
+                                    <th colspan="6" class="text-end">WHT (3%):</th>
+                                    <th class="text-end">-${{ withholding_tax|floatformat:2 }}</th>
+                                </tr>
+                                <tr>
+                                    <th colspan="6" class="text-end h5 mb-0">Net Grand Total Amt:</th>
+                                    <th class="text-end h5 mb-0">${{ net_grand_total|floatformat:2 }}</th>
                                 </tr>
                             </tfoot>
                         </table>

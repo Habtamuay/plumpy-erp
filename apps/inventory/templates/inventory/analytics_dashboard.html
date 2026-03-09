@@ -5,352 +5,215 @@
 
 {% block extra_css %}
 <style>
-    .stat-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: none;
+    .page-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+    }
+    .chip {
+        background: #eef2ff;
+        color: #3730a3;
+        border: 1px solid #c7d2fe;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .kpi-card {
+        border: 1px solid #e9ecef;
         border-radius: 10px;
+        padding: 12px;
+        height: 100%;
+        background: #fff;
     }
-    .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    .kpi-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: #6c757d;
+        margin-bottom: 4px;
     }
-    .stat-icon {
-        font-size: 2.5rem;
-        opacity: 0.7;
+    .kpi-value {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.1;
+        margin-bottom: 0;
     }
-    .expiry-critical {
-        background-color: #dc3545;
-        color: white;
+    .report-tile {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 12px;
+        background: #fff;
+        height: 100%;
     }
-    .expiry-warning {
-        background-color: #ffc107;
-        color: #212529;
+    .report-tile h6 {
+        font-size: 14px;
+        margin-bottom: 6px;
     }
-    .expiry-good {
-        background-color: #28a745;
-        color: white;
+    .mini-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        background: #fff;
     }
-    .progress-bar-expiry {
-        height: 8px;
-        border-radius: 4px;
+    .mini-card .card-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 700;
     }
-    .category-pie-container {
-        height: 300px;
-        position: relative;
+    .mini-card .card-body {
+        padding: 10px 12px;
+    }
+    .table-condensed td, .table-condensed th {
+        padding: 0.35rem 0.5rem;
+        font-size: 12px;
+        vertical-align: middle;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0"><i class="bi bi-graph-up me-2 text-primary"></i>Inventory Analytics Dashboard</h1>
-    <div>
-        <span class="badge bg-secondary">Last Updated: {% now "d M Y H:i" %}</span>
-    </div>
+<div class="page-head">
+    <h1 class="h4 mb-0"><i class="bi bi-graph-up me-2 text-primary"></i>Inventory Analytics Dashboard</h1>
+    <span class="chip">Updated: {% now "d M Y H:i" %}</span>
 </div>
 
-<!-- Summary Cards -->
-<div class="row g-4 mb-4">
+<div class="row g-2 mb-2">
     <div class="col-xl-3 col-md-6">
-        <div class="card stat-card bg-primary text-white h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-white-50 mb-2">Total Inventory Value</h6>
-                        <h2 class="mb-0">{{ total_stock_value|floatformat:0|intcomma }}</h2>
-                        <small class="text-white-50">ETB</small>
-                    </div>
-                    <div class="stat-icon">
-                        <i class="bi bi-cash-stack"></i>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Inventory Value</div>
+            <p class="kpi-value text-primary">{{ total_stock_value|floatformat:0|intcomma }}</p>
+            <small class="text-muted">ETB</small>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="card stat-card bg-success text-white h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-white-50 mb-2">Categories</h6>
-                        <h2 class="mb-0">{{ stock_by_category|length }}</h2>
-                        <small class="text-white-50">Active stock categories</small>
-                    </div>
-                    <div class="stat-icon">
-                        <i class="bi bi-grid-3x3-gap-fill"></i>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Categories</div>
+            <p class="kpi-value text-success">{{ stock_by_category|length }}</p>
+            <small class="text-muted">Active categories</small>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="card stat-card bg-warning text-dark h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-dark-50 mb-2">Near Expiry (≤90 days)</h6>
-                        <h2 class="mb-0">{{ near_expiry|length }}</h2>
-                        <small class="text-dark-50">Lots</small>
-                    </div>
-                    <div class="stat-icon">
-                        <i class="bi bi-exclamation-triangle"></i>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Near Expiry</div>
+            <p class="kpi-value text-warning">{{ near_expiry|length }}</p>
+            <small class="text-muted">Lots in 90 days</small>
         </div>
     </div>
-
     <div class="col-xl-3 col-md-6">
-        <div class="card stat-card bg-danger text-white h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-white-50 mb-2">Low Stock Alerts</h6>
-                        <h2 class="mb-0">{{ low_stock_count }}</h2>
-                        <small class="text-white-50">Items below reorder point</small>
-                    </div>
-                    <div class="stat-icon">
-                        <i class="bi bi-exclamation-octagon"></i>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Low Stock Alerts</div>
+            <p class="kpi-value text-danger">{{ low_stock_count }}</p>
+            <small class="text-muted">Items below reorder</small>
         </div>
     </div>
 </div>
 
-<!-- Charts Row -->
-<div class="row g-4 mb-4">
-    <!-- Stock by Category Chart -->
-    <div class="col-xl-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="bi bi-pie-chart me-2 text-primary"></i>Stock Value by Category</h5>
-            </div>
-            <div class="card-body">
-                <div class="category-pie-container">
-                    <canvas id="categoryPieChart"></canvas>
-                </div>
-            </div>
+<div class="row g-2 mb-2">
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-speedometer2 me-1 text-primary"></i>Dashboard</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:dashboard' %}">Open</a>
         </div>
     </div>
-
-    <!-- Expiry Timeline -->
-    <div class="col-xl-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="bi bi-calendar-check me-2 text-warning"></i>Expiry Timeline</h5>
-            </div>
-            <div class="card-body">
-                {% if near_expiry %}
-                    <div class="mb-3">
-                        <h6>Near-Expiry Lots (Next 90 Days)</h6>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Item</th>
-                                    <th>Batch</th>
-                                    <th>Expiry Date</th>
-                                    <th>Days Left</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for lot in near_expiry %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ lot.item.code }}</strong><br>
-                                        <small class="text-muted">{{ lot.item.name|truncatechars:30 }}</small>
-                                    </td>
-                                    <td>{{ lot.batch_number }}</td>
-                                    <td>{{ lot.expiry_date|date:"d M Y" }}</td>
-                                    <td>
-                                        {% with days=lot.days_to_expire %}
-                                            <div class="d-flex align-items-center">
-                                                <div class="progress flex-grow-1 me-2" style="height: 6px;">
-                                                    {% if days <= 30 %}
-                                                        <div class="progress-bar bg-danger" style="width: {{ days }}%"></div>
-                                                    {% elif days <= 60 %}
-                                                        <div class="progress-bar bg-warning" style="width: {{ days }}%"></div>
-                                                    {% else %}
-                                                        <div class="progress-bar bg-success" style="width: {{ days }}%"></div>
-                                                    {% endif %}
-                                                </div>
-                                                <span class="fw-bold">{{ days }} days</span>
-                                            </div>
-                                        {% endwith %}
-                                    </td>
-                                    <td>
-                                        {% with days=lot.days_to_expire %}
-                                            {% if days <= 30 %}
-                                                <span class="badge bg-danger">Critical</span>
-                                            {% elif days <= 60 %}
-                                                <span class="badge bg-warning text-dark">Warning</span>
-                                            {% else %}
-                                                <span class="badge bg-success">Good</span>
-                                            {% endif %}
-                                        {% endwith %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="text-center py-5">
-                        <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
-                        <h6 class="mt-3">No near-expiry lots found</h6>
-                        <p class="text-muted small">All lots have more than 90 days until expiry</p>
-                    </div>
-                {% endif %}
-                
-                {% if expired_count > 0 %}
-                <div class="alert alert-danger mt-3 mb-0">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    <strong>{{ expired_count }} expired lot(s)</strong> - Please review and dispose
-                </div>
-                {% endif %}
-            </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-box-seam me-1 text-primary"></i>Current Stock</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:current_stock' %}">Open</a>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-pie-chart me-1 text-primary"></i>Stock Summary</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:stock_summary' %}">Open</a>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-activity me-1 text-primary"></i>Low Stock</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:low_stock_alerts' %}">Open</a>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-journal-check me-1 text-primary"></i>Consumption vs BOM</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:consumption_vs_bom' %}">Open</a>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="report-tile">
+            <h6><i class="bi bi-graph-up-arrow me-1 text-primary"></i>Trends</h6>
+            <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'inventory:inventory_trends' %}">Open</a>
         </div>
     </div>
 </div>
 
-<!-- Stock by Category Table -->
-<div class="card shadow-sm">
-    <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="bi bi-table me-2 text-info"></i>Stock Distribution by Category</h5>
+<div class="row g-2">
+    <div class="col-lg-6">
+        <div class="mini-card h-100">
+            <div class="card-header">Near Expiry Lots</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-condensed table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Batch</th>
+                                <th>Expiry</th>
+                                <th class="text-end">Days</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lot in near_expiry|slice:":8" %}
+                            <tr>
+                                <td>{{ lot.item.code }}</td>
+                                <td>{{ lot.batch_number }}</td>
+                                <td>{{ lot.expiry_date|date:"d M Y" }}</td>
+                                <td class="text-end">{{ lot.days_to_expire }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-3">No near-expiry lots.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover table-bordered mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Category</th>
-                        <th class="text-end">Total Quantity</th>
-                        <th class="text-end">Total Value (ETB)</th>
-                        <th class="text-end">% of Total Value</th>
-                        <th>Progress</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for cat in stock_by_category %}
-                    <tr>
-                        <td>
-                            <span class="fw-bold">{{ cat.item__category|title }}</span>
-                        </td>
-                        <td class="text-end">{{ cat.total_qty|floatformat:2|intcomma }}</td>
-                        <td class="text-end fw-bold">{{ cat.total_value|floatformat:0|intcomma }}</td>
-                        <td class="text-end">
-                            {% widthratio cat.total_value total_stock_value 100 as percentage %}
-                            {{ percentage|floatformat:1 }}%
-                        </td>
-                        <td style="width: 200px;">
-                            <div class="progress" style="height: 10px;">
-                                {% widthratio cat.total_value total_stock_value 100 as width %}
-                                <div class="progress-bar bg-primary" role="progressbar" 
-                                     style="width: {{ width }}%;" 
-                                     aria-valuenow="{{ width }}" 
-                                     aria-valuemin="0" 
-                                     aria-valuemax="100">
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center py-4">
-                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
-                            <p class="mt-2">No stock data available</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="col-lg-6">
+        <div class="mini-card h-100">
+            <div class="card-header">Stock by Category</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-condensed table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Value (ETB)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cat in stock_by_category %}
+                            <tr>
+                                <td>{{ cat.item__category|title }}</td>
+                                <td class="text-end">{{ cat.total_qty|floatformat:2|intcomma }}</td>
+                                <td class="text-end">{{ cat.total_value|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-3">No stock data available.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
-
-<!-- Chart.js Script -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Data for pie chart
-        const categories = [
-            {% for cat in stock_by_category %}
-                "{{ cat.item__category|title }}"{% if not forloop.last %},{% endif %}
-            {% endfor %}
-        ];
-        
-        const values = [
-            {% for cat in stock_by_category %}
-                {{ cat.total_value|default:0 }}{% if not forloop.last %},{% endif %}
-            {% endfor %}
-        ];
-
-        // Colors for pie chart
-        const colors = [
-            'rgba(13, 110, 253, 0.8)',   // primary blue
-            'rgba(25, 135, 84, 0.8)',    // success green
-            'rgba(255, 193, 7, 0.8)',     // warning yellow
-            'rgba(220, 53, 69, 0.8)',     // danger red
-            'rgba(111, 66, 193, 0.8)',    // purple
-            'rgba(253, 126, 20, 0.8)',    // orange
-            'rgba(23, 162, 184, 0.8)',    // info teal
-            'rgba(108, 117, 125, 0.8)',   // secondary gray
-        ];
-
-        // Only create chart if there's data
-        if (categories.length > 0) {
-            // Create pie chart
-            const ctx = document.getElementById('categoryPieChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: categories,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors.slice(0, categories.length),
-                        borderColor: 'white',
-                        borderWidth: 2,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                boxWidth: 12,
-                                padding: 15,
-                                font: { size: 11 }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `${label}: ${value.toLocaleString()} ETB (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        } else {
-            // Show message if no data
-            document.getElementById('categoryPieChart').parentNode.innerHTML = 
-                '<div class="text-center py-5"><i class="bi bi-pie-chart text-muted" style="font-size: 3rem;"></i>' +
-                '<p class="mt-2">No category data available</p></div>';
-        }
-    });
-</script>
-
 {% endblock %}
