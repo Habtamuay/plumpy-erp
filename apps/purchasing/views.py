@@ -248,7 +248,7 @@ def po_detail(request, po_id):
     net_grand_total = grand_total - withholding_tax
     
     # Get related receipts if any
-    receipts = GoodsReceipt.objects.filter(po=po).select_related('received_by')
+    receipts = GoodsReceipt.objects.filter(po=po).select_related('received_by', 'created_by')
     
     context = {
         'po': po,
@@ -609,7 +609,8 @@ def receive_po(request, po_id):
                 po=po,
                 receipt_date=received_date,
                 notes=notes,
-                received_by=request.user
+                received_by=request.user,
+                created_by=request.user
             )
             
             # Update inventory for each line
@@ -1362,7 +1363,8 @@ def goods_receipt_create(request):
                 po=po,
                 receipt_date=request.POST.get('receipt_date'),
                 notes=request.POST.get('notes'),
-                received_by=request.user
+                received_by=request.user,
+                created_by=request.user
             )
             
             messages.success(request, f"Goods receipt {receipt.receipt_number} created successfully.")
