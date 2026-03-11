@@ -15,7 +15,8 @@ from apps.company.models import Company
 
 from .models import (
     PurchaseOrder, PurchaseOrderLine, Supplier, 
-    PurchaseRequisition, GoodsReceipt, GoodsReceiptLine
+    PurchaseRequisition, GoodsReceipt, GoodsReceiptLine,
+    PurchaseOrderApproval
 )
 from apps.inventory.models import Item, Warehouse
 from apps.core.models import Unit
@@ -103,12 +104,45 @@ def dashboard(request):
     """
     Purchasing dashboard view
     """
+    company_name = request.session.get('current_company_name')
+    
+    # Base querysets
+    po_qs = PurchaseOrder.objects.all()
+    requisition_qs = PurchaseRequisition.objects.all()
+    receipt_qs = GoodsReceipt.objects.all()
+    approval_qs = PurchaseOrderApproval.objects.all()
+    supplier_qs = Supplier.objects.filter(is_active=True)
+    
+    # Filter by company if set
+    if company_name:
+        po_qs = po_qs.filter(company=company_name)
+        requisition_qs = requisition_qs.filter(company=company_name)
+        supplier_qs = supplier_qs.filter(company=company_name)
+        # GoodsReceipt and PurchaseOrderApproval don't have company field directly,
+        # they're linked through PO
+        receipt_qs = receipt_qs.filter(po__company=company_name)
+        approval_qs = approval_qs.filter(po__company=company_name)
+    
     context = {
         'current_period': timezone.now().strftime('%B %Y'),
-        'total_po_count': PurchaseOrder.objects.count(),
-        'pending_po_count': PurchaseOrder.objects.filter(status='pending').count(),
-        'total_suppliers': Supplier.objects.filter(is_active=True).count(),
-        'recent_pos': PurchaseOrder.objects.order_by('-order_date')[:5],
+        'total_po_count': po_qs.count(),
+        'pending_po_count': po_qs.filter(status='pending').count(),
+        'total_suppliers': supplier_qs.count(),
+        'recent_pos': po_qs.select_related('supplier').order_by('-order_date')[:5],
+        
+        # Purchase Requisitions
+        'total_requisition_count': requisition_qs.count(),
+        'pending_requisition_count': requisition_qs.filter(status__in=['draft', 'submitted']).count(),
+        'approved_requisition_count': requisition_qs.filter(status='approved').count(),
+        'recent_requisitions': requisition_qs.select_related('requested_by').order_by('-created_at')[:5],
+        
+        # Goods Receipts
+        'total_receipt_count': receipt_qs.count(),
+        'recent_receipts': receipt_qs.select_related('po', 'received_by').order_by('-receipt_date')[:5],
+        
+        # Approval Workflow
+        'pending_approvals': approval_qs.filter(status='pending').select_related('po', 'approver').order_by('-created_at')[:5],
+        'pending_approval_count': approval_qs.filter(status='pending').count(),
     }
     return render(request, 'purchasing/dashboard.html', context)
 
