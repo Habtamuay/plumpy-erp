@@ -301,13 +301,12 @@
                             <table class="table table-bordered table-hover" id="orderLinesTable">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width: 25%">Item <span class="text-danger">*</span></th>
-                                        <th style="width: 10%">Quantity <span class="text-danger">*</span></th>
-                                        <th style="width: 10%">Unit</th>
-                                        <th style="width: 12%">Unit Price <span class="text-danger">*</span></th>
-                                        <th style="width: 10%">VAT %</th>
-                                        <th style="width: 15%">Subtotal</th>
-                                        <th style="width: 8%">Actions</th>
+                                        <th style="width: 30%">Item <span class="text-danger">*</span></th>
+                                        <th style="width: 12%">Quantity <span class="text-danger">*</span></th>
+                                        <th style="width: 12%">Unit</th>
+                                        <th style="width: 18%">Unit Price <span class="text-danger">*</span></th>
+                                        <th style="width: 18%">Subtotal</th>
+                                        <th style="width: 10%">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="orderLinesBody">
@@ -347,15 +346,9 @@
                                                        value="{{ line.unit_price|default:0 }}" min="0" step="0.01" required>
                                             </td>
                                             <td>
-                                                <select name="tax_rate" class="form-select form-select-sm tax-rate-input">
-                                                    <option value="0" {% if line.tax_rate == 0 %}selected{% endif %}>0% (Exempt)</option>
-                                                    <option value="15" {% if line.tax_rate == 15 %}selected{% endif %}>15% VAT</option>
-                                                    <option value="10" {% if line.tax_rate == 10 %}selected{% endif %}>10% (Tourism)</option>
-                                                </select>
-                                            </td>
-                                            <td>
                                                 <input type="text" class="form-control form-control-sm line-subtotal bg-light" readonly 
-                                                       value="{{ line.total_price|floatformat:2 }}">
+                                                       value="{{ line.subtotal|floatformat:2 }}">
+                                                <input type="hidden" name="tax_rate" class="tax-rate-input" value="{{ line.tax_rate|default:15 }}">
                                             </td>
                                             <td class="text-center">
                                                 <button type="button" class="btn btn-sm btn-outline-danger remove-item" title="Remove item">
@@ -366,7 +359,7 @@
                                         {% endfor %}
                                     {% else %}
                                     <tr id="emptyRow">
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="6" class="text-center text-muted py-5">
                                             <i class="bi bi-inbox fs-1 d-block mb-3"></i>
                                             <h5>No items added yet</h5>
                                             <p class="mb-3">Click the "Add Item" button to start adding items to this purchase order.</p>
@@ -379,22 +372,22 @@
                                 </tbody>
                                 <tfoot class="table-light">
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold">Subtotal (Before VAT):</td>
+                                        <td colspan="4" class="text-end fw-bold">Subtotal (Before VAT):</td>
                                         <td class="fw-bold"><span id="subtotal">0.00</span></td>
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold">VAT:</td>
+                                        <td colspan="4" class="text-end fw-bold">VAT (15%):</td>
                                         <td class="fw-bold"><span id="taxTotal">0.00</span></td>
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold" id="withholdingTaxLabel">Withholding Tax (3% if taxable base > 20,000 ETB):</td>
+                                        <td colspan="4" class="text-end fw-bold" id="withholdingTaxLabel">Withholding Tax (3% if taxable base > 20,000 ETB):</td>
                                         <td class="fw-bold text-danger"><span id="withholdingTax">0.00</span></td>
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold">Shipping Cost:</td>
+                                        <td colspan="4" class="text-end fw-bold">Shipping Cost:</td>
                                         <td>
                                             <div class="input-group input-group-sm">
                                                 <input type="number" name="shipping_cost" id="shipping_cost" 
@@ -406,7 +399,7 @@
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="5" class="text-end fw-bold">Discount:</td>
+                                        <td colspan="4" class="text-end fw-bold">Discount:</td>
                                         <td>
                                             <div class="input-group input-group-sm">
                                                 <input type="number" name="discount" id="discount" 
@@ -418,7 +411,7 @@
                                         <td></td>
                                     </tr>
                                     <tr class="table-primary">
-                                        <td colspan="5" class="text-end fw-bold h5 mb-0">Grand Total:</td>
+                                        <td colspan="4" class="text-end fw-bold h5 mb-0">Grand Total:</td>
                                         <td class="fw-bold h5 mb-0"><span id="grandTotal">0.00</span> {{ po.currency|default:'ETB' }}</td>
                                         <td></td>
                                     </tr>
@@ -619,14 +612,8 @@
             <input type="number" name="unit_price" class="form-control form-control-sm unit-price-input" value="0" min="0" step="0.01" required>
         </td>
         <td>
-            <select name="tax_rate" class="form-select form-select-sm tax-rate-input">
-                <option value="0">0% (Exempt)</option>
-                <option value="15" selected>15% VAT</option>
-                <option value="10">10% (Tourism)</option>
-            </select>
-        </td>
-        <td>
             <input type="text" class="form-control form-control-sm line-subtotal bg-light" readonly value="0.00">
+            <input type="hidden" name="tax_rate" class="tax-rate-input" value="15">
         </td>
         <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-danger remove-item" title="Remove item">
@@ -967,7 +954,7 @@
         const tbody = document.getElementById('orderLinesBody');
         tbody.innerHTML = `
             <tr id="emptyRow">
-                <td colspan="7" class="text-center text-muted py-5">
+                <td colspan="6" class="text-center text-muted py-5">
                     <i class="bi bi-inbox fs-1 d-block mb-3"></i>
                     <h5>No items added yet</h5>
                     <p class="mb-3">Click the "Add Item" button to start adding items to this purchase order.</p>
@@ -1006,11 +993,7 @@
             });
         }
         
-        if (taxRateSelect) {
-            taxRateSelect.addEventListener('change', function() {
-                calculateLineTotal(row);
-            });
-        }
+
         
         if (itemSelect) {
             const onItemChange = function() {
@@ -1074,20 +1057,16 @@
         
         const quantityInput = row.querySelector('.quantity-input');
         const unitPriceInput = row.querySelector('.unit-price-input');
-        const taxRateSelect = row.querySelector('.tax-rate-input');
         const subtotalInput = row.querySelector('.line-subtotal');
         
-        if (!quantityInput || !unitPriceInput || !taxRateSelect || !subtotalInput) return;
+        if (!quantityInput || !unitPriceInput || !subtotalInput) return;
         
         const quantity = parseFloat(quantityInput.value) || 0;
         const unitPrice = parseFloat(unitPriceInput.value) || 0;
-        const taxRate = parseFloat(taxRateSelect.value) || 0;
         
         const subtotal = quantity * unitPrice;
-        const taxAmount = subtotal * (taxRate / 100);
-        const lineTotal = subtotal + taxAmount;
         
-        subtotalInput.value = lineTotal.toFixed(2);
+        subtotalInput.value = subtotal.toFixed(2);
         
         calculateGrandTotal();
     }
@@ -1095,31 +1074,22 @@
     // Function to calculate grand total
     function calculateGrandTotal() {
         let subtotalBeforeVat = 0;
-        let taxTotal = 0;
         
         document.querySelectorAll('.order-line-row').forEach(row => {
             const quantityInput = row.querySelector('.quantity-input');
             const unitPriceInput = row.querySelector('.unit-price-input');
-            const taxRateSelect = row.querySelector('.tax-rate-input');
-            const lineSubtotalInput = row.querySelector('.line-subtotal');
             
-            if (!quantityInput || !unitPriceInput || !taxRateSelect) return;
+            if (!quantityInput || !unitPriceInput) return;
             
             const quantity = parseFloat(quantityInput.value) || 0;
             const unitPrice = parseFloat(unitPriceInput.value) || 0;
-            const taxRate = parseFloat(taxRateSelect.value) || 0;
             
             const lineSubtotal = quantity * unitPrice;
-            const lineVat = lineSubtotal * (taxRate / 100);
-            const lineTotal = lineSubtotal + lineVat;
-
             subtotalBeforeVat += lineSubtotal;
-            taxTotal += lineVat;
-
-            if (lineSubtotalInput) {
-                lineSubtotalInput.value = lineTotal.toFixed(2);
-            }
         });
+        
+        // Calculate 15% VAT on the subtotal
+        const taxTotal = subtotalBeforeVat * 0.15;
         
         const shipping = parseFloat(document.getElementById('shipping_cost')?.value) || 0;
         const discount = parseFloat(document.getElementById('discount')?.value) || 0;

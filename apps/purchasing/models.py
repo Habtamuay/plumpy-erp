@@ -129,9 +129,11 @@ class PurchaseRequisitionLine(CompanyModel):
 class PurchaseOrder(CompanyModel):
     STATUS_CHOICES = [
         ("draft", "Draft"),
+        ("pending", "Pending Approval"),
         ("approved", "Approved"),
+        ("rejected", "Rejected"),
         ("ordered", "Ordered"),
-        ("partial", "Partial"),
+        ("partial", "Partial Receipt"),
         ("received", "Received"),
         ("closed", "Closed"),
         ("cancelled", "Cancelled"),

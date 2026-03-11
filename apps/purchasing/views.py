@@ -1596,3 +1596,61 @@ def ajax_check_po_number(request):
         return JsonResponse({'exists': exists})
     return JsonResponse({'exists': False})
 
+@login_required
+def ajax_add_supplier(request):
+    """AJAX endpoint to add a new supplier"""
+    if request.method == 'POST':
+        try:
+            company_name = request.session.get('current_company_name')
+            if not company_name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No company selected'
+                }, status=400)
+            
+            # Generate supplier code if not provided
+            supplier_code = request.POST.get('code', '').strip()
+            if not supplier_code:
+                # Auto-generate code based on name
+                name = request.POST.get('name', '').strip()
+                if name:
+                    # Use first 3 letters of name + timestamp
+                    prefix = ''.join(filter(str.isalnum, name[:3])).upper()
+                    timestamp = timezone.now().strftime('%y%m%d%H%M')
+                    supplier_code = f"{prefix}{timestamp}"
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Supplier name is required'
+                    }, status=400)
+            
+            # Create supplier
+            supplier = Supplier.objects.create(
+                company=company_name,
+                code=supplier_code,
+                name=request.POST.get('name', '').strip(),
+                contact_person=request.POST.get('contact_person', '').strip(),
+                email=request.POST.get('email', '').strip(),
+                phone=request.POST.get('phone', '').strip(),
+                address=request.POST.get('address', '').strip(),
+                tax_id=request.POST.get('tax_id', '').strip(),
+                payment_terms_days=int(request.POST.get('payment_terms_days', 30)),
+                notes=request.POST.get('notes', '').strip(),
+                is_active=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'supplier_id': supplier.id,
+                'supplier_name': supplier.name,
+                'supplier_code': supplier.code
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
