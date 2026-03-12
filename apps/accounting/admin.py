@@ -45,8 +45,8 @@ class AccountTypeAdmin(admin.ModelAdmin):
 @admin.register(AccountGroup)
 class AccountGroupAdmin(admin.ModelAdmin):
     list_display = ('name', 'account_type', 'code_range_start', 'code_range_end', 'display_order', 'is_active')
-    list_filter = ('account_type', 'is_active')
-    search_fields = ('name', 'description')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'description', 'account_type__name')
     ordering = ('display_order', 'name')
     autocomplete_fields = ['account_type']
 
@@ -72,8 +72,8 @@ class AccountGroupAdmin(admin.ModelAdmin):
 @admin.register(AccountCategory)
 class AccountCategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'account_group', 'report_category', 'display_order', 'is_active')
-    list_filter = ('account_group', 'report_category', 'is_active')
-    search_fields = ('name', 'description')
+    list_filter = ('report_category', 'is_active')
+    search_fields = ('name', 'description', 'account_group__name')
     ordering = ('display_order', 'name')
     autocomplete_fields = ['account_group']
 
@@ -98,8 +98,8 @@ class AccountCategoryAdmin(admin.ModelAdmin):
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'account_type', 'account_group', 'account_category', 'current_balance_display', 'is_active')
-    list_filter = ('account_type', 'account_group', 'account_category', 'is_active', 'is_control_account')
-    search_fields = ('code', 'name', 'description')
+    list_filter = ('is_active', 'is_control_account')
+    search_fields = ('code', 'name', 'description', 'account_type__name', 'account_group__name', 'account_category__name')
     ordering = ('code',)
     autocomplete_fields = ['account_type', 'account_group', 'account_category', 'parent']
     readonly_fields = ('current_balance', 'created_at', 'updated_at', 'balance_display')
