@@ -5,7 +5,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import (
-    JournalEntry, JournalLine, Account, AccountType,  # Added AccountType import
+    JournalEntry, JournalLine, Account, AccountType, AccountGroup, AccountCategory,
     PurchaseBill, Payment
 )
 from apps.production.models import ProductionRun
@@ -16,7 +16,7 @@ from apps.company.models import Company
 
 # Helper to get or create common accounts
 def get_account(code, name=None, account_type_name=None):
-    """Get or create an account by code with proper AccountType instance"""
+    """Get or create an account by code with proper AccountType, AccountGroup, and AccountCategory instances"""
     
     # First, get or create the account type
     if account_type_name:
@@ -52,12 +52,39 @@ def get_account(code, name=None, account_type_name=None):
             }
         )
     
-    # Now create or get the account with the correct account_type instance
+    # Get or create a default account group for this account type
+    account_group, _ = AccountGroup.objects.get_or_create(
+        account_type=account_type,
+        name=f"{account_type.name} Group",
+        defaults={
+            'code_range_start': f"{code_prefix}000",
+            'code_range_end': f"{code_prefix}999",
+            'description': f'Default group for {account_type.name} accounts',
+            'is_active': True,
+            'display_order': 0,
+        }
+    )
+    
+    # Get or create a default account category for this account group
+    account_category, _ = AccountCategory.objects.get_or_create(
+        account_group=account_group,
+        name=f"{account_type.name} Category",
+        defaults={
+            'report_category': 'balance_sheet' if account_type.name in ['Asset', 'Liability', 'Equity'] else 'income_statement',
+            'description': f'Default category for {account_type.name} accounts',
+            'is_active': True,
+            'display_order': 0,
+        }
+    )
+    
+    # Now create or get the account with all required fields
     account, created = Account.objects.get_or_create(
         code=code,
         defaults={
             'name': name or code,
-            'account_type': account_type,  # This is now an AccountType instance, not a string
+            'account_type': account_type,
+            'account_group': account_group,
+            'account_category': account_category,
             'is_active': True,
             'opening_balance': Decimal('0.00'),
             'current_balance': Decimal('0.00'),
