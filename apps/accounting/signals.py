@@ -44,10 +44,11 @@ def get_account(code, name=None, account_type_name=None):
         )
     else:
         # Default to Asset if no type specified
+        code_prefix = '1'
         account_type, _ = AccountType.objects.get_or_create(
             name='Asset',
             defaults={
-                'code_prefix': '1',
+                'code_prefix': code_prefix,
                 'description': 'Asset accounts'
             }
         )
