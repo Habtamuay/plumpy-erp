@@ -10,6 +10,7 @@ from apps.sales.models import SalesOrder, SalesInvoice, SalesInvoiceLine, SalesS
 from apps.production.models import ProductionRun
 from apps.core.models import Item
 from apps.accounting.models import JournalEntry, JournalLine, Account
+from apps.accounting.signals import get_account  # Import the helper function
 from apps.company.models import Customer
 from apps.inventory.models import StockTransaction, Lot, Warehouse
 
@@ -194,18 +195,10 @@ def create_invoice_journal_entry(invoice):
         sales_account = Account.objects.filter(code='4100').first()
         
         if not ar_account:
-            ar_account = Account.objects.create(
-                code='1100',
-                name='Accounts Receivable',
-                account_type='asset'
-            )
+            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
         
         if not sales_account:
-            sales_account = Account.objects.create(
-                code='4100',
-                name='Sales Revenue',
-                account_type='revenue'
-            )
+            sales_account = get_account('4100', 'Sales Revenue', 'revenue')
         
         # Create journal entry
         je = JournalEntry.objects.create(
@@ -237,11 +230,7 @@ def create_invoice_journal_entry(invoice):
         if invoice.tax_amount and invoice.tax_amount > 0:
             vat_account = Account.objects.filter(code='2200').first()
             if not vat_account:
-                vat_account = Account.objects.create(
-                    code='2200',
-                    name='VAT Payable',
-                    account_type='liability'
-                )
+                vat_account = get_account('2200', 'VAT Payable', 'liability')
             
             JournalLine.objects.create(
                 journal=je,
@@ -429,18 +418,10 @@ def create_payment_journal_entry(payment):
         ar_account = Account.objects.filter(code='1100').first()
         
         if not cash_account:
-            cash_account = Account.objects.create(
-                code='1010',
-                name='Cash/Bank',
-                account_type='asset'
-            )
+            cash_account = get_account('1010', 'Cash/Bank', 'asset')
         
         if not ar_account:
-            ar_account = Account.objects.create(
-                code='1100',
-                name='Accounts Receivable',
-                account_type='asset'
-            )
+            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
         
         # Create journal entry
         je = JournalEntry.objects.create(
