@@ -82,12 +82,12 @@ def generate_invoice_pdf(invoice):
     # table header
     p.setFont("Helvetica-Bold", 9)
     p.drawString(left_x, y, "No")
-    p.drawString(left_x+30, y, "Code")
-    p.drawString(left_x+90, y, "Description")
-    p.drawString(left_x+230, y, "Unit")
-    p.drawString(left_x+270, y, "Qty")
-    p.drawString(left_x+310, y, "Unit Price")
-    p.drawString(left_x+380, y, "Total")
+    p.drawString(left_x+25, y, "Code")
+    p.drawString(left_x+80, y, "Description")
+    p.drawString(left_x+220, y, "Unit")
+    p.drawString(left_x+255, y, "Qty")
+    p.drawRightString(left_x+350, y, "Unit Price")
+    p.drawRightString(left_x+430, y, "Total")
     y -= 14
 
     p.setFont("Helvetica", 8)
@@ -97,12 +97,12 @@ def generate_invoice_pdf(invoice):
     line_no = 1
     for line in invoice.lines.all():
         p.drawString(left_x, y, str(line_no))
-        p.drawString(left_x+30, y, line.item.code or "")
-        p.drawString(left_x+90, y, line.item.name)
-        p.drawString(left_x+230, y, line.unit.abbreviation if line.unit else "")
-        p.drawString(left_x+270, y, str(line.quantity))
-        p.drawString(left_x+310, y, str(line.unit_price))
-        p.drawString(left_x+380, y, str(line.total_price))
+        p.drawString(left_x+25, y, line.item.code or "")
+        p.drawString(left_x+80, y, line.item.name)
+        p.drawString(left_x+220, y, line.unit.abbreviation if line.unit else "")
+        p.drawString(left_x+255, y, str(line.quantity))
+        p.drawRightString(left_x+350, y, f"{line.unit_price:,.2f}")
+        p.drawRightString(left_x+430, y, f"{line.total_price:,.2f}")
         y -= 14
         line_no += 1
         if y < 100:
@@ -110,17 +110,17 @@ def generate_invoice_pdf(invoice):
             y = 800
     y -= 20
 
-    # totals box on right (shifted further right)
-    tx = left_x + 340
+    # totals box on right (aligned with Total column)
+    tx = left_x + 280
     p.setFont("Helvetica-Bold", 9)
     p.drawString(tx, y, "SUBTOTAL")
-    p.drawRightString(tx+80, y, str(invoice.subtotal))
+    p.drawRightString(left_x+430, y, f"{invoice.subtotal:,.2f}")
     y -= 14
     p.drawString(tx, y, f"VAT({invoice.tax_rate}%)")
-    p.drawRightString(tx+80, y, str(invoice.tax_amount))
+    p.drawRightString(left_x+430, y, f"{invoice.tax_amount:,.2f}")
     y -= 14
     p.drawString(tx, y, "GRAND TOTAL")
-    p.drawRightString(tx+80, y, str(invoice.total_amount))
+    p.drawRightString(left_x+430, y, f"{invoice.total_amount:,.2f}")
     y -= 30
 
     # footer payment and memo

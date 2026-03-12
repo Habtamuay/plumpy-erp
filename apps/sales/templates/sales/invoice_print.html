@@ -13,11 +13,15 @@
         
         .details-table { width: 100%; line-height: 20px; margin-bottom: 40px; }
         .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .items-table th, .items-table td { border: 1px solid #333; padding: 8px; }
+        .items-table th, .items-table td { border: 1px solid #333; padding: 8px; text-align: left; }
         .items-table th { background: #f8f9fa; }
+        .items-table th:nth-child(5), .items-table th:nth-child(6), .items-table th:nth-child(7),
+        .items-table td:nth-child(5), .items-table td:nth-child(6), .items-table td:nth-child(7) { text-align: right; }
         
-        .totals-table { width: 30%; margin-left: 70%; line-height: 25px; border-collapse: collapse; }
-        .totals-table td { padding: 5px; border: 1px solid #333; }
+        .totals-table { width: 40%; margin-left: 60%; line-height: 25px; border-collapse: collapse; }
+        .totals-table td { padding: 8px; border: 1px solid #333; }
+        .totals-table td:first-child { text-align: left; font-weight: bold; }
+        .totals-table td:last-child { text-align: right; }
         .grand-total { font-weight: bold; }
 
         @media print {
@@ -64,13 +68,13 @@
         <table class="items-table">
             <thead>
                 <tr>
-                    <th>No</th>
-                    <th>Code</th>
-                    <th>Description</th>
-                    <th>Unit</th>
-                    <th>Qty</th>
-                    <th>Unit Price</th>
-                    <th>Total</th>
+                    <th style="width: 5%;">No</th>
+                    <th style="width: 10%;">Code</th>
+                    <th style="width: 30%;">Description</th>
+                    <th style="width: 8%;">Unit</th>
+                    <th style="width: 10%;">Qty</th>
+                    <th style="width: 15%;">Unit Price</th>
+                    <th style="width: 17%;">Total</th>
                 </tr>
             </thead>
             <tbody>
@@ -88,18 +92,18 @@
             </tbody>
         </table>
 
-        <table class="totals-table" style="margin-top:5px; width:40%;">
+        <table class="totals-table">
             <tr>
                 <td>SUBTOTAL</td>
-                <td>{{ invoice.subtotal }}</td>
+                <td>{{ invoice.subtotal|floatformat:2 }}</td>
             </tr>
             <tr>
                 <td>VAT({{ invoice.tax_rate }}%)</td>
-                <td>{{ invoice.tax_amount }}</td>
+                <td>{{ invoice.tax_amount|floatformat:2 }}</td>
             </tr>
             <tr class="grand-total">
                 <td><strong>GRAND TOTAL</strong></td>
-                <td><strong>{{ invoice.total_amount }}</strong></td>
+                <td><strong>{{ invoice.total_amount|floatformat:2 }}</strong></td>
             </tr>
         </table>
 
