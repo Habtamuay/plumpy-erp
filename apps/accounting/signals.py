@@ -18,23 +18,29 @@ from apps.company.models import Company
 def get_account(code, name=None, account_type_name=None):
     """Get or create an account by code with proper AccountType, AccountGroup, and AccountCategory instances"""
     
-    # First, get or create the account type
-    if account_type_name:
-        # Capitalize the account type name properly
-        type_name = account_type_name.capitalize()
+    try:
+        # Determine the code prefix and type name
+        if account_type_name:
+            # Capitalize the account type name properly
+            type_name = account_type_name.capitalize()
+            
+            # Map common account types to code prefixes
+            prefix_map = {
+                'Asset': '1',
+                'Liability': '2',
+                'Equity': '3',
+                'Revenue': '4',
+                'Income': '4',
+                'Expense': '5',
+            }
+            
+            code_prefix = prefix_map.get(type_name, code[0] if code else '1')
+        else:
+            # Default to Asset if no type specified
+            type_name = 'Asset'
+            code_prefix = '1'
         
-        # Map common account types to code prefixes
-        prefix_map = {
-            'Asset': '1',
-            'Liability': '2',
-            'Equity': '3',
-            'Revenue': '4',
-            'Income': '4',
-            'Expense': '5',
-        }
-        
-        code_prefix = prefix_map.get(type_name, code[0])
-        
+        # Get or create the account type
         account_type, _ = AccountType.objects.get_or_create(
             name=type_name,
             defaults={
@@ -42,62 +48,95 @@ def get_account(code, name=None, account_type_name=None):
                 'description': f'{type_name} accounts'
             }
         )
-    else:
-        # Default to Asset if no type specified
-        code_prefix = '1'
-        account_type, _ = AccountType.objects.get_or_create(
-            name='Asset',
+        
+        # Get or create a default account group for this account type
+        # Use a unique name that includes code_prefix to avoid conflicts
+        group_name = f"{account_type.name} Group"
+        try:
+            account_group, _ = AccountGroup.objects.get_or_create(
+                account_type=account_type,
+                name=group_name,
+                defaults={
+                    'code_range_start': f"{code_prefix}000",
+                    'code_range_end': f"{code_prefix}999",
+                    'description': f'Default group for {account_type.name} accounts',
+                    'is_active': True,
+                    'display_order': 0,
+                }
+            )
+        except Exception as e:
+            # If group creation fails due to unique constraint, try to find existing one
+            account_group = AccountGroup.objects.filter(
+                account_type=account_type,
+                name__icontains=account_type.name
+            ).first()
+            if not account_group:
+                # If still not found, get any group for this account type
+                account_group = AccountGroup.objects.filter(account_type=account_type).first()
+            if not account_group:
+                raise ValueError(f"Could not create or find AccountGroup for {account_type.name}: {e}")
+        
+        # Ensure account_group is set before proceeding
+        if not account_group:
+            raise ValueError(f"AccountGroup is None for account type {type_name}")
+        
+        # Get or create a default account category for this account group
+        # Use a unique name that includes account_group to avoid conflicts
+        category_name = f"{account_type.name} Category"
+        try:
+            account_category, _ = AccountCategory.objects.get_or_create(
+                account_group=account_group,
+                name=category_name,
+                defaults={
+                    'report_category': 'balance_sheet' if account_type.name in ['Asset', 'Liability', 'Equity'] else 'income_statement',
+                    'description': f'Default category for {account_type.name} accounts',
+                    'is_active': True,
+                    'display_order': 0,
+                }
+            )
+        except Exception as e:
+            # If category creation fails due to unique constraint, try to find existing one
+            account_category = AccountCategory.objects.filter(
+                account_group=account_group,
+                name__icontains=account_type.name
+            ).first()
+            if not account_category:
+                # If still not found, get any category for this account group
+                account_category = AccountCategory.objects.filter(account_group=account_group).first()
+            if not account_category:
+                raise ValueError(f"Could not create or find AccountCategory for {account_type.name}: {e}")
+        
+        # Ensure account_category is set before proceeding
+        if not account_category:
+            raise ValueError(f"AccountCategory is None for account type {type_name}")
+        
+        # Now create or get the account with all required fields
+        account, created = Account.objects.get_or_create(
+            code=code,
             defaults={
-                'code_prefix': code_prefix,
-                'description': 'Asset accounts'
+                'name': name or code,
+                'account_type': account_type,
+                'account_group': account_group,
+                'account_category': account_category,
+                'is_active': True,
+                'opening_balance': Decimal('0.00'),
+                'current_balance': Decimal('0.00'),
             }
         )
-    
-    # Get or create a default account group for this account type
-    account_group, _ = AccountGroup.objects.get_or_create(
-        account_type=account_type,
-        name=f"{account_type.name} Group",
-        defaults={
-            'code_range_start': f"{code_prefix}000",
-            'code_range_end': f"{code_prefix}999",
-            'description': f'Default group for {account_type.name} accounts',
-            'is_active': True,
-            'display_order': 0,
-        }
-    )
-    
-    # Get or create a default account category for this account group
-    account_category, _ = AccountCategory.objects.get_or_create(
-        account_group=account_group,
-        name=f"{account_type.name} Category",
-        defaults={
-            'report_category': 'balance_sheet' if account_type.name in ['Asset', 'Liability', 'Equity'] else 'income_statement',
-            'description': f'Default category for {account_type.name} accounts',
-            'is_active': True,
-            'display_order': 0,
-        }
-    )
-    
-    # Now create or get the account with all required fields
-    account, created = Account.objects.get_or_create(
-        code=code,
-        defaults={
-            'name': name or code,
-            'account_type': account_type,
-            'account_group': account_group,
-            'account_category': account_category,
-            'is_active': True,
-            'opening_balance': Decimal('0.00'),
-            'current_balance': Decimal('0.00'),
-        }
-    )
-    
-    # If account exists but we want to update the name
-    if not created and name and account.name != name:
-        account.name = name
-        account.save(update_fields=['name'])
-    
-    return account
+        
+        # If account exists but we want to update the name
+        if not created and name and account.name != name:
+            account.name = name
+            account.save(update_fields=['name'])
+        
+        return account
+        
+    except Exception as e:
+        # Log the error and re-raise with more context
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in get_account for code={code}, name={name}, type={account_type_name}: {e}")
+        raise
 
 
 @receiver(post_save, sender=JournalEntry)
