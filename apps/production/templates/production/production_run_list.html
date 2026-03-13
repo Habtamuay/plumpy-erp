@@ -1,12 +1,19 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Production Runs</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="mb-0">Production Runs</h2>
+        {% if current_company_name %}
+        <small class="text-muted">Working Company: {{ current_company_name }}</small>
+        {% endif %}
+    </div>
+    <a href="{% url 'production:start_run' %}" class="btn btn-primary">Start New Run</a>
+</div>
 
-<a href="{% url 'production:start_run' %}" class="btn btn-primary mb-3">Start New Run</a>
 
 {% if runs %}
-    <table class="table table-striped">
+    <table class="table table-striped table-hover align-middle">
         <thead>
             <tr>
                 <th>ID</th>
@@ -16,20 +23,81 @@
                 <th>Actual Qty</th>
                 <th>Status</th>
                 <th>Start</th>
-                <th>End</th>
+                <th>Planned/Actual End</th>
+                <th>Trace / Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for run in runs %}
             <tr>
-                <td>{{ run.id }}</td>
-                <td>{{ run.product }}</td>
-                <td>{{ run.bom }}</td>
+                <td>
+                    <a href="{% url 'production:production_run_detail' run.id %}">
+                        #{{ run.id }}
+                    </a>
+                </td>
+                <td>
+                    <a href="{% url 'production:production_run_detail' run.id %}">
+                        {{ run.product }}
+                    </a>
+                </td>
+                <td>
+                    {% if run.bom %}
+                    <a href="{% url 'production:bom_detail' run.bom.id %}" title="Open BOM origin">
+                        {{ run.bom }}
+                    </a>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
                 <td>{{ run.planned_quantity|floatformat:2 }}</td>
-                <td>{{ run.actual_quantity|default:"—"|floatformat:2 }}</td>
-                <td>{{ run.display_status }}</td>
+                <td>
+                    {% if run.actual_quantity is not None %}
+                        {{ run.actual_quantity|floatformat:2 }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td><a href="{% url 'production:production_run_detail' run.id %}">{{ run.display_status }}</a></td>
                 <td>{{ run.start_date|date:"d M Y H:i" }}</td>
-                <td>{{ run.end_date|date:"d M Y H:i"|default:"—" }}</td>
+                <td>
+                    {% if run.end_date %}
+                        {{ run.end_date|date:"d M Y H:i" }}
+                    {% elif run.planned_end_date %}
+                        <span class="text-muted">Planned: {{ run.planned_end_date|date:"d M Y H:i" }}</span>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <a href="{% url 'production:production_run_detail' run.id %}" class="btn btn-outline-info" title="Trace full flow">
+                            View Flow
+                        </a>
+                        {% if run.status == 'planned' or run.status == 'in_progress' %}
+                        <a href="{% url 'production:edit_run' run.id %}" class="btn btn-outline-primary" title="Change run data">
+                            Edit
+                        </a>
+                        {% endif %}
+                        {% if run.status == 'planned' %}
+                        <form method="post" action="{% url 'production:start_existing_run' run.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary" title="Move to In Progress">
+                                Start
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% if run.status == 'in_progress' %}
+                        <a href="{% url 'production:complete_run' run.id %}" class="btn btn-outline-success" title="Complete run">
+                            Complete
+                        </a>
+                        {% endif %}
+                        {% if run.status == 'planned' or run.status == 'in_progress' %}
+                        <a href="{% url 'production:cancel_run' run.id %}" class="btn btn-outline-danger" title="Cancel run">
+                            Cancel
+                        </a>
+                        {% endif %}
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

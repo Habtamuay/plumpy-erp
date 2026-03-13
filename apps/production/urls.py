@@ -11,6 +11,8 @@ urlpatterns = [
     # Production Runs
     path('runs/', views.production_run_list, name='production_run_list'),
     path('runs/start/', views.start_production_run, name='start_run'),
+    path('runs/<int:pk>/start/', views.start_existing_run, name='start_existing_run'),
+    path('runs/<int:pk>/edit/', views.edit_production_run, name='edit_run'),
     path('runs/<int:pk>/', views.production_run_detail, name='production_run_detail'),
     path('runs/<int:pk>/complete/', views.complete_production_run, name='complete_run'),
     path('runs/<int:pk>/cancel/', views.cancel_production_run, name='cancel_run'),

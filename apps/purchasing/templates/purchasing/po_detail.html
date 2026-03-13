@@ -296,8 +296,15 @@
                                     <td>{{ receipt.receipt_number }}</td>
                                     <td>{{ receipt.received_date|date:"Y-m-d H:i" }}</td>
                                     <td>{{ receipt.notes|truncatewords:20 }}</td>
-                                    <td>{{ receipt.created_by.get_full_name|default:receipt.created_by.username }}</td>
+                                    <td>{{ receipt.received_by.get_full_name|default:receipt.received_by.username }}</td>
                                 </tr>
+                                    <td>
+                                        {% if receipt.received_by %}
+                                        {{ receipt.received_by.get_full_name|default:receipt.received_by.username }}
+                                        {% else %}
+                                    <em>System</em>
+                                    {% endif %}
+                                </td>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -309,42 +316,69 @@
     {% endif %}
 </div>
 
-<!-- Receive PO Modal -->
-<div class="modal fade" id="receivePOModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Receiving Modal -->
+<div class="modal fade" id="receiveModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Receive Purchase Order #{{ po.po_number }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <form id="receivePOForm" method="post" action="{% url 'purchasing:receive_po' po.id %}">
-                    {% csrf_token %}
-                    <p>Are you sure you want to mark this purchase order as received?</p>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Received Date *</label>
-                        <input type="date" class="form-control" name="received_date" value="{% now 'Y-m-d' %}" required>
+            <form method="post" action="{% url 'purchasing:receive_po' po.id %}" id="receiveForm">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Receipt Date *</label>
+                            <input type="date" name="received_date" class="form-control" value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Receipt Number</label>
+                            <input type="text" name="receipt_number" class="form-control" 
+                                   value="GRN-{% now 'Ymd' %}-001" placeholder="Leave blank for auto-generation">
+                            <div class="form-text">Auto-generated if left blank</div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label class="form-label">Receipt Number *</label>
-                        <input type="text" class="form-control" name="receipt_number" 
-                               value="GRN-{% now 'Ymd' %}-{{ po.id }}" required>
-                    </div>
+                    <h6 class="mt-3 mb-2">Items to Receive</h6>
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Ordered</th>
+                                <th>Received</th>
+                                <th>Remaining</th>
+                                <th>Receiving Now</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in lines %}
+                            <tr>
+                                <td>{{ line.item_obj.name|default:line.item }}</td>
+                                <td class="text-end">{{ line.quantity_ordered }}</td>
+                                <td class="text-end">{{ line.quantity_received }}</td>
+                                <td class="text-end">{{ line.remaining }}</td>
+                                <td>
+                                    <input type="number" name="qty_{{ line.id }}" class="form-control form-control-sm" 
+                                           value="{{ line.remaining }}" min="0" max="{{ line.remaining }}" step="0.01">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                     
                     <div class="mb-3">
                         <label class="form-label">Notes</label>
-                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                        <textarea name="notes" class="form-control" rows="2"></textarea>
                     </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" form="receivePOForm" class="btn btn-success">
-                    <i class="fas fa-check me-2"></i>Confirm Receipt
-                </button>
-            </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Receive Items
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

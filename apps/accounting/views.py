@@ -16,6 +16,7 @@ from .resources import ARAgingResource, APAgingResource
 from apps.company.models import Customer, Company
 from apps.purchasing.models import Supplier
 from apps.sales.models import SalesInvoice  # Import SalesInvoice from sales app
+from django.db.models.functions import TruncMonth
 
 
 def _current_company(request):
@@ -111,6 +112,43 @@ def dashboard(request):
     ).annotate(
         total_invoiced=Sum('total_amount')
     ).order_by('-total_invoiced')[:5]
+
+    # Chart Data: Revenue vs Expenses (Last 6 Months)
+    six_months_ago = today - timedelta(days=180)
+    
+    # Revenue: Account Type 4 (Credit normal)
+    revenue_qs = JournalLine.objects.filter(
+        journal__company=company,
+        journal__entry_date__gte=six_months_ago,
+        journal__is_posted=True,
+        account__account_type__code_prefix__startswith='4'
+    ).annotate(month=TruncMonth('journal__entry_date')).values('month').annotate(
+        amount=Sum('credit') - Sum('debit')
+    ).order_by('month')
+
+    # Expenses: Account Type 5 (Debit normal)
+    expense_qs = JournalLine.objects.filter(
+        journal__company=company,
+        journal__entry_date__gte=six_months_ago,
+        journal__is_posted=True,
+        account__account_type__code_prefix__startswith='5'
+    ).annotate(month=TruncMonth('journal__entry_date')).values('month').annotate(
+        amount=Sum('debit') - Sum('credit')
+    ).order_by('month')
+
+    # Merge data for Chart.js
+    chart_data_map = {}
+    for r in revenue_qs:
+        m_str = r['month'].strftime('%Y-%m')
+        if m_str not in chart_data_map: chart_data_map[m_str] = {'r': 0, 'e': 0, 'label': r['month'].strftime('%b %Y')}
+        chart_data_map[m_str]['r'] = float(r['amount'])
+        
+    for e in expense_qs:
+        m_str = e['month'].strftime('%Y-%m')
+        if m_str not in chart_data_map: chart_data_map[m_str] = {'r': 0, 'e': 0, 'label': e['month'].strftime('%b %Y')}
+        chart_data_map[m_str]['e'] = float(e['amount'])
+
+    sorted_keys = sorted(chart_data_map.keys())
     
     context = {
         'total_ar_outstanding': total_ar_outstanding,
@@ -132,6 +170,9 @@ def dashboard(request):
         'recent_journal_entries': recent_journal_entries,
         'top_customers': top_customers,
         'today': today,
+        'chart_labels': json.dumps([chart_data_map[k]['label'] for k in sorted_keys]),
+        'chart_revenue': json.dumps([chart_data_map[k]['r'] for k in sorted_keys]),
+        'chart_expenses': json.dumps([chart_data_map[k]['e'] for k in sorted_keys]),
     }
     
     return render(request, 'accounting/dashboard.html', context)
@@ -298,13 +339,30 @@ def ap_dashboard(request):
 @login_required
 def ar_aging_report(request):
     """Detailed AR Aging Report with export functionality"""
+    company = getattr(request, 'company', None) or _current_company(request)
+    if not company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     today = timezone.now().date()
     
+    # Filters
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    customer_id = request.GET.get('customer')
+
     # Get all AR invoices from sales app
-    invoices = _scope(SalesInvoice.objects.filter(
-        status__in=['posted', 'partial', 'overdue']
-    ), company).select_related('customer').order_by('due_date')
+    qs = SalesInvoice.objects.filter(status__in=['posted', 'partial', 'overdue'])
     
+    if date_from:
+        qs = qs.filter(due_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(due_date__lte=date_to)
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+    
+    invoices = _scope(qs, company).select_related('customer').order_by('due_date')
+
     # Calculate aging buckets
     aging_buckets = {
         'current': invoices.filter(due_date__gte=today),
@@ -325,19 +383,23 @@ def ar_aging_report(request):
     # Handle Excel export
     if request.GET.get('export') == 'excel':
         resource = ARAgingResource()
-        dataset = resource.export(invoices)
+        xlsx_data = resource.export_styled(invoices)
         response = HttpResponse(
-            dataset.xlsx, 
+            xlsx_data, 
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         filename = f"AR_Aging_{today.strftime('%Y%m%d')}.xlsx"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
     
+    customers = Customer.objects.filter(company=company, is_active=True).order_by('name')
+
     context = {
         'invoices': invoices,
         'bucket_totals': bucket_totals,
         'today': today,
+        'customers': customers,
+        'selected_customer': int(customer_id) if customer_id else None,
     }
     
     return render(request, 'accounting/ar_aging.html', context)
@@ -346,13 +408,30 @@ def ar_aging_report(request):
 @login_required
 def ap_aging_report(request):
     """Detailed AP Aging Report with export functionality"""
+    company = getattr(request, 'company', None) or _current_company(request)
+    if not company:
+        messages.error(request, "Please select a company first.")
+        return redirect('core:home')
+
     today = timezone.now().date()
     
+    # Filters
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    supplier_id = request.GET.get('supplier')
+
     # Get all AP bills
-    bills = _scope(PurchaseBill.objects.filter(
-        status__in=['posted', 'partial', 'overdue']
-    ), company).select_related('supplier').order_by('due_date')
+    qs = PurchaseBill.objects.filter(status__in=['posted', 'partial', 'overdue'])
+
+    if date_from:
+        qs = qs.filter(due_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(due_date__lte=date_to)
+    if supplier_id:
+        qs = qs.filter(supplier_id=supplier_id)
     
+    bills = _scope(qs, company).select_related('supplier').order_by('due_date')
+
     # Calculate aging buckets
     aging_buckets = {
         'current': bills.filter(due_date__gte=today),
@@ -373,19 +452,23 @@ def ap_aging_report(request):
     # Handle Excel export
     if request.GET.get('export') == 'excel':
         resource = APAgingResource()
-        dataset = resource.export(bills)
+        xlsx_data = resource.export_styled(bills)
         response = HttpResponse(
-            dataset.xlsx, 
+            xlsx_data, 
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         filename = f"AP_Aging_{today.strftime('%Y%m%d')}.xlsx"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
     
+    suppliers = Supplier.objects.filter(company=company.name, is_active=True).order_by('name')
+
     context = {
         'bills': bills,
         'bucket_totals': bucket_totals,
         'today': today,
+        'suppliers': suppliers,
+        'selected_supplier': int(supplier_id) if supplier_id else None,
     }
     
     return render(request, 'accounting/ap_aging.html', context)

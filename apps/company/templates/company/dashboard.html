@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Company Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">Company Dashboard</h2>
+            <p class="text-muted mb-0">{{ company.name }}</p>
+        </div>
+        <a href="{% url 'company:scope_audit' %}" class="btn btn-outline-secondary">Scope Audit</a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100"><div class="card-body text-center"><h6 class="text-muted">Branches</h6><h3>{{ stats.branches }}</h3></div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100"><div class="card-body text-center"><h6 class="text-muted">Departments</h6><h3>{{ stats.departments }}</h3></div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100"><div class="card-body text-center"><h6 class="text-muted">Customers</h6><h3>{{ stats.customers }}</h3></div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100"><div class="card-body text-center"><h6 class="text-muted">Employees</h6><h3>{{ stats.employees }}</h3></div></div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">Recent Customers</div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        {% for c in recent_customers %}
+                        <li>{{ c.name }} ({{ c.created_at|date:"Y-m-d" }})</li>
+                        {% empty %}
+                        <li class="text-muted">No customers yet.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">Recent Employees</div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        {% for e in recent_employees %}
+                        <li>{{ e.full_name }} ({{ e.created_at|date:"Y-m-d" }})</li>
+                        {% empty %}
+                        <li class="text-muted">No employees yet.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db.models import Sum, F, Q, Count
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.views.decorators.http import require_POST
 from decimal import Decimal
 import json
 
@@ -114,6 +115,10 @@ def dashboard(request):
 def production_run_list(request):
     """List all production runs with filtering"""
     runs = ProductionRun.objects.select_related('bom', 'product', 'created_by').order_by('-start_date')
+    company_id = request.session.get('current_company_id')
+    if company_id:
+        # Include legacy records with no company set, so historical runs remain visible.
+        runs = runs.filter(Q(company_id=company_id) | Q(company__isnull=True))
     
     # Apply filters
     form = ProductionSearchForm(request.GET)
@@ -141,8 +146,67 @@ def production_run_list(request):
         'form': form,
         'status_choices': ProductionRun.STATUS_CHOICES,
         'products': Item.objects.filter(category='finished', is_active=True),
+        'current_company_name': request.session.get('current_company_name'),
     }
     return render(request, 'production/production_run_list.html', context)
+
+
+@login_required
+def edit_production_run(request, pk):
+    """
+    Edit a production run (planned/in-progress only).
+    """
+    run = get_object_or_404(ProductionRun.objects.select_related('bom', 'product'), pk=pk)
+    company_id = request.session.get('current_company_id')
+    if company_id and run.company_id and run.company_id != company_id:
+        messages.error(request, "This run does not belong to the selected company.")
+        return redirect('production:production_run_list')
+
+    if run.status in ['completed', 'cancelled', 'failed']:
+        messages.error(request, f"Cannot edit a run with status '{run.get_status_display()}'.")
+        return redirect('production:production_run_detail', pk=run.pk)
+
+    if request.method == 'POST':
+        form = StartProductionRunForm(request.POST, instance=run, user=request.user)
+        if form.is_valid():
+            updated_run = form.save(commit=False)
+            # Ensure company/product consistency
+            if run.company_id and not updated_run.company_id:
+                updated_run.company_id = run.company_id
+            if updated_run.bom and updated_run.bom.product:
+                updated_run.product = updated_run.bom.product
+            updated_run.save()
+            messages.success(request, f'Production Run #{updated_run.id} updated successfully.')
+            return redirect('production:production_run_detail', pk=updated_run.pk)
+    else:
+        form = StartProductionRunForm(instance=run, user=request.user)
+
+    context = {
+        'form': form,
+        'run': run,
+        'is_edit': True,
+    }
+    return render(request, 'production/start_run.html', context)
+
+
+@login_required
+@require_POST
+def start_existing_run(request, pk):
+    """
+    Move a planned run to in-progress.
+    """
+    run = get_object_or_404(ProductionRun, pk=pk)
+    company_id = request.session.get('current_company_id')
+    if company_id and run.company_id and run.company_id != company_id:
+        messages.error(request, "This run does not belong to the selected company.")
+        return redirect('production:production_run_list')
+
+    try:
+        run.start()
+        messages.success(request, f"Run #{run.id} moved to In Progress.")
+    except ValidationError as e:
+        messages.error(request, f"Could not start run: {e}")
+    return redirect('production:production_run_detail', pk=run.pk)
 
 
 @login_required
@@ -192,6 +256,10 @@ def start_production_run(request):
             try:
                 run = form.save(commit=False)
                 run.created_by = request.user
+                # Always scope new runs to the selected company.
+                company_id = request.session.get('current_company_id')
+                if company_id:
+                    run.company_id = company_id
                 run.save()
                 
                 # Store material requirements in session for display

@@ -212,7 +212,7 @@ def add_finished_goods(production_run, to_warehouse):
     # Create new lot for finished goods
     lot = Lot.objects.create(
         item=product,
-        batch_number=f"PROD-{production_run.id:05d}-{timezone.now().strftime('%Y%m%d')}",
+        batch_number=production_run.batch_number or f"PROD-{production_run.id:05d}-{timezone.now().strftime('%Y%m%d')}",
         manufacturing_date=production_run.end_date or timezone.now().date(),
         expiry_date=(production_run.end_date or timezone.now().date()) + 
                     timezone.timedelta(days=product.shelf_life_days or 730),

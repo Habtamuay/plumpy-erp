@@ -185,7 +185,7 @@
                                             <a href="/admin/purchasing/purchaseorder/add/?item={{ stock.item.id }}" class="btn btn-outline-success" title="Create PO">
                                                 <i class="bi bi-cart-plus"></i>
                                             </a>
-                                            <a href="/admin/inventory/stocktransaction/?item__id__exact={{ stock.item.id }}" class="btn btn-outline-info" title="View Transactions">
+                                            <a href="{% url 'inventory:stock_ledger' %}?item={{ stock.item.id }}&warehouse={{ stock.warehouse.id }}" class="btn btn-outline-info" title="View Stock Ledger">
                                                 <i class="bi bi-clock-history"></i>
                                             </a>
                                         </div>

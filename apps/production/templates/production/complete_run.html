@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Complete Production Run - #{{ run.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-check-circle-fill me-2 text-success"></i>Complete Production Run</h2>
+            <p class="text-muted mb-0">Run #{{ run.id }} for {{ run.product_name }}</p>
+        </div>
+        {# This assumes you have a detail view for your production run named 'production_run_detail' in your 'production' app's urls.py #}
+        <a href="{% if run.id %}{% url 'production:production_run_detail' run.id %}{% else %}#{% endif %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to Production Run
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Confirm Completion</h5>
+                </div>
+                <div class="card-body">
+                    <p>You are about to complete this production run. This will consume the raw materials from inventory and add the finished product to stock.</p>
+                    
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    <p class="mb-0">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="{{ form.actual_quantity.id_for_label }}" class="form-label"><strong>{{ form.actual_quantity.label }} {% if form.actual_quantity.field.required %}<span class="text-danger">*</span>{% endif %}</strong></label>
+                                {{ form.actual_quantity }}
+                                <div class="form-text">
+                                    Enter the final quantity of finished goods produced. Planned was {{ run.planned_quantity|floatformat:2 }} {{ run.product.unit.abbreviation }}.
+                                </div>
+                                {% for error in form.actual_quantity.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.completion_date.id_for_label }}" class="form-label"><strong>{{ form.completion_date.label }} {% if form.completion_date.field.required %}<span class="text-danger">*</span>{% endif %}</strong></label>
+                                {{ form.completion_date }}
+                                {% for error in form.completion_date.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.waste_quantity.id_for_label }}" class="form-label"><strong>{{ form.waste_quantity.label }}</strong></label>
+                                {{ form.waste_quantity }}
+                                {% for error in form.waste_quantity.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.transfer_to_warehouse.id_for_label }}" class="form-label"><strong>{{ form.transfer_to_warehouse.label }} {% if form.transfer_to_warehouse.field.required %}<span class="text-danger">*</span>{% endif %}</strong></label>
+                                {{ form.transfer_to_warehouse }}
+                                {% for error in form.transfer_to_warehouse.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ form.notes.id_for_label }}" class="form-label"><strong>{{ form.notes.label }}</strong></label>
+                                {{ form.notes }}
+                                {% for error in form.notes.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning mt-4">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Warning:</strong> This action is irreversible. Please verify the actual quantity before confirming.
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-success px-4">
+                                <i class="bi bi-check-circle me-2"></i>Confirm Completion
+                            </button>
+                            <a href="{% if run.id %}{% url 'production:production_run_detail' run.id %}{% else %}#{% endif %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Run Summary</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr><th scope="row">Product</th><td>{{ run.product_name }} ({{ run.product_code }})</td></tr>
+                        <tr><th scope="row">BOM Version</th><td>{{ run.bom.version }}</td></tr>
+                        <tr><th scope="row">Planned Quantity</th><td>{{ run.planned_quantity|floatformat:2 }} {{ run.product.unit.abbreviation }}</td></tr>
+                        <tr><th scope="row">Start Date</th><td>{{ run.start_date|date:"d M Y" }}</td></tr>
+                        <tr><th scope="row">Status</th><td><span class="badge bg-warning text-dark">In Progress</span></td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

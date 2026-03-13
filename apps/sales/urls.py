@@ -22,6 +22,9 @@ urlpatterns = [
     path('orders/export/', views.export_orders, name='export_orders'),
     path('get-sales-order-details/', views.get_sales_order_details, name='get_sales_order_details'),
     path('get-invoice-details/', views.get_invoice_details, name='get_invoice_details'),
+    path('orders/<int:order_id>/print/', views.order_print, name='order_print'),
+    path('orders/<int:order_id>/pdf/', views.order_pdf, name='order_pdf'),
+   
     
     # ============================
     # Sales Invoice URLs
@@ -30,6 +33,7 @@ urlpatterns = [
     path('invoices/create/', views.invoice_create, name='invoice_create'),
     path('invoices/create-from-order/<int:order_id>/', views.create_invoice_from_order, name='create_invoice_from_order'),
     path('invoices/<int:invoice_id>/', views.invoice_detail, name='invoice_detail'),
+    path('invoices/<int:invoice_id>/print/', views.print_invoice_view, name='invoice_print'),
     path('invoices/<int:invoice_id>/send/', views.invoice_send, name='invoice_send'),
     path('invoices/<int:invoice_id>/cancel/', views.invoice_cancel, name='invoice_cancel'),
     path('customers/<int:customer_id>/history/', views.customer_history, name='customer_history'),

@@ -10,6 +10,11 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
 <!-- Bootstrap Icons -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<style>
+    .table .action-center .btn {
+        margin: 0 2px;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -170,7 +175,7 @@
                                     <th>Tax ID</th>
                                     <th>VAT</th>
                                     <th>Status</th>
-                                    <th>Actions</th>
+                                    <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -202,25 +207,23 @@
                                         <span class="badge bg-secondary">Inactive</span>
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <a href="{% url 'purchasing:supplier_detail' supplier.id %}" 
-                                               class="btn btn-outline-primary" title="View Details">
-                                                <i class="bi bi-eye"></i>
-                                            </a>
-                                            <a href="{% url 'purchasing:supplier_edit' supplier.id %}" 
-                                               class="btn btn-outline-secondary" title="Edit">
-                                                <i class="bi bi-pencil"></i>
-                                            </a>
-                                            <button type="button" class="btn btn-outline-danger" title="Delete"
-                                                    onclick="confirmDelete({{ supplier.id }}, '{{ supplier.name|escapejs }}')">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            <a href="{% url 'purchasing:supplier_performance' supplier.id %}" 
-                                               class="btn btn-outline-info" title="Performance">
-                                                <i class="bi bi-graph-up"></i>
-                                            </a>
-                                        </div>
+                                    <td class="text-center action-center">
+                                        <a href="{% url 'purchasing:supplier_detail' supplier.id %}"
+                                           class="btn btn-sm btn-info" title="View Details">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a href="{% url 'purchasing:supplier_edit' supplier.id %}"
+                                           class="btn btn-sm btn-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-danger" title="Delete"
+                                                onclick="confirmDelete({{ supplier.id }}, '{{ supplier.name|escapejs }}')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        <a href="{% url 'purchasing:supplier_performance' supplier.id %}"
+                                           class="btn btn-sm btn-success" title="Performance">
+                                            <i class="bi bi-graph-up"></i>
+                                        </a>
                                     </td>
                                 </tr>
                                 {% empty %}

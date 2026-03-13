@@ -24,8 +24,21 @@ from apps.sales.models import SalesOrder, SalesInvoice
 @login_required
 def company_dashboard(request):
     """Main company dashboard"""
-    user_profile = get_object_or_404(UserProfile, user=request.user)
-    company = user_profile.company
+    company = getattr(request, 'company', None)
+
+    # Fallback for users without UserProfile record.
+    if not company:
+        company_id = request.session.get('current_company_id')
+        if company_id:
+            company = Company.objects.filter(id=company_id, is_active=True).first()
+
+    user_profile = UserProfile.objects.filter(user=request.user).select_related('company').first()
+    if not company and user_profile:
+        company = user_profile.company
+
+    if not company:
+        messages.warning(request, "Please select a company first.")
+        return redirect('core:home')
     
     # Company statistics
     stats = {
@@ -40,6 +53,7 @@ def company_dashboard(request):
     recent_employees = UserProfile.objects.filter(company=company).order_by('-created_at')[:5]
     
     context = {
+        'user_profile': user_profile,
         'company': company,
         'stats': stats,
         'recent_customers': recent_customers,

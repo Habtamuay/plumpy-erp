@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Reports Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Reports Dashboard</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                <a href="{% url 'reports:create_scheduled_report' %}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-clock"></i> Schedule Report
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="card text-white bg-primary h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Monthly Revenue</h5>
+                    <h2 class="display-6">{{ monthly_revenue|floatform:2|intcomma }}</h2>
+                    <p class="card-text"><small>Current Month</small></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Orders</h5>
+                    <h2 class="display-6">{{ pending_orders }}</h2>
+                    <p class="card-text"><small>To be fulfilled</small></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="card text-white bg-info h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Active Production</h5>
+                    <h2 class="display-6">{{ active_production }}</h2>
+                    <p class="card-text"><small>Runs in progress</small></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="card text-white bg-warning h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Items</h5>
+                    <h2 class="display-6">{{ total_items }}</h2>
+                    <p class="card-text"><small>In Inventory</small></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Revenue Trend (Last 30 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Top Products by Sales</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="productChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Scheduled Reports -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Inventory Value by Category</h5>
+                </div>
+                <div class="card-body">
+                     <canvas id="inventoryChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links / Categories -->
+        <div class="col-lg-8 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Report Categories</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for category in categories %}
+                        <div class="col-md-6 mb-3">
+                            <h6 class="border-bottom pb-2">{{ category.name }}</h6>
+                            <div class="list-group list-group-flush">
+                                {% for report in category.reports.all %}
+                                <a href="{% url report.url_name %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    {{ report.name }}
+                                    <i class="fas fa-chevron-right text-muted small"></i>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Common chart options
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    };
+
+    // 1. Revenue Trend Chart
+    fetch('{% url "reports:api_revenue_trend" %}')
+        .then(response => response.json())
+        .then(data => {
+            new Chart(document.getElementById('revenueChart'), {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Revenue',
+                        data: data.values,
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: commonOptions
+            });
+        });
+
+    // 2. Sales by Product Chart
+    fetch('{% url "reports:api_sales_by_product" %}')
+        .then(response => response.json())
+        .then(data => {
+            new Chart(document.getElementById('productChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.values,
+                        backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b']
+                    }]
+                },
+                options: commonOptions
+            });
+        });
+
+    // 3. Inventory by Category Chart
+    fetch('{% url "reports:api_inventory_by_category" %}')
+        .then(response => response.json())
+        .then(data => {
+            new Chart(document.getElementById('inventoryChart'), {
+                type: 'pie',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.values,
+                        backgroundColor: ['#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14']
+                    }]
+                },
+                options: commonOptions
+            });
+        });
+});
+</script>
+{% endblock %}
+{% endblock %}

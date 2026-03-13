@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title|default:"Purchasing Reports" }}{% endblock title %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{{ page_title|default:"Purchasing Reports" }}</h1>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Available Reports</h6>
+        </div>
+        <div class="card-body">
+            <p>Select a report from the list below to view its details.</p>
+            <div class="list-group">
+                <a href="{% url 'purchasing:spend_analysis_report' %}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-chart-pie fa-fw mr-2 text-gray-400"></i>
+                    Spend Analysis Report
+                </a>
+                <a href="{% url 'purchasing:lead_time_report' %}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-clock fa-fw mr-2 text-gray-400"></i>
+                    Supplier Lead Time Report
+                </a>
+                <a href="{% url 'purchasing:po_status_report' %}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-tasks fa-fw mr-2 text-gray-400"></i>
+                    Purchase Order Status Report
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

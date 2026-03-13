@@ -19,14 +19,28 @@ class StartProductionRunForm(forms.ModelForm):
     
     class Meta:
         model = ProductionRun
-        fields = ['bom', 'planned_quantity', 'notes']
+        fields = ['bom', 'planned_quantity', 'start_date', 'planned_end_date', 'notes']
         widgets = {
             'planned_quantity': forms.NumberInput(attrs={
                 'step': '0.001', 
                 'min': '0.001',
                 'class': 'form-control',
-                'placeholder': 'Enter planned quantity'
+                'placeholder': 'Enter planned quantity in KG'
             }),
+            'start_date': forms.DateTimeInput(
+                format='%Y-%m-%dT%H:%M',
+                attrs={
+                    'type': 'datetime-local',
+                    'class': 'form-control'
+                }
+            ),
+            'planned_end_date': forms.DateTimeInput(
+                format='%Y-%m-%dT%H:%M',
+                attrs={
+                    'type': 'datetime-local',
+                    'class': 'form-control'
+                }
+            ),
             'notes': forms.Textarea(attrs={
                 'rows': 3,
                 'class': 'form-control',
@@ -35,7 +49,9 @@ class StartProductionRunForm(forms.ModelForm):
         }
         labels = {
             'bom': 'Bill of Materials',
-            'planned_quantity': 'Planned Quantity',
+            'planned_quantity': 'Planned Quantity (KG)',
+            'start_date': 'Planned Start Date & Time',
+            'planned_end_date': 'Planned End Date & Time',
             'notes': 'Production Notes',
         }
 
@@ -49,6 +65,15 @@ class StartProductionRunForm(forms.ModelForm):
         
         # Add help text
         self.fields['bom'].help_text = "Select the Bill of Materials for this production run"
+        self.fields['start_date'].help_text = "When this run should start"
+        self.fields['planned_end_date'].help_text = "Expected completion datetime"
+        self.fields['start_date'].input_formats = ['%Y-%m-%dT%H:%M']
+        self.fields['planned_end_date'].input_formats = ['%Y-%m-%dT%H:%M']
+
+        # Pre-fill start date/time on new run
+        if not self.instance or not self.instance.pk:
+            now = timezone.now().replace(second=0, microsecond=0)
+            self.fields['start_date'].initial = now.strftime('%Y-%m-%dT%H:%M')
         
         # Initialize material requirements (will be populated via JavaScript)
         self.material_requirements = []
@@ -113,6 +138,11 @@ class StartProductionRunForm(forms.ModelForm):
                 total_cost += component_cost
             
             cleaned_data['estimated_cost'] = total_cost
+
+        start_date = cleaned_data.get('start_date')
+        planned_end_date = cleaned_data.get('planned_end_date')
+        if start_date and planned_end_date and planned_end_date < start_date:
+            raise forms.ValidationError("Planned end date must be after start date.")
         
         return cleaned_data
 
@@ -124,7 +154,7 @@ class CompleteProductionRunForm(forms.Form):
         max_digits=15,
         decimal_places=4,
         min_value=0.001,
-        label="Actual Produced Quantity",
+        label="Actual Produced Quantity (KG)",
         widget=forms.NumberInput(attrs={
             'step': '0.001',
             'min': '0.001',
@@ -198,7 +228,7 @@ class CompleteProductionRunForm(forms.Form):
         
         if actual_qty and waste_qty:
             total_output = actual_qty + waste_qty
-            if self.production_run and total_output > self.production_run.planned_quantity * 1.2:  # Allow 20% overage
+            if self.production_run and total_output > self.production_run.planned_quantity * Decimal('1.2'):  # Allow 20% overage
                 raise forms.ValidationError(
                     f"Total output ({total_output}) exceeds planned quantity "
                     f"({self.production_run.planned_quantity}) by more than 20%."

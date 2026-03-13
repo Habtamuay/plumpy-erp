@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 from decimal import Decimal
+from datetime import timedelta
 
 from apps.company.models import Customer
 from apps.core.models import Item, Unit, CompanyModel
@@ -26,18 +27,23 @@ class SalesOrder(CompanyModel):
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='sales_orders')
     order_number = models.CharField(max_length=30, unique=True, editable=False)
     order_date = models.DateField(default=timezone.now)
+    expected_ship_date = models.DateField(null=True, blank=True)
     
+    # Financial fields
     subtotal = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
-    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15)
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
-    shipping_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
     
+    # Additional fields
+    notes = models.TextField(blank=True, null=True)
+    terms_conditions = models.TextField(blank=True, null=True)
+    
+    # Status and tracking
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-id']
@@ -47,69 +53,141 @@ class SalesOrder(CompanyModel):
 
     def save(self, *args, **kwargs):
         if not self.order_number:
+            # Get the last order to generate a sequential number
             last = SalesOrder.objects.order_by('-id').first()
-            num = (last.id + 1) if last else 1
-            self.order_number = f"SO-{timezone.now().strftime('%Y%m')}-{num:05d}"
+            last_id = last.id if last else 0
+            self.order_number = f"SO-{timezone.now().strftime('%Y%m')}-{last_id + 1:05d}"
         super().save(*args, **kwargs)
 
     def calculate_totals(self):
-        self.subtotal = sum(line.total_price for line in self.lines.all())
-        self.discount_amount = self.subtotal * (self.discount_percent / 100)
-        discounted_val = self.subtotal - self.discount_amount
-        self.tax_amount = discounted_val * (self.tax_rate / 100)
-        self.total_amount = discounted_val + self.tax_amount + self.shipping_amount
-        super().save(update_fields=["subtotal", "discount_amount", "tax_amount", "total_amount"])
+        """Calculate all financial totals for the order"""
+        # Get all lines and calculate subtotal
+        lines = self.lines.all()
+        
+        if lines.exists():
+            self.subtotal = sum(line.total_price for line in lines)
+        else:
+            self.subtotal = 0
+        
+        # Calculate tax
+        self.tax_amount = self.subtotal * (self.tax_rate / 100)
+        
+        # Calculate grand total
+        self.total_amount = self.subtotal + self.tax_amount
+        
+        # Save without calling calculate_totals again to avoid recursion
+        super().save(update_fields=["subtotal", "tax_amount", "total_amount"])
+
+   
+    def update_status_from_lines(self):
+        """Update order status based on shipment progress"""
+        lines = self.lines.all()
+        if not lines.exists():
+            return
+        
+        total_quantity = sum(line.quantity for line in lines)
+        total_shipped = sum(line.quantity_shipped for line in lines)
+        
+        if total_shipped == 0:
+            new_status = 'confirmed' if self.status == 'confirmed' else self.status
+        elif total_shipped < total_quantity:
+            new_status = 'processing'
+        else:
+            new_status = 'shipped'
+        
+        if new_status != self.status:
+            self.status = new_status
+            self.save(update_fields=['status'])
 
     def create_invoice(self, user=None):
-        """Method used by Admin buttons/Views to auto-generate invoice"""
+        """
+        Creates an invoice from the sales order. This is the single source of
+        truth for invoice creation from an order. It prevents creating
+        duplicates and handles status updates and journal entry creation.
+        """
+        if self.status == 'cancelled':
+            return None # Cannot invoice a cancelled order
+
         if self.invoices.exists():
             return self.invoices.first()
 
+        # The SalesInvoice.save() method handles autofilling header and lines.
         invoice = SalesInvoice.objects.create(
+            company=self.company,
             sales_order=self,
-            customer=self.customer,
-            due_date=timezone.now().date(),
-            tax_rate=self.tax_rate
+            due_date=timezone.now().date() + timedelta(days=30),
+            created_by=user or self.created_by,
         )
-        # Note: Line creation is now handled in SalesInvoice.save()
+
+        invoice.status = 'posted'
+        invoice.save(update_fields=['status'])
+
+        # Update order status.
         self.status = "invoiced"
-        self.save(update_fields=["status"])
+        self.save(update_fields=['status'])
         return invoice
+
 
 
 class SalesOrderLine(CompanyModel):
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="lines")
     item = models.ForeignKey(Item, on_delete=models.PROTECT)
     warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, null=True, blank=True)
+    
     quantity = models.DecimalField(max_digits=12, decimal_places=4, validators=[MinValueValidator(0.0001)])
     quantity_shipped = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    
     unit = models.ForeignKey(Unit, on_delete=models.PROTECT)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
     total_price = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
+    
+    @property
+    def quantity_remaining(self):
+        return self.quantity - self.quantity_shipped
+    
+    @property
+    def is_fully_shipped(self):
+        return self.quantity_remaining <= 0
 
     def save(self, *args, **kwargs):
-        line_total = self.quantity * self.unit_price
-        self.discount_amount = line_total * (self.discount_percent / 100)
-        self.total_price = line_total - self.discount_amount
+        # Calculate line totals
+        self.total_price = self.quantity * self.unit_price
+        
+        # Store the order before saving
+        order = self.order
+        
+        # Save the line
         super().save(*args, **kwargs)
-        if self.order:
-            self.order.calculate_totals()
+        
+        # Update order totals
+        if order:
+            order.calculate_totals()
+
+    def delete(self, *args, **kwargs):
+        order = self.order
+        super().delete(*args, **kwargs)
+        if order:
+            order.calculate_totals()
 
 # =====================================================
 # SALES INVOICE
 # =====================================================
 
 class SalesInvoice(CompanyModel):
-    STATUS_CHOICES = (('draft', 'Draft'), ('posted', 'Posted'), ('paid', 'Paid'), ('cancelled', 'Cancelled'))
+    STATUS_CHOICES = (
+        ('draft', 'Draft'), 
+        ('posted', 'Posted'), 
+        ('paid', 'Paid'), 
+        ('cancelled', 'Cancelled')
+    )
     
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT)
     invoice_number = models.CharField(max_length=30, unique=True, editable=False)
     invoice_date = models.DateField(default=timezone.now)
     due_date = models.DateField()
-    
+
+    # Financial fields
     subtotal = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15)
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
@@ -126,6 +204,15 @@ class SalesInvoice(CompanyModel):
     notes = models.TextField(blank=True, null=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-invoice_date', '-id']
+        verbose_name = "Sales Invoice"
+        verbose_name_plural = "Sales Invoices"
+
+    def __str__(self):
+        return self.invoice_number
 
     @property
     def remaining_amount(self):
@@ -137,81 +224,121 @@ class SalesInvoice(CompanyModel):
     def is_fully_paid(self):
         return self.paid_amount >= self.total_amount
 
-    # Use string reference to avoid circular imports
-    journal_entry = models.ForeignKey('accounting.JournalEntry', on_delete=models.SET_NULL, null=True, blank=True)
+    def _generate_sequential_number(self, field_name, prefix, padding):
+        """
+        Generates a sequential number for a given field based on a prefix.
+        """
+        if getattr(self, field_name):
+            return
+
+        last_obj = self.__class__.objects.filter(
+            **{f"{field_name}__startswith": prefix}
+        ).order_by('-id').first()
+
+        last_val = 0
+        if last_obj:
+            last_full_number = getattr(last_obj, field_name)
+            if last_full_number:
+                try:
+                    last_val_str = last_full_number.split('-')[-1]
+                    last_val = int(last_val_str)
+                except (ValueError, IndexError):
+                    last_val = 0
+
+        new_val = last_val + 1
+        new_number = f"{prefix}{new_val:0{padding}d}"
+        setattr(self, field_name, new_number)
+
+    def _generate_invoice_number(self):
+        """Generates a sequential invoice number (e.g., INV-YYYYMM-00001)."""
+        prefix = f"INV-{timezone.now().strftime('%Y%m')}-"
+        self._generate_sequential_number('invoice_number', prefix, 5)
+
+    def _generate_fs_number(self):
+        """Generates a sequential FS number (e.g., FS-00000001)."""
+        self._generate_sequential_number('fs_number', 'FS-', 8)
+
+    def _generate_reference_number(self):
+        """Generates a sequential reference number based on payment method."""
+        prefix = 'CRSI-' if self.payment_method == 'credit' else 'CSI-'
+        self._generate_sequential_number('reference_number', prefix, 8)
+
+    def _autofill_header_from_order(self):
+        """If a sales order is linked, autofill customer, tax, and discount."""
+        if self.sales_order and not self.customer_id:
+            self.customer = self.sales_order.customer
+            self.tax_rate = self.sales_order.tax_rate
+
+    def _autofill_lines_from_order(self):
+        """
+        If a sales order is linked, copy its lines to this invoice.
+        """
+        if self.sales_order and not self.lines.exists():
+            lines_to_create = []
+            for line in self.sales_order.lines.all():
+                # Use shipped quantity if available, otherwise use ordered quantity
+                invoice_quantity = line.quantity_shipped if hasattr(line, 'quantity_shipped') and line.quantity_shipped > 0 else line.quantity
+
+                # Calculate line total (no discount)
+                line_total = invoice_quantity * line.unit_price
+                
+                lines_to_create.append(SalesInvoiceLine(
+                    company=self.company,
+                    invoice=self,
+                    item=line.item,
+                    quantity=invoice_quantity,
+                    unit=line.unit,
+                    unit_price=line.unit_price,
+                    total_price=line_total,  # Now passing total_price here
+                ))
+            
+            if lines_to_create:
+                SalesInvoiceLine.objects.bulk_create(lines_to_create)
+                return True
+        return False
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
-        
-        # 1. Generate Invoice Number
-        if not self.invoice_number:
-            last = SalesInvoice.objects.order_by('-id').first()
-            num = (last.id + 1) if last else 1
-            self.invoice_number = f"INV-{timezone.now().strftime('%Y%m')}-{num:05d}"
 
-        # 2. Autofill from Sales Order if selected but Customer is missing (Admin fix)
-        if self.sales_order and not self.customer_id:
-            self.customer = self.sales_order.customer
-            self.tax_rate = self.sales_order.tax_rate
+        if 'update_fields' in kwargs:
+            super().save(*args, **kwargs)
+            return
 
-        # 1. Generate Invoice Number
-        if not self.invoice_number:
-            last = SalesInvoice.objects.order_by('-id').first()
-            num = (last.id + 1) if last else 1
-            self.invoice_number = f"INV-{timezone.now().strftime('%Y%m')}-{num:05d}"
+        # --- Pre-Save Logic ---
+        if is_new:
+            self._generate_invoice_number()
+            self._autofill_header_from_order()
+            self._generate_fs_number()
+            self._generate_reference_number()
 
-        # 2. Autofill from Sales Order if selected but Customer is missing (Admin fix)
-        if self.sales_order and not self.customer_id:
-            self.customer = self.sales_order.customer
-            self.tax_rate = self.sales_order.tax_rate
-
-        # 3. Generate FS and reference numbers
-        if not self.fs_number:
-            last = SalesInvoice.objects.filter(fs_number__startswith='FS-').order_by('-id').first()
-            if last and last.fs_number:
-                try:
-                    prev = int(last.fs_number.split('-')[1])
-                except Exception:
-                    prev = 0
-            else:
-                prev = 0
-            self.fs_number = f"FS-{prev+1:08d}"
-
-        if not self.reference_number:
-            prefix = 'CRSI' if self.payment_method == 'credit' else 'CSI'
-            last = SalesInvoice.objects.filter(reference_number__startswith=prefix).order_by('-id').first()
-            if last and last.reference_number:
-                try:
-                    prev = int(last.reference_number.split('-')[1])
-                except Exception:
-                    prev = 0
-            else:
-                prev = 0
-            self.reference_number = f"{prefix}-{prev+1:08d}"
-
+        # Save the main instance
         super().save(*args, **kwargs)
 
-        # 4. Autofill Lines from Sales Order (The "Automatic Configuration" fix)
-        if is_new and self.sales_order and not self.lines.exists():
-            for line in self.sales_order.lines.all():
-                SalesInvoiceLine.objects.create(
-                    invoice=self,
-                    item=line.item,
-                    quantity=line.quantity,
-                    unit=line.unit,
-                    unit_price=line.unit_price,
-                    discount_percent=line.discount_percent,
-                )
-            self.calculate_totals()
+        # --- Post-Save Logic ---
+        if is_new:
+            lines_were_added = self._autofill_lines_from_order()
+            if lines_were_added:
+                self.calculate_totals()
 
     def calculate_totals(self):
-        self.subtotal = sum(line.total_price for line in self.lines.all())
-        self.tax_amount = self.subtotal * (self.tax_rate / 100)
-        self.total_amount = self.subtotal + self.tax_amount
-        super().save(update_fields=['subtotal', 'tax_amount', 'total_amount'])
+        """Calculate invoice totals from lines"""
+        if not self.pk:
+            return
+            
+        # Calculate subtotal from lines
+        from django.db.models import Sum
+        lines_total = self.lines.aggregate(total=Sum('total_price'))['total'] or 0
+        self.subtotal = lines_total
 
-    def __str__(self):
-        return self.invoice_number
+        # Calculate tax
+        from decimal import Decimal
+        self.tax_amount = self.subtotal * (Decimal(self.tax_rate) / Decimal('100'))
+
+        # Calculate total
+        self.total_amount = self.subtotal + self.tax_amount
+
+        # Save with update_fields
+        self.save(update_fields=['subtotal', 'tax_amount', 'total_amount'])
 
 
 class SalesInvoiceLine(CompanyModel):
@@ -220,17 +347,41 @@ class SalesInvoiceLine(CompanyModel):
     quantity = models.DecimalField(max_digits=12, decimal_places=4)
     unit = models.ForeignKey(Unit, on_delete=models.PROTECT)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
     total_price = models.DecimalField(max_digits=15, decimal_places=2, default=0, editable=False)
 
-    def save(self, *args, **kwargs):
-        line_total = self.quantity * self.unit_price
-        self.discount_amount = line_total * (self.discount_percent / 100)
-        self.total_price = line_total - self.discount_amount
-        super().save(*args, **kwargs)
-        self.invoice.calculate_totals()
+    class Meta:
+        ordering = ['id']
+        verbose_name = "Sales Invoice Line"
+        verbose_name_plural = "Sales Invoice Lines"
 
+    def __str__(self):
+        return f"{self.item.code if self.item else 'Item'} x {self.quantity}"
+
+    def save(self, *args, **kwargs):
+        # Calculate total price before saving
+        line_total = self.quantity * self.unit_price
+        self.total_price = line_total
+        
+        # Store invoice reference for later update
+        invoice = self.invoice
+        
+        # Save the line
+        super().save(*args, **kwargs)
+        
+        # Update invoice totals
+        if invoice:
+            invoice.calculate_totals()
+
+    def delete(self, *args, **kwargs):
+        # Store invoice reference before deletion
+        invoice = self.invoice
+        
+        # Delete the line
+        super().delete(*args, **kwargs)
+        
+        # Update invoice totals
+        if invoice:
+            invoice.calculate_totals()
 # =====================================================
 # SALES SHIPMENT
 # =====================================================
@@ -259,25 +410,9 @@ class SalesShipmentLine(CompanyModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        so_line = self.sales_order_line
-        
-        # Calculate shipped qty only from finalized shipments
-        total_shipped = sum(l.quantity for l in so_line.shipment_lines.filter(shipment__status="shipped"))
-        so_line.quantity_shipped = total_shipped
-        so_line.save(update_fields=["quantity_shipped"])
+        # Logic to update SalesOrderLine.quantity_shipped has been moved to the
+        # `handle_shipment_shipped` signal to ensure it runs at the correct time.
 
-        # Inventory Movement logic
-        if self.shipment.status == "shipped":
-            from apps.inventory.models import StockTransaction
-            StockTransaction.objects.create(
-                transaction_type="issue",
-                item=so_line.item,
-                warehouse_from=self.shipment.warehouse,
-                quantity=self.quantity,
-                reference=self.shipment.shipment_number,
-                sales_order=self.sales_order_line.order,
-                notes=f"Shipment {self.shipment.shipment_number}"
-            )
 
 # =====================================================
 # SALES PAYMENT

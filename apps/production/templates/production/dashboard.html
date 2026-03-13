@@ -15,17 +15,24 @@
     <!-- Stock Alerts -->
     <div style="border: 2px solid #dc3545; padding: 20px; border-radius: 8px; background: #fff5f5;">
         <h2 style="margin-top:0; color: #dc3545;">⚠️ Stock Alerts</h2>
+        <div style="margin-bottom: 10px;">
+            <a href="{% url 'inventory:stock_ledger' %}">Open Full Stock Ledger</a>
+        </div>
         {% if low_stock or out_of_stock %}
             <ul style="list-style: none; padding-left: 0;">
                 {% for item in low_stock %}
                     <li style="margin: 8px 0;">
-                        <strong>{{ item.code }} – {{ item.name }}</strong><br>
+                        <strong>
+                            <a href="{% url 'inventory:stock_ledger' %}?item={{ item.id }}">{{ item.code }} – {{ item.name }}</a>
+                        </strong><br>
                         Stock: {{ item.current_stock|floatformat:2 }} / Min: {{ item.minimum_stock|floatformat:2 }}
                     </li>
                 {% endfor %}
                 {% for item in out_of_stock %}
                     <li style="margin: 8px 0; color: red;">
-                        <strong>{{ item.code }} – {{ item.name }}</strong><br>
+                        <strong>
+                            <a href="{% url 'inventory:stock_ledger' %}?item={{ item.id }}">{{ item.code }} – {{ item.name }}</a>
+                        </strong><br>
                         <strong>OUT OF STOCK</strong>
                     </li>
                 {% endfor %}

@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ form_title|default:"Create Sales Order" }}{% endblock %}
+
+{% block extra_css %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .select2-container {
+        width: 100% !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="bi bi-cart-plus me-2 text-primary"></i>
+                            {{ form_title|default:"Create Sales Order" }}
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-file-text me-2"></i>
+                            {% if form_title %}Update order information{% else %}Create a new sales order{% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <a href="{% url 'sales:order_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to Orders
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>Order Details</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="orderForm" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="customer" class="form-label">Customer *</label>
+                                <select class="form-select" id="customer" name="customer" required>
+                                    <option value="">Select a customer...</option>
+                                    {% for customer in customers %}
+                                        <option value="{{ customer.id }}" {% if order and order.customer.id == customer.id %}selected{% endif %}>
+                                            {{ customer.name }} {% if customer.code %}({{ customer.code }}){% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                {% if not customers %}
+                                    <div class="alert alert-warning mt-2">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                        No customers available. <a href="{% url 'customer_create' %}" class="alert-link">Create a customer first</a>.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="order_date" class="form-label">Order Date *</label>
+                                <input type="date" class="form-control" id="order_date" name="order_date" 
+                                       value="{% if order %}{{ order.order_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="expected_ship_date" class="form-label">Expected Ship Date</label>
+                                <input type="date" class="form-control" id="expected_ship_date" name="expected_ship_date" 
+                                       value="{% if order and order.expected_ship_date %}{{ order.expected_ship_date|date:'Y-m-d' }}{% endif %}">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="tax_rate" class="form-label">Tax Rate (%)</label>
+                                <input type="number" class="form-control" id="tax_rate" name="tax_rate" 
+                                       value="{% if order %}{{ order.tax_rate }}{% else %}15{% endif %}" step="0.01" min="0">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="notes" class="form-label">Notes</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="2">{% if order %}{{ order.notes }}{% endif %}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="terms_conditions" class="form-label">Terms & Conditions</label>
+                                <textarea class="form-control" id="terms_conditions" name="terms_conditions" rows="3">{% if order %}{{ order.terms_conditions }}{% endif %}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <div class="d-flex">
+                                <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+                                <div>
+                                    <strong>Note:</strong> After creating the order, you'll be redirected to the order detail page where you can add items.
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'sales:order_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary" {% if not customers %}disabled{% endif %}>
+                                <i class="bi bi-check-circle me-2"></i>
+                                {% if order %}Update Order{% else %}Create Order{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Select2 -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        // Initialize Select2 for customer dropdown
+        $('#customer').select2({
+            theme: 'bootstrap-5',
+            placeholder: 'Search for a customer...',
+            allowClear: true,
+            width: '100%'
+        });
+
+        // Set minimum date for order date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('order_date').setAttribute('min', today);
+
+        // Form validation
+        $('#orderForm').on('submit', function(e) {
+            const customer = $('#customer').val();
+            const orderDate = $('#order_date').val();
+            
+            if (!customer) {
+                e.preventDefault();
+                alert('Please select a customer.');
+                $('#customer').focus();
+                return false;
+            }
+            
+            if (!orderDate) {
+                e.preventDefault();
+                alert('Please select an order date.');
+                $('#order_date').focus();
+                return false;
+            }
+            
+            // Validate tax rate
+            const taxRate = parseFloat($('#tax_rate').val()) || 0;
+            if (taxRate < 0) {
+                e.preventDefault();
+                alert('Tax rate cannot be negative.');
+                $('#tax_rate').focus();
+                return false;
+            }
+        });
+    });
+</script>
+{% endblock %}

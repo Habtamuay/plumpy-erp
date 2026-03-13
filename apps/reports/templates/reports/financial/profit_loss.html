@@ -1,4 +1,5 @@
 {% extends "reports/base_report.html" %}
+{% load humanize %}
 
 {% block title %}Profit & Loss Statement{% endblock %}
 {% block report_title %}Profit & Loss Statement{% endblock %}
@@ -40,6 +41,21 @@
         <i class="fas fa-sync-alt me-2"></i>Update
     </button>
 </div>
+
+<!-- Date Filter Form -->
+<form method="get" class="row g-3 align-items-end mt-3">
+    <div class="col-md-3">
+        <label class="form-label">From Date</label>
+        <input type="date" name="date_from" class="form-control" value="{{ request.GET.date_from }}">
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">To Date</label>
+        <input type="date" name="date_to" class="form-control" value="{{ request.GET.date_to }}">
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100">Apply</button>
+    </div>
+</form>
 {% endblock %}
 
 {% block report_content %}
@@ -48,7 +64,7 @@
     <div class="col-md-3">
         <div class="chart-card">
             <div class="text-secondary small">Total Revenue</div>
-            <div class="h3 mb-0">$1,234,567</div>
+            <div class="h3 mb-0">{{ total_income|floatformat:2|intcomma }} ETB</div>
             <div class="small text-success">
                 <i class="fas fa-arrow-up"></i> +12.5% vs last period
             </div>
@@ -57,7 +73,7 @@
     <div class="col-md-3">
         <div class="chart-card">
             <div class="text-secondary small">Cost of Goods Sold</div>
-            <div class="h3 mb-0">$789,012</div>
+            <div class="h3 mb-0">{{ total_cogs|floatformat:2|intcomma }} ETB</div>
             <div class="small text-danger">
                 <i class="fas fa-arrow-up"></i> +8.3% vs last period
             </div>
@@ -66,21 +82,25 @@
     <div class="col-md-3">
         <div class="chart-card">
             <div class="text-secondary small">Gross Profit</div>
-            <div class="h3 mb-0">$445,555</div>
+            <div class="h3 mb-0">{{ gross_profit|floatformat:2|intcomma }} ETB</div>
+            {% if total_income > 0 %}
+            <div class="small">Margin: {{ gross_profit|div:total_income|mul:100|floatformat:1 }}%</div>
+            {% endif %}
             <div class="small text-success">
                 <i class="fas fa-arrow-up"></i> +15.2% vs last period
             </div>
-            <div class="small">Margin: 36.1%</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="chart-card">
             <div class="text-secondary small">Net Profit</div>
-            <div class="h3 mb-0">$234,567</div>
+            <div class="h3 mb-0">{{ net_profit|floatformat:2|intcomma }} ETB</div>
+            {% if total_income > 0 %}
+            <div class="small">Margin: {{ net_profit|div:total_income|mul:100|floatformat:1 }}%</div>
+            {% endif %}
             <div class="small text-success">
                 <i class="fas fa-arrow-up"></i> +10.8% vs last period
             </div>
-            <div class="small">Margin: 19.0%</div>
         </div>
     </div>
 </div>
@@ -119,153 +139,100 @@
             <tr class="table-primary">
                 <th colspan="6">Revenue</th>
             </tr>
+            {% for account in income_accounts %}
             <tr>
-                <td>Product Sales</td>
-                <td class="text-end">$987,654</td>
-                <td class="text-end">$876,543</td>
-                <td class="text-end text-success">$111,111</td>
-                <td class="text-end text-success">12.7%</td>
-                <td class="text-end">80.0%</td>
+                <td>{{ account.name }}</td>
+                <td class="text-end">{{ account.balance|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
             </tr>
-            <tr>
-                <td>Service Revenue</td>
-                <td class="text-end">$197,531</td>
-                <td class="text-end">$175,432</td>
-                <td class="text-end text-success">$22,099</td>
-                <td class="text-end text-success">12.6%</td>
-                <td class="text-end">16.0%</td>
-            </tr>
-            <tr>
-                <td>Other Income</td>
-                <td class="text-end">$49,382</td>
-                <td class="text-end">$45,678</td>
-                <td class="text-end text-success">$3,704</td>
-                <td class="text-end text-success">8.1%</td>
-                <td class="text-end">4.0%</td>
-            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted text-center">No income recorded.</td></tr>
+            {% endfor %}
             <tr class="fw-bold">
                 <td>Total Revenue</td>
-                <td class="text-end">$1,234,567</td>
-                <td class="text-end">$1,097,653</td>
-                <td class="text-end text-success">$136,914</td>
-                <td class="text-end text-success">12.5%</td>
+                <td class="text-end">{{ total_income|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
                 <td class="text-end">100.0%</td>
             </tr>
             
             <tr class="table-danger">
                 <th colspan="6">Cost of Goods Sold</th>
             </tr>
+            {% for account in cogs_accounts %}
             <tr>
-                <td>Raw Materials</td>
-                <td class="text-end">$493,827</td>
-                <td class="text-end">$456,789</td>
-                <td class="text-end text-danger">$37,038</td>
-                <td class="text-end text-danger">8.1%</td>
-                <td class="text-end">40.0%</td>
+                <td>{{ account.name }}</td>
+                <td class="text-end">{{ account.balance|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
             </tr>
-            <tr>
-                <td>Direct Labor</td>
-                <td class="text-end">$246,913</td>
-                <td class="text-end">$234,567</td>
-                <td class="text-end text-danger">$12,346</td>
-                <td class="text-end text-danger">5.3%</td>
-                <td class="text-end">20.0%</td>
-            </tr>
-            <tr>
-                <td>Manufacturing Overhead</td>
-                <td class="text-end">$48,272</td>
-                <td class="text-end">$45,678</td>
-                <td class="text-end text-danger">$2,594</td>
-                <td class="text-end text-danger">5.7%</td>
-                <td class="text-end">3.9%</td>
-            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted text-center">No COGS recorded.</td></tr>
+            {% endfor %}
             <tr class="fw-bold">
                 <td>Total COGS</td>
-                <td class="text-end">$789,012</td>
-                <td class="text-end">$737,034</td>
-                <td class="text-end text-danger">$51,978</td>
-                <td class="text-end text-danger">7.1%</td>
-                <td class="text-end">63.9%</td>
+                <td class="text-end">{{ total_cogs|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">{{ total_cogs|div:total_income|mul:100|floatformat:1 }}%</td>
             </tr>
             
             <tr class="fw-bold text-primary">
                 <td>Gross Profit</td>
-                <td class="text-end">$445,555</td>
-                <td class="text-end">$360,619</td>
-                <td class="text-end text-success">$84,936</td>
-                <td class="text-end text-success">23.6%</td>
-                <td class="text-end">36.1%</td>
+                <td class="text-end">{{ gross_profit|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">{{ gross_profit|div:total_income|mul:100|floatformat:1 }}%</td>
             </tr>
             
             <tr class="table-warning">
                 <th colspan="6">Operating Expenses</th>
             </tr>
+            {% for account in expense_accounts %}
             <tr>
-                <td>Selling & Marketing</td>
-                <td class="text-end">$98,765</td>
-                <td class="text-end">$87,654</td>
-                <td class="text-end text-danger">$11,111</td>
-                <td class="text-end text-danger">12.7%</td>
-                <td class="text-end">8.0%</td>
+                <td>{{ account.name }}</td>
+                <td class="text-end">{{ account.balance|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
             </tr>
-            <tr>
-                <td>General & Administrative</td>
-                <td class="text-end">$74,074</td>
-                <td class="text-end">$65,432</td>
-                <td class="text-end text-danger">$8,642</td>
-                <td class="text-end text-danger">13.2%</td>
-                <td class="text-end">6.0%</td>
-            </tr>
-            <tr>
-                <td>Research & Development</td>
-                <td class="text-end">$37,037</td>
-                <td class="text-end">$32,098</td>
-                <td class="text-end text-danger">$4,939</td>
-                <td class="text-end text-danger">15.4%</td>
-                <td class="text-end">3.0%</td>
-            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted text-center">No operating expenses recorded.</td></tr>
+            {% endfor %}
             <tr class="fw-bold">
                 <td>Total Operating Expenses</td>
-                <td class="text-end">$209,876</td>
-                <td class="text-end">$185,184</td>
-                <td class="text-end text-danger">$24,692</td>
-                <td class="text-end text-danger">13.3%</td>
-                <td class="text-end">17.0%</td>
+                <td class="text-end">{{ total_expenses|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">{{ total_expenses|div:total_income|mul:100|floatformat:1 }}%</td>
             </tr>
             
             <tr class="fw-bold text-primary">
                 <td>Operating Income</td>
-                <td class="text-end">$235,679</td>
-                <td class="text-end">$175,435</td>
-                <td class="text-end text-success">$60,244</td>
-                <td class="text-end text-success">34.3%</td>
-                <td class="text-end">19.1%</td>
-            </tr>
-            
-            <tr>
-                <td>Interest Expense</td>
-                <td class="text-end">$5,000</td>
-                <td class="text-end">$6,000</td>
-                <td class="text-end text-success">-$1,000</td>
-                <td class="text-end text-success">-16.7%</td>
-                <td class="text-end">0.4%</td>
-            </tr>
-            <tr>
-                <td>Tax Expense</td>
-                <td class="text-end">$58,920</td>
-                <td class="text-end">$43,859</td>
-                <td class="text-end text-danger">$15,061</td>
-                <td class="text-end text-danger">34.3%</td>
-                <td class="text-end">4.8%</td>
+                <td class="text-end">{{ operating_income|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">{{ operating_income|div:total_income|mul:100|floatformat:1 }}%</td>
             </tr>
             
             <tr class="fw-bold table-success">
                 <td>Net Profit</td>
-                <td class="text-end">$171,759</td>
-                <td class="text-end">$125,576</td>
-                <td class="text-end text-success">$46,183</td>
-                <td class="text-end text-success">36.8%</td>
-                <td class="text-end">13.9%</td>
+                <td class="text-end">{{ net_profit|floatformat:2|intcomma }}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td class="text-end">{{ net_profit|div:total_income|mul:100|floatformat:1 }}%</td>
             </tr>
         </tbody>
     </table>
@@ -279,17 +246,17 @@
             <div class="row">
                 <div class="col-md-2 text-center">
                     <div class="text-secondary small">Gross Margin</div>
-                    <div class="h4">36.1%</div>
+                    <div class="h4">{{ gross_profit|div:total_income|mul:100|floatformat:1 }}%</div>
                     <span class="badge bg-success">+2.3%</span>
                 </div>
                 <div class="col-md-2 text-center">
                     <div class="text-secondary small">Operating Margin</div>
-                    <div class="h4">19.1%</div>
+                    <div class="h4">{{ operating_income|div:total_income|mul:100|floatformat:1 }}%</div>
                     <span class="badge bg-success">+3.1%</span>
                 </div>
                 <div class="col-md-2 text-center">
                     <div class="text-secondary small">Net Margin</div>
-                    <div class="h4">13.9%</div>
+                    <div class="h4">{{ net_profit|div:total_income|mul:100|floatformat:1 }}%</div>
                     <span class="badge bg-success">+2.5%</span>
                 </div>
                 <div class="col-md-2 text-center">
@@ -314,66 +281,184 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', function() {
     // P&L Trend Chart
     const ctx1 = document.getElementById('pnlTrendChart').getContext('2d');
-    new Chart(ctx1, {
-        type: 'line',
-        data: {
-            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            datasets: [{
-                label: 'Revenue',
-                data: [98000, 105000, 112000, 108000, 115000, 121000, 125000, 132000, 128000, 135000, 142000, 148000],
-                borderColor: '#2563eb',
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                tension: 0.4,
-                fill: true
-            }, {
-                label: 'Expenses',
-                data: [72000, 78000, 82000, 80000, 85000, 89000, 92000, 97000, 95000, 99000, 103000, 107000],
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                tension: 0.4,
-                fill: true
-            }, {
-                label: 'Net Profit',
-                data: [26000, 27000, 30000, 28000, 30000, 32000, 33000, 35000, 33000, 36000, 39000, 41000],
-                borderColor: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false
-        }
-    });
-
-    // Expense Breakdown Chart
-    const ctx2 = document.getElementById('expenseBreakdownChart').getContext('2d');
-    new Chart(ctx2, {
-        type: 'pie',
-        data: {
-            labels: ['COGS', 'S&M', 'G&A', 'R&D', 'Interest', 'Tax'],
-            datasets: [{
-                data: [63.9, 8.0, 6.0, 3.0, 0.4, 4.8],
-                backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#6b7280', '#10b981']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.label + ': ' + context.raw + '%';
+    
+    // Fetch trend data from API
+    fetch('{% url "reports:api_pnl_trend" %}?' + new URLSearchParams({
+        date_from: document.querySelector('input[name="date_from"]').value || '',
+        date_to: document.querySelector('input[name="date_to"]').value || ''
+    }))
+        .then(response => response.json())
+        .then(data => {
+            new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: data.labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: data.datasets || [{
+                        label: 'Revenue',
+                        data: [98000, 105000, 112000, 108000, 115000, 121000, 125000, 132000, 128000, 135000, 142000, 148000],
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Expenses',
+                        data: [72000, 78000, 82000, 80000, 85000, 89000, 92000, 97000, 95000, 99000, 103000, 107000],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Net Profit',
+                        data: [26000, 27000, 30000, 28000, 30000, 32000, 33000, 35000, 33000, 36000, 39000, 41000],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
                         }
                     }
                 }
-            }
-        }
-    });
+            });
+        })
+        .catch(error => {
+            console.error('Error loading trend data:', error);
+            // Fallback to default data
+            new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: [98000, 105000, 112000, 108000, 115000, 121000, 125000, 132000, 128000, 135000, 142000, 148000],
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Expenses',
+                        data: [72000, 78000, 82000, 80000, 85000, 89000, 92000, 97000, 95000, 99000, 103000, 107000],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Net Profit',
+                        data: [26000, 27000, 30000, 28000, 30000, 32000, 33000, 35000, 33000, 36000, 39000, 41000],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        });
+
+    // Expense Breakdown Chart
+    const ctx2 = document.getElementById('expenseBreakdownChart').getContext('2d');
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const date_from = urlParams.get('date_from');
+    const date_to = urlParams.get('date_to');
+    let expenseApiUrl = '{% url "reports:api_expense_breakdown" %}';
+    if (date_from && date_to) {
+        expenseApiUrl += `?date_from=${date_from}&date_to=${date_to}`;
+    }
+
+    fetch(expenseApiUrl)
+        .then(response => response.json())
+        .then(data => {
+            new Chart(ctx2, {
+                type: 'pie',
+                data: {
+                    labels: data.labels || ['COGS', 'S&M', 'G&A', 'R&D', 'Interest', 'Tax'],
+                    datasets: [{
+                        data: data.values || [63.9, 8.0, 6.0, 3.0, 0.4, 4.8],
+                        backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#6b7280', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.raw + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading expense breakdown:', error);
+            // Fallback to default data
+            new Chart(ctx2, {
+                type: 'pie',
+                data: {
+                    labels: ['COGS', 'S&M', 'G&A', 'R&D', 'Interest', 'Tax'],
+                    datasets: [{
+                        data: [63.9, 8.0, 6.0, 3.0, 0.4, 4.8],
+                        backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#6b7280', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.raw + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+});
+
+function applyFilters() {
+    const period = document.getElementById('period').value;
+    const compare = document.getElementById('compare').value;
+    const view_type = document.getElementById('view_type').value;
+    
+    // Construct URL with filter parameters
+    const url = new URL(window.location.href);
+    url.searchParams.set('period', period);
+    url.searchParams.set('compare', compare);
+    url.searchParams.set('view_type', view_type);
+    
+    window.location.href = url.toString();
+}
 </script>
 {% endblock %}

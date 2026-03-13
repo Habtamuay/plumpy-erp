@@ -69,10 +69,24 @@
             <div class="card">
                 <div class="card-body">
                     <div class="btn-group" role="group">
-                        {% if run.status == 'planned' %}
-                        <a href="{% url 'production:start_run' %}?run_id={{ run.id }}" class="btn btn-primary">
-                            <i class="bi bi-play-fill me-2"></i>Start Run
+                        {% if run.status == 'planned' or run.status == 'in_progress' %}
+                        <a href="{% url 'production:edit_run' run.id %}" class="btn btn-outline-primary">
+                            <i class="bi bi-pencil-square me-2"></i>Edit Run
                         </a>
+                        {% endif %}
+                        <a href="#run-info" class="btn btn-outline-info">
+                            <i class="bi bi-diagram-3 me-2"></i>Trace Origin
+                        </a>
+                        <a href="#inventory-flow" class="btn btn-outline-dark">
+                            <i class="bi bi-arrow-left-right me-2"></i>Flow Movements
+                        </a>
+                        {% if run.status == 'planned' %}
+                        <form method="post" action="{% url 'production:start_existing_run' run.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-play-fill me-2"></i>Start Run
+                            </button>
+                        </form>
                         <a href="{% url 'production:cancel_run' run.id %}" class="btn btn-danger">
                             <i class="bi bi-x-circle me-2"></i>Cancel
                         </a>
@@ -94,7 +108,7 @@
     </div>
 
     <!-- Run Information -->
-    <div class="row mb-4">
+    <div class="row mb-4" id="run-info">
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header bg-light">
@@ -122,6 +136,14 @@
                         <tr>
                             <th>Planned Quantity:</th>
                             <td>{{ run.planned_quantity|floatformat:2 }} kg</td>
+                        </tr>
+                        <tr>
+                            <th>Planned Start:</th>
+                            <td>{{ run.start_date|date:"Y-m-d H:i" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Planned End:</th>
+                            <td>{{ run.planned_end_date|date:"Y-m-d H:i"|default:"-" }}</td>
                         </tr>
                         <tr>
                             <th>Actual Quantity:</th>
@@ -216,7 +238,7 @@
     </div>
 
     <!-- Material Requirements -->
-    <div class="row mb-4">
+    <div class="row mb-4" id="material-flow">
         <div class="col-12">
             <div class="card">
                 <div class="card-header bg-light">
@@ -273,7 +295,7 @@
     </div>
 
     <!-- Inventory Movements -->
-    <div class="row mb-4">
+    <div class="row mb-4" id="inventory-flow">
         <div class="col-12">
             <div class="card">
                 <div class="card-header bg-light">

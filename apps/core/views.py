@@ -437,6 +437,33 @@ def item_create(request):
     return render(request, 'core/item_form.html', context)
 
 
+# In items/views.py
+@login_required
+def quick_create_item(request):
+    if request.method == 'POST':
+        company = _current_company(request)
+        item = Item.objects.create(
+            company=company,
+            name=request.POST.get('name'),
+            code=request.POST.get('code'),
+            selling_price=request.POST.get('selling_price'),
+            unit_id=request.POST.get('unit') or None
+        )
+        return JsonResponse({'id': item.id, 'name': item.name})
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+@login_required
+def quick_create_unit(request):
+    if request.method == 'POST':
+        company = _current_company(request)
+        unit = Unit.objects.create(
+            company=company,
+            name=request.POST.get('name'),
+            abbreviation=request.POST.get('abbreviation', '')
+        )
+        return JsonResponse({'id': unit.id, 'name': unit.name})
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
 @login_required
 @permission_required('core.change_item', raise_exception=True)
 def item_edit(request, item_id):

@@ -10,7 +10,8 @@ from collections import defaultdict
 import json
 import csv
 
-from .models import Warehouse, Lot, StockTransaction, CurrentStock
+from .models import Warehouse, Lot, StockTransaction, CurrentStock, StockLedger
+from .services.stock_service import create_stock_entry
 from .resources import (
     ConsumptionReportResource, StockSummaryResource, 
     LowStockResource, StockTransactionResource
@@ -108,6 +109,95 @@ def _ensure_current_stock_seed(company_id):
             quantity=qty,
             company_id=company_id
         )
+
+
+def _ensure_stock_ledger_seed(company_id):
+    """
+    Backfill StockLedger from historical StockTransaction data when ledger is empty.
+    This keeps legacy data traceable without manual re-entry.
+    """
+    ledger_qs = _scoped(StockLedger.objects.all(), company_id)
+    if ledger_qs.exists():
+        return
+
+    tx_qs = _scoped(
+        StockTransaction.objects.select_related('item', 'warehouse_from', 'warehouse_to').order_by('transaction_date', 'id'),
+        company_id
+    )
+    if not tx_qs.exists():
+        # Fallback: seed opening balances from CurrentStock snapshots
+        current_qs = _scoped(
+            CurrentStock.objects.select_related('item', 'warehouse').filter(quantity__gt=0),
+            company_id
+        )
+        for cs in current_qs:
+            create_stock_entry(
+                company=cs.company,
+                product=cs.item,
+                warehouse=cs.warehouse,
+                qty_in=cs.quantity,
+                document_type='OpeningBalance',
+                document_id=cs.id,
+                unit_cost=cs.item.current_avg_cost or cs.item.unit_cost or Decimal('0.0000'),
+                posting_date=timezone.now(),
+            )
+        return
+
+    for tx in tx_qs:
+        unit_cost = tx.unit_cost or tx.item.current_avg_cost or tx.item.unit_cost or Decimal('0.0000')
+
+        if tx.transaction_type == 'transfer':
+            if tx.warehouse_from:
+                create_stock_entry(
+                    company=tx.company_id and tx.company or None,
+                    product=tx.item,
+                    warehouse=tx.warehouse_from,
+                    qty_out=tx.quantity,
+                    document_type='StockTransferOut',
+                    document_id=tx.id,
+                    unit_cost=unit_cost,
+                    posting_date=tx.transaction_date,
+                )
+            if tx.warehouse_to:
+                create_stock_entry(
+                    company=tx.company_id and tx.company or None,
+                    product=tx.item,
+                    warehouse=tx.warehouse_to,
+                    qty_in=tx.quantity,
+                    document_type='StockTransferIn',
+                    document_id=tx.id,
+                    unit_cost=unit_cost,
+                    posting_date=tx.transaction_date,
+                )
+            continue
+
+        in_types = {'receipt', 'return'}
+        out_types = {'issue', 'adjustment', 'scrap', 'sample', 'return_supplier'}
+
+        if tx.transaction_type in in_types and tx.warehouse_to:
+            create_stock_entry(
+                company=tx.company_id and tx.company or None,
+                product=tx.item,
+                warehouse=tx.warehouse_to,
+                qty_in=tx.quantity,
+                document_type=tx.transaction_type,
+                document_id=tx.id,
+                unit_cost=unit_cost,
+                posting_date=tx.transaction_date,
+            )
+            continue
+
+        if tx.transaction_type in out_types and tx.warehouse_from:
+            create_stock_entry(
+                company=tx.company_id and tx.company or None,
+                product=tx.item,
+                warehouse=tx.warehouse_from,
+                qty_out=tx.quantity,
+                document_type=tx.transaction_type,
+                document_id=tx.id,
+                unit_cost=unit_cost,
+                posting_date=tx.transaction_date,
+            )
 
 
 # ============================
@@ -366,6 +456,60 @@ def current_stock(request):
         'today': timezone.now().date(),
     }
     return render(request, 'inventory/current_stock.html', context)
+
+
+@login_required
+def stock_ledger(request):
+    """
+    Auditable stock ledger with opening/in/out/closing balances.
+    """
+    company_id = _company_id(request)
+    _ensure_stock_ledger_seed(company_id)
+
+    ledger_qs = _scoped(
+        StockLedger.objects.select_related('product', 'warehouse').all(),
+        company_id
+    ).order_by('-posting_date', '-id')
+
+    item_id = request.GET.get('item')
+    warehouse_id = request.GET.get('warehouse')
+    date_from = request.GET.get('from')
+    date_to = request.GET.get('to')
+
+    if item_id:
+        ledger_qs = ledger_qs.filter(product_id=item_id)
+    if warehouse_id:
+        ledger_qs = ledger_qs.filter(warehouse_id=warehouse_id)
+    if date_from:
+        try:
+            ledger_qs = ledger_qs.filter(posting_date__date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            ledger_qs = ledger_qs.filter(posting_date__date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    rows = []
+    for entry in ledger_qs[:1000]:
+        opening_balance = entry.balance_quantity - entry.quantity_in + entry.quantity_out
+        rows.append({
+            'entry': entry,
+            'opening_balance': opening_balance,
+        })
+
+    context = {
+        'rows': rows,
+        'items': _scoped(Item.objects.filter(is_active=True), company_id).order_by('code'),
+        'warehouses': _scoped(Warehouse.objects.filter(is_active=True), company_id).order_by('name'),
+        'selected_item': item_id or '',
+        'selected_warehouse': warehouse_id or '',
+        'date_from': date_from or '',
+        'date_to': date_to or '',
+        'today': timezone.now().date(),
+    }
+    return render(request, 'inventory/stock_ledger.html', context)
 
 
 # ============================

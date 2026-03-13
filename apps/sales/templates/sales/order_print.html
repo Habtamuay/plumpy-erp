@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Order {{ order.order_number }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+        }
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .document-title {
+            font-size: 20px;
+            color: #555;
+        }
+        .info-section {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .info-box {
+            width: 45%;
+        }
+        .info-box table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info-box td {
+            padding: 5px;
+            border: 1px solid #ddd;
+        }
+        .info-box td:first-child {
+            font-weight: bold;
+            background-color: #f5f5f5;
+            width: 40%;
+        }
+        .items-section {
+            margin-bottom: 30px;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .items-table th {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            text-align: left;
+        }
+        .items-table td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        .items-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .text-right {
+            text-align: right;
+        }
+        .totals-section {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .totals-table {
+            width: 300px;
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+        .totals-table td:first-child {
+            font-weight: bold;
+            background-color: #f5f5f5;
+        }
+        .grand-total {
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #e6f3ff;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 12px;
+            color: #777;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .terms {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+        }
+        .terms h4 {
+            margin-top: 0;
+            color: #555;
+        }
+        @media print {
+            .no-print {
+                display: none;
+            }
+            body {
+                padding: 0;
+            }
+        }
+        .print-button {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .print-button button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .print-button button:hover {
+            background-color: #0056b3;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        .status-draft { background-color: #6c757d; }
+        .status-confirmed { background-color: #007bff; }
+        .status-processing { background-color: #fd7e14; }
+        .status-shipped { background-color: #17a2b8; }
+        .status-delivered { background-color: #28a745; }
+        .status-invoiced { background-color: #6610f2; }
+        .status-closed { background-color: #343a40; }
+        .status-cancelled { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="no-print print-button">
+        <button onclick="window.print()">Print Order</button>
+    </div>
+
+    <div class="header">
+        <div class="company-name">{{ order.company.name|default:"Company Name" }}</div>
+        <div class="document-title">Sales Order #{{ order.order_number }}</div>
+    </div>
+
+    <div class="info-section">
+        <div class="info-box">
+            <table>
+                <tr>
+                    <td>Customer:</td>
+                    <td>{{ order.customer.name }}</td>
+                </tr>
+                <tr>
+                    <td>Contact Person:</td>
+                    <td>{{ order.customer.contact_person|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <td>Email:</td>
+                    <td>{{ order.customer.email|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <td>Phone:</td>
+                    <td>{{ order.customer.phone|default:"-" }}</td>
+                </tr>
+                {% if order.customer.address %}
+                <tr>
+                    <td>Address:</td>
+                    <td>{{ order.customer.address }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        <div class="info-box">
+            <table>
+                <tr>
+                    <td>Order Date:</td>
+                    <td>{{ order.order_date|date:"F j, Y" }}</td>
+                </tr>
+                <tr>
+                    <td>Expected Ship Date:</td>
+                    <td>{{ order.expected_ship_date|date:"F j, Y"|default:"Not specified" }}</td>
+                </tr>
+                <tr>
+                    <td>Status:</td>
+                    <td>
+                        <span class="status-badge status-{{ order.status }}">
+                            {{ order.get_status_display }}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Created By:</td>
+                    <td>{{ order.created_by.get_full_name|default:order.created_by.username }}</td>
+                </tr>
+                <tr>
+                    <td>Tax Rate:</td>
+                    <td>{{ order.tax_rate }}%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="items-section">
+        <h3>Order Items</h3>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Item Code</th>
+                    <th>Item Name</th>
+                    <th class="text-right">Quantity</th>
+                    <th>Unit</th>
+                    <th class="text-right">Unit Price</th>
+                    <th class="text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in order.lines.all %}
+                <tr>
+                    <td>{{ line.item.code }}</td>
+                    <td>{{ line.item.name }}</td>
+                    <td class="text-right">{{ line.quantity|floatformat:2 }}</td>
+                    <td>{{ line.unit.abbreviation|default:line.unit.name|default:"-" }}</td>
+                    <td class="text-right">{{ line.unit_price|floatformat:2 }}</td>
+                    <td class="text-right">{{ line.total_price|floatformat:2 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">No items in this order</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="totals-section">
+        <table class="totals-table">
+            <tr>
+                <td>Subtotal:</td>
+                <td class="text-right">{{ order.subtotal|floatformat:2 }}</td>
+            </tr>
+            <tr>
+                <td>Tax ({{ order.tax_rate }}%):</td>
+                <td class="text-right">{{ order.tax_amount|floatformat:2 }}</td>
+            </tr>
+            <tr class="grand-total">
+                <td>Grand Total:</td>
+                <td class="text-right">{{ order.total_amount|floatformat:2 }}</td>
+            </tr>
+        </table>
+    </div>
+
+    {% if order.notes %}
+    <div class="terms">
+        <h4>Notes</h4>
+        <p>{{ order.notes|linebreaks }}</p>
+    </div>
+    {% endif %}
+
+    {% if order.terms_conditions %}
+    <div class="terms">
+        <h4>Terms & Conditions</h4>
+        <p>{{ order.terms_conditions|linebreaks }}</p>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p>This is a computer generated document. No signature is required.</p>
+        <p>Generated on: {% now "F j, Y H:i:s" %}</p>
+    </div>
+
+    <script>
+        // Auto-print when page loads (optional - uncomment if you want auto-print)
+        // window.onload = function() {
+        //     window.print();
+        // }
+    </script>
+</body>
+</html>

@@ -19,6 +19,8 @@ urlpatterns = [
     path('items/<int:item_id>/', views.item_detail, name='item_detail'),
     path('items/<int:item_id>/edit/', views.item_edit, name='item_edit'),
     path('items/<int:item_id>/delete/', views.item_delete, name='item_delete'),
+    path('quick-create/', views.quick_create_item, name='quick_create'),
+    path('unit-quick-create/', views.quick_create_unit, name='unit_quick_create'),
     
     # Unit URLs
     path('units/', views.unit_list, name='unit_list'),

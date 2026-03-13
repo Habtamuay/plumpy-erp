@@ -1,27 +1,117 @@
-{% extends 'base.html' %}
-{% block title %}Balance Sheet{% endblock %}
+{% extends "core/base.html" %}
+{% load humanize %}
+
+{% block title %}Balance Sheet | {{ company.name }}{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-  <h3>Balance Sheet</h3>
-  <p class="text-muted">Company: {{ company.name }}</p>
-  <table class="table table-bordered w-auto">
-    <tr>
-      <th>Assets</th>
-      <td class="text-end">{{ report.assets|floatformat:2 }}</td>
-    </tr>
-    <tr>
-      <th>Liabilities</th>
-      <td class="text-end">{{ report.liabilities|floatformat:2 }}</td>
-    </tr>
-    <tr>
-      <th>Equity</th>
-      <td class="text-end">{{ report.equity|floatformat:2 }}</td>
-    </tr>
-    <tr class="fw-bold">
-      <th>Liabilities + Equity</th>
-      <td class="text-end">{{ report.liabilities|add:report.equity|floatformat:2 }}</td>
-    </tr>
-  </table>
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Balance Sheet</h1>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary">
+                <i class="fas fa-print"></i> Print
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Report Settings</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="date" class="form-label">As of Date</label>
+                    <input type="date" class="form-control" id="date" name="date" 
+                           value="{{ end_date|date:'Y-m-d'|default:today|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Run Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Report Content -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="text-center mb-4">
+                <h4 class="font-weight-bold">{{ company.name }}</h4>
+                <h5>Balance Sheet</h5>
+                <p class="text-muted">As of {{ end_date|default:"Today" }}</p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <!-- ASSETS -->
+                    <thead class="table-light">
+                        <tr>
+                            <th colspan="2">ASSETS</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for type in report.assets %}
+                            {% for group in type.groups %}
+                                <tr class="fw-bold bg-light">
+                                    <td colspan="3" class="ps-4">{{ group.name }}</td>
+                                </tr>
+                                {% for acc in group.accounts %}
+                                <tr>
+                                    <td style="width: 100px;" class="ps-5 text-muted">{{ acc.code }}</td>
+                                    <td class="ps-5">{{ acc.name }}</td>
+                                    <td class="text-end">{{ acc.balance|floatformat:2|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="fw-bold border-top">
+                                    <td colspan="2" class="ps-4">Total {{ group.name }}</td>
+                                    <td class="text-end">{{ group.total|floatformat:2|intcomma }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% endfor %}
+                        <tr class="table-dark">
+                            <td colspan="2">TOTAL ASSETS</td>
+                            <td class="text-end">{{ report.total_assets|floatformat:2|intcomma }}</td>
+                        </tr>
+                    </tbody>
+
+                    <!-- LIABILITIES & EQUITY -->
+                    <thead class="table-light mt-4">
+                        <tr><th colspan="3" class="pt-4">LIABILITIES & EQUITY</th></tr>
+                    </thead>
+                    <tbody>
+                        <!-- Liabilities -->
+                        {% for type in report.liabilities %}
+                            {% for group in type.groups %}
+                                <tr class="fw-bold bg-light"><td colspan="3" class="ps-4">{{ group.name }}</td></tr>
+                                {% for acc in group.accounts %}
+                                <tr><td class="ps-5 text-muted">{{ acc.code }}</td><td class="ps-5">{{ acc.name }}</td><td class="text-end">{{ acc.balance|floatformat:2|intcomma }}</td></tr>
+                                {% endfor %}
+                                <tr class="fw-bold"><td colspan="2" class="ps-4">Total {{ group.name }}</td><td class="text-end">{{ group.total|floatformat:2|intcomma }}</td></tr>
+                            {% endfor %}
+                        {% endfor %}
+                        <tr class="fw-bold"><td colspan="2">TOTAL LIABILITIES</td><td class="text-end">{{ report.total_liabilities|floatformat:2|intcomma }}</td></tr>
+
+                        <!-- Equity -->
+                        {% for type in report.equity %}
+                            {% for group in type.groups %}
+                                <tr class="fw-bold bg-light"><td colspan="3" class="ps-4">{{ group.name }}</td></tr>
+                                {% for acc in group.accounts %}
+                                <tr><td class="ps-5 text-muted">{{ acc.code }}</td><td class="ps-5">{{ acc.name }}</td><td class="text-end">{{ acc.balance|floatformat:2|intcomma }}</td></tr>
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
+                        <tr><td colspan="2" class="ps-4">Net Income (Current Year)</td><td class="text-end">{{ report.net_income|floatformat:2|intcomma }}</td></tr>
+                        <tr class="fw-bold"><td colspan="2">TOTAL EQUITY</td><td class="text-end">{{ report.total_equity|add:report.net_income|floatformat:2|intcomma }}</td></tr>
+
+                        <tr class="table-dark"><td colspan="2">TOTAL LIABILITIES & EQUITY</td><td class="text-end">{{ report.total_liabilities_and_equity|floatformat:2|intcomma }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
-

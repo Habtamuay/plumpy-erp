@@ -108,6 +108,7 @@ class Account(CompanyModel):
     # Financial tracking
     opening_balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     current_balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), editable=False)
+    budget = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), help_text="Target budget amount")
     foreign_currency = models.BooleanField(default=False)
     currency_code = models.CharField(max_length=3, blank=True, help_text="ISO currency code if foreign currency")
     

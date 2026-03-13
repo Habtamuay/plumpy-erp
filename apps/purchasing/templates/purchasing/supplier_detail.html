@@ -3,8 +3,27 @@
 
 {% block title %}{{ supplier.name }} - Supplier Details{% endblock %}
 
-{% block content %}
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-3px);
+    }
+    .rating-star {
+        color: #ffc107;
+    }
+    .rating-star-empty {
+        color: #e4e5e9;
+    }
+    .progress {
+        height: 8px;
+    }
+</style>
+{% endblock %}
 
+{% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="h3 mb-1">
@@ -27,6 +46,58 @@
     </div>
 </div>
 
+<!-- Enhanced Metrics Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white stat-card">
+            <div class="card-body">
+                <h6 class="card-title">Total Spend</h6>
+                <h3 class="mb-0">{{ total_spend|floatformat:0|intcomma }} ETB</h3>
+                <small class="opacity-75">Lifetime value</small>
+                <div class="mt-2 small">
+                    <i class="bi bi-calendar"></i> This month: {{ monthly_spend|floatformat:0|intcomma }} ETB
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark stat-card">
+            <div class="card-body">
+                <h6 class="card-title">Outstanding</h6>
+                <h3 class="mb-0">{{ outstanding|floatformat:0|intcomma }} ETB</h3>
+                <small class="opacity-75">Pending payments</small>
+                <div class="mt-2 small">
+                    <i class="bi bi-cart"></i> {{ po_count }} total orders
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white stat-card">
+            <div class="card-body">
+                <h6 class="card-title">On-Time Delivery</h6>
+                <h3 class="mb-0">{{ on_time_rate|floatformat:1 }}%</h3>
+                <small class="opacity-75">{{ on_time_count }} of {{ received_count }} orders</small>
+                <div class="mt-2 progress">
+                    <div class="progress-bar bg-white" style="width: {{ on_time_rate }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white stat-card">
+            <div class="card-body">
+                <h6 class="card-title">Avg. Lead Time</h6>
+                <h3 class="mb-0">{{ avg_lead_time }} days</h3>
+                <small class="opacity-75">From order to receipt</small>
+                <div class="mt-2 small">
+                    <i class="bi bi-clock"></i> {{ pending_approvals_count }} pending approvals
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Supplier Information Cards -->
 <div class="row g-4 mb-4">
     <div class="col-md-4">
@@ -46,7 +117,7 @@
                     </tr>
                     <tr>
                         <th>Company:</th>
-                        <td>{{ supplier.company.name }}</td>
+                        <td>{{ supplier.company }}</td>
                     </tr>
                     <tr>
                         <th>TIN:</th>
@@ -157,14 +228,8 @@
                         </td>
                     </tr>
                     <tr>
-                        <th>Avg. Lead Time:</th>
-                        <td>
-                            {% if avg_delivery_days %}
-                            {{ avg_delivery_days }} days
-                            {% else %}
-                            —
-                            {% endif %}
-                        </td>
+                        <th>Monthly Spend:</th>
+                        <td>{{ monthly_spend|floatformat:0|intcomma }} ETB</td>
                     </tr>
                 </table>
             </div>
@@ -207,17 +272,17 @@
         <div class="card bg-primary text-white">
             <div class="card-body text-center">
                 <h5 class="card-title">Performance Rating</h5>
-                <h2 class="mb-0">{{ supplier.performance_rating|default:"0"|floatformat:1 }}</h2>
+                <h2 class="mb-0">{{ performance_rating|floatformat:1 }}</h2>
                 <div class="mt-2">
                     {% for i in "12345"|make_list %}
-                        {% if forloop.counter <= supplier.performance_rating|floatformat:0 %}
-                        <i class="bi bi-star-fill text-warning"></i>
+                        {% if forloop.counter <= performance_rating %}
+                        <i class="bi bi-star-fill rating-star"></i>
                         {% else %}
-                        <i class="bi bi-star text-white"></i>
+                        <i class="bi bi-star rating-star-empty"></i>
                         {% endif %}
                     {% endfor %}
                 </div>
-                <small>/5.0</small>
+                <small>/5.0 (calculated from {{ received_count }} deliveries)</small>
             </div>
         </div>
     </div>
@@ -225,8 +290,11 @@
         <div class="card bg-success text-white">
             <div class="card-body text-center">
                 <h5 class="card-title">On-Time Delivery</h5>
-                <h2 class="mb-0">{{ supplier.on_time_delivery_rate|default:"0"|floatformat:1 }}%</h2>
-                <small>Last 12 months</small>
+                <h2 class="mb-0">{{ on_time_rate|floatformat:1 }}%</h2>
+                <div class="progress mt-2 bg-light">
+                    <div class="progress-bar bg-white" style="width: {{ on_time_rate }}%"></div>
+                </div>
+                <small class="mt-2 d-block">{{ on_time_count }} of {{ received_count }} orders on time</small>
             </div>
         </div>
     </div>
@@ -234,7 +302,16 @@
         <div class="card bg-info text-white">
             <div class="card-body text-center">
                 <h5 class="card-title">Quality Rating</h5>
-                <h2 class="mb-0">{{ supplier.quality_rating|default:"0"|floatformat:1 }}</h2>
+                <h2 class="mb-0">{{ quality_rating|floatformat:1 }}</h2>
+                <div class="mt-2">
+                    {% for i in "12345"|make_list %}
+                        {% if forloop.counter <= quality_rating %}
+                        <i class="bi bi-star-fill rating-star"></i>
+                        {% else %}
+                        <i class="bi bi-star rating-star-empty"></i>
+                        {% endif %}
+                    {% endfor %}
+                </div>
                 <small>/5.0</small>
             </div>
         </div>
@@ -259,14 +336,15 @@
                         <th>Expected Delivery</th>
                         <th class="text-end">Amount</th>
                         <th>Status</th>
+                        <th>Lead Time</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for po in pos %}
+                    {% for po in recent_pos %}
                     <tr>
-                        <td><strong>{{ po.po_number }}</strong></td>
+                        <td><strong><a href="{% url 'purchasing:po_detail' po.id %}">{{ po.po_number }}</a></strong></td>
                         <td>{{ po.order_date|date:"d M Y" }}</td>
-                        <td>{{ po.expected_delivery_date|date:"d M Y" }}</td>
+                        <td>{{ po.expected_delivery_date|date:"d M Y"|default:"—" }}</td>
                         <td class="text-end">{{ po.total_amount|floatformat:2|intcomma }}</td>
                         <td>
                             {% if po.status == 'received' %}
@@ -275,6 +353,8 @@
                             <span class="badge bg-warning text-dark">Partial</span>
                             {% elif po.status == 'ordered' %}
                             <span class="badge bg-info">Ordered</span>
+                            {% elif po.status == 'approved' %}
+                            <span class="badge bg-primary">Approved</span>
                             {% elif po.status == 'draft' %}
                             <span class="badge bg-secondary">Draft</span>
                             {% elif po.status == 'cancelled' %}
@@ -283,11 +363,18 @@
                             <span class="badge bg-secondary">{{ po.get_status_display }}</span>
                             {% endif %}
                         </td>
+                        <td>
+                            {% if po.received_date and po.order_date %}
+                                {{ po.received_date|timeuntil:po.order_date }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">
-                            <i class="bi bi-receipt"></i>
+                        <td colspan="6" class="text-center py-4 text-muted">
+                            <i class="bi bi-receipt fs-4"></i>
                             <p class="mt-2 mb-0">No purchase orders found for this supplier</p>
                         </td>
                     </tr>
@@ -298,12 +385,85 @@
     </div>
 </div>
 
+<!-- Recent Goods Receipts -->
+{% if has_receipts %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-box-seam me-2 text-success"></i>Recent Goods Receipts</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Receipt #</th>
+                        <th>Date</th>
+                        <th>PO #</th>
+                        <th>Warehouse</th>
+                        <th>Received By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for receipt in recent_receipts %}
+                    <tr>
+                        <td><a href="{% url 'purchasing:goods_receipt_detail' receipt.id %}">{{ receipt.receipt_number }}</a></td>
+                        <td>{{ receipt.receipt_date|date:"d M Y" }}</td>
+                        <td><a href="{% url 'purchasing:po_detail' receipt.po.id %}">{{ receipt.po.po_number }}</a></td>
+                        <td>{{ receipt.warehouse }}</td>
+                        <td>{{ receipt.received_by.get_full_name|default:receipt.received_by.username }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Top Purchased Items -->
+{% if top_items %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-bar-chart me-2 text-info"></i>Top Purchased Items</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Item Code</th>
+                        <th>Item Name</th>
+                        <th class="text-end">Total Quantity</th>
+                        <th class="text-end">Total Spent</th>
+                        <th>Unit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_items %}
+                    <tr>
+                        <td>{{ item.item_code }}</td>
+                        <td>{{ item.item_name }}</td>
+                        <td class="text-end">{{ item.total_quantity|floatformat:0 }}</td>
+                        <td class="text-end">{{ item.total_spent|floatformat:0|intcomma }} ETB</td>
+                        <td>{{ item.unit }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Recent Bills & Payments -->
 <div class="row">
     <div class="col-md-6">
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-receipt-cutoff me-2 text-danger"></i>Recent Bills</h5>
+                {% if has_bills %}
+                <a href="#" class="btn btn-sm btn-outline-danger">View All</a>
+                {% endif %}
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -318,7 +478,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for bill in bills %}
+                            {% for bill in recent_bills %}
                             <tr>
                                 <td>{{ bill.bill_number }}</td>
                                 <td>{{ bill.bill_date|date:"d M Y" }}</td>
@@ -350,8 +510,11 @@
     
     <div class="col-md-6">
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-cash me-2 text-success"></i>Recent Payments</h5>
+                {% if has_payments %}
+                <a href="#" class="btn btn-sm btn-outline-success">View All</a>
+                {% endif %}
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -365,11 +528,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for payment in payments %}
+                            {% for payment in recent_payments %}
                             <tr>
                                 <td>{{ payment.date|date:"d M Y" }}</td>
                                 <td>{{ payment.reference|default:"—" }}</td>
-                                <td class="text-end fw-bold text-danger">{{ payment.amount|floatformat:2|intcomma }}</td>
+                                <td class="text-end fw-bold text-success">{{ payment.amount|floatformat:2|intcomma }}</td>
                                 <td>
                                     {% if payment.reconciled_at %}
                                     <span class="badge bg-success">Reconciled</span>

@@ -115,7 +115,7 @@ class AccountAdmin(admin.ModelAdmin):
             'fields': ('is_control_account', 'allow_manual_entries')
         }),
         ('Financial', {
-            'fields': ('opening_balance', 'current_balance', 'balance_display')
+            'fields': ('opening_balance', 'current_balance', 'budget', 'balance_display')
         }),
         ('Foreign Currency', {
             'fields': ('foreign_currency', 'currency_code'),
@@ -132,7 +132,6 @@ class AccountAdmin(admin.ModelAdmin):
         try:
             balance = float(obj.current_balance)
             color = 'green' if balance >= 0 else 'red'
-            # Format the number first, then pass to format_html
             formatted_balance = f"{balance:,.2f}"
             return format_html(
                 '<span style="color: {}; font-weight: bold;">{}</span>',
@@ -321,10 +320,8 @@ class PaymentAdmin(admin.ModelAdmin):
     def amount_display(self, obj):
         """Display amount with color coding - FIXED"""
         try:
-            # Convert to float first, then format
             amount = float(obj.amount)
             color = 'green' if obj.payment_type == 'customer' else 'red'
-            # Format the number first, then pass to format_html
             formatted_amount = f"{amount:,.2f}"
             return format_html(
                 '<span style="color: {}; font-weight: bold;">{}</span>',

@@ -1,11 +1,27 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Start New Production Run</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">
+        {% if is_edit %}
+            Edit Production Run #{{ run.id }}
+        {% else %}
+            Start New Production Run
+        {% endif %}
+    </h2>
+    <a href="{% if is_edit %}{% url 'production:production_run_detail' run.id %}{% else %}{% url 'production:production_run_list' %}{% endif %}" class="btn btn-outline-secondary">
+        Back
+    </a>
+</div>
 
 <form method="post">
     {% csrf_token %}
+    <div class="alert alert-info py-2">
+        Enter production quantity in <strong>KG</strong>. BOM base is auto-normalized from either <strong>1000 KG</strong> or <strong>1 MT</strong>.
+    </div>
     {{ form.as_p }}
-    <button type="submit" class="btn btn-success">Start Run</button>
+    <button type="submit" class="btn btn-success">
+        {% if is_edit %}Save Changes{% else %}Start Run{% endif %}
+    </button>
 </form>
 {% endblock %}

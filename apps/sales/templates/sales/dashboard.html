@@ -1,118 +1,44 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Sales Dashboard{% endblock %}
 
 {% block extra_css %}
 <!-- Chart.js CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
-<!-- Bootstrap Icons -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 <style>
     .stat-card {
-        border-radius: 15px;
-        padding: 25px;
-        margin-bottom: 20px;
-        color: white;
-        transition: transform 0.3s;
+        transition: transform 0.2s;
+        border: none;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
     .stat-card:hover {
-        transform: translateY(-5px);
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    .stat-card i {
-        font-size: 3rem;
-        opacity: 0.3;
-        position: absolute;
-        top: 20px;
-        right: 20px;
-    }
-    .stat-card .stat-value {
+    .stat-icon {
         font-size: 2.5rem;
-        font-weight: bold;
-        margin-bottom: 5px;
+        opacity: 0.7;
     }
-    .stat-card .stat-label {
-        font-size: 1rem;
-        opacity: 0.9;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .stat-total { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .stat-pending { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-    .stat-processing { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-    .stat-shipped { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-    
-    .chart-container {
-        position: relative;
-        height: 300px;
-        margin: 20px 0;
-    }
-    .recent-item {
-        padding: 15px;
-        border-bottom: 1px solid #eee;
-        transition: background-color 0.3s;
-    }
-    .recent-item:hover {
-        background-color: #f8f9fa;
-    }
-    .recent-item:last-child {
-        border-bottom: none;
-    }
-    .status-badge {
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
-    .status-draft { background-color: #6c757d; color: white; }
-    .status-confirmed { background-color: #007bff; color: white; }
-    .status-processing { background-color: #17a2b8; color: white; }
-    .status-ready_to_ship { background-color: #ffc107; color: black; }
-    .status-shipped { background-color: #28a745; color: white; }
-    .status-delivered { background-color: #20c997; color: white; }
-    .status-invoiced { background-color: #6610f2; color: white; }
-    .status-closed { background-color: #343a40; color: white; }
-    .status-cancelled { background-color: #dc3545; color: white; }
-    .status-overdue { background-color: #dc3545; color: white; }
-    .status-paid { background-color: #28a745; color: white; }
-    .status-partial { background-color: #ffc107; color: black; }
-    
     .quick-action-card {
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 20px;
         text-align: center;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
         transition: all 0.3s;
-        cursor: pointer;
-        background: white;
     }
     .quick-action-card:hover {
-        background: #f8f9fa;
-        border-color: #0d6efd;
-        transform: translateY(-3px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        transform: scale(1.05);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
     }
-    .quick-action-card i {
-        font-size: 2.5rem;
-        color: #0d6efd;
-        margin-bottom: 10px;
-    }
-    .quick-action-card h5 {
-        margin-bottom: 5px;
-        font-size: 1.1rem;
-    }
-    .quick-action-card p {
-        color: #6c757d;
-        font-size: 0.9rem;
-        margin-bottom: 0;
-    }
-    .overdue-badge {
-        background-color: #dc3545;
+    .quick-action-card a {
         color: white;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 0.75rem;
-        margin-left: 5px;
+        text-decoration: none;
+    }
+    .table-hover tbody tr:hover {
+        background-color: rgba(0,123,255,0.05);
     }
 </style>
 {% endblock %}
@@ -122,81 +48,101 @@
     <!-- Page Header -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card shadow-sm">
+            <div class="card bg-primary text-white">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
-                        <h2 class="mb-1">
-                            <i class="bi bi-graph-up me-2 text-primary"></i>Sales Dashboard
-                        </h2>
-                        <p class="text-muted mb-0">
-                            <i class="bi bi-calendar me-2"></i>{{ today|date:"F j, Y" }}
-                        </p>
+                        <h2 class="mb-1"><i class="bi bi-graph-up me-2"></i>Sales Dashboard</h2>
+                        <p class="mb-0">Welcome back, {{ request.user.get_full_name|default:request.user.username }}</p>
                     </div>
                     <div>
-                        <a href="{% url 'sales:order_create' %}" class="btn btn-primary">
-                            <i class="bi bi-plus-circle me-2"></i>New Order
-                        </a>
+                        <span class="badge bg-light text-dark p-3">
+                            <i class="bi bi-calendar me-2"></i>{{ today|date:"F j, Y" }}
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Statistics Cards -->
+    <!-- Summary Cards -->
     <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="stat-card stat-total position-relative">
-                <i class="bi bi-cart"></i>
-                <div class="stat-value">{{ total_orders|default:0 }}</div>
-                <div class="stat-label">Total Orders</div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Total Orders</h6>
+                            <h3 class="text-white mb-0">{{ total_orders|default:"0" }}</h3>
+                            <small>{{ confirmed_orders }} confirmed | {{ pending_orders }} pending</small>
+                        </div>
+                        <i class="bi bi-cart stat-icon"></i>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="stat-card stat-pending position-relative">
-                <i class="bi bi-hourglass-split"></i>
-                <div class="stat-value">{{ pending_orders|default:0 }}</div>
-                <div class="stat-label">Pending Orders</div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Total Revenue</h6>
+                            <h3 class="text-white mb-0">{{ total_revenue|floatformat:2|default:"0.00" }}</h3>
+                            <small>{{ paid_invoices }} paid invoices</small>
+                        </div>
+                        <i class="bi bi-currency-dollar stat-icon"></i>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="stat-card stat-processing position-relative">
-                <i class="bi bi-gear"></i>
-                <div class="stat-value">{{ processing_orders|default:0 }}</div>
-                <div class="stat-label">Processing</div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Pending Revenue</h6>
+                            <h3 class="text-white mb-0">{{ pending_revenue|floatformat:2|default:"0.00" }}</h3>
+                            <small>{{ unpaid_invoices }} unpaid invoices</small>
+                        </div>
+                        <i class="bi bi-clock-history stat-icon"></i>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="stat-card stat-shipped position-relative">
-                <i class="bi bi-truck"></i>
-                <div class="stat-value">{{ shipped_orders|default:0 }}</div>
-                <div class="stat-label">Shipped/Delivered</div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card stat-card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Overdue</h6>
+                            <h3 class="text-white mb-0">{{ overdue_invoices|default:"0" }}</h3>
+                            <small>invoices overdue</small>
+                        </div>
+                        <i class="bi bi-exclamation-triangle stat-icon"></i>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Charts Row -->
     <div class="row mb-4">
-        <div class="col-md-8">
-            <div class="card shadow-sm">
+        <div class="col-md-8 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-light">
-                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Monthly Sales Trend</h5>
+                    <h5 class="mb-0"><i class="bi bi-bar-chart-line me-2"></i>Monthly Sales Trend</h5>
                 </div>
                 <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="salesChart"></canvas>
-                    </div>
+                    <canvas id="monthlySalesChart" height="100"></canvas>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm">
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Order Status</h5>
                 </div>
                 <div class="card-body">
-                    <div class="chart-container" style="height: 250px;">
-                        <canvas id="statusChart"></canvas>
-                    </div>
+                    <canvas id="orderStatusChart" height="200"></canvas>
                 </div>
             </div>
         </div>
@@ -205,157 +151,135 @@
     <!-- Quick Actions -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light">
-                    <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
+            <h5 class="mb-3"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</h5>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'sales:order_create' %}" class="text-decoration-none">
+                <div class="quick-action-card">
+                    <i class="bi bi-plus-circle fs-1 mb-2"></i>
+                    <h6>New Order</h6>
+                    <small>Create a sales order</small>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3 mb-3">
-                            <a href="{% url 'sales:order_create' %}" class="text-decoration-none">
-                                <div class="quick-action-card">
-                                    <i class="bi bi-plus-circle"></i>
-                                    <h5>New Order</h5>
-                                    <p>Create a sales order</p>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <a href="{% url 'sales:invoice_list' %}" class="text-decoration-none">
-                                <div class="quick-action-card">
-                                    <i class="bi bi-file-text"></i>
-                                    <h5>Invoices</h5>
-                                    <p>View all invoices</p>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <a href="{% url 'sales:shipment_list' %}" class="text-decoration-none">
-                                <div class="quick-action-card">
-                                    <i class="bi bi-truck"></i>
-                                    <h5>Shipments</h5>
-                                    <p>Track shipments</p>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <a href="{% url 'sales:payment_list' %}" class="text-decoration-none">
-                                <div class="quick-action-card">
-                                    <i class="bi bi-cash"></i>
-                                    <h5>Payments</h5>
-                                    <p>Record payments</p>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'sales:invoice_list' %}" class="text-decoration-none">
+                <div class="quick-action-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <i class="bi bi-file-text fs-1 mb-2"></i>
+                    <h6>Invoices</h6>
+                    <small>View all invoices</small>
                 </div>
-            </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'sales:shipment_list' %}" class="text-decoration-none">
+                <div class="quick-action-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <i class="bi bi-truck fs-1 mb-2"></i>
+                    <h6>Shipments</h6>
+                    <small>Track shipments</small>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'sales:payment_list' %}" class="text-decoration-none">
+                <div class="quick-action-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <i class="bi bi-cash-coin fs-1 mb-2"></i>
+                    <h6>Payments</h6>
+                    <small>Record payments</small>
+                </div>
+            </a>
         </div>
     </div>
 
     <!-- Recent Orders and Invoices -->
-    <div class="row">
-        <div class="col-md-6 mb-4">
-            <div class="card shadow-sm h-100">
+    <div class="row mb-4">
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Orders</h5>
-                    <a href="{% url 'sales:order_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
+                    <h5 class="mb-0"><i class="bi bi-cart me-2"></i>Recent Orders</h5>
+                    <a href="{% url 'sales:order_list' %}" class="btn btn-sm btn-outline-primary">View All <i class="bi bi-arrow-right"></i></a>
                 </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush">
-                        {% for order in recent_orders %}
-                        <div class="list-group-item recent-item">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <a href="{% url 'sales:order_detail' order.id %}" class="fw-bold text-decoration-none">
-                                        {{ order.order_number }}
-                                    </a>
-                                    <div class="small text-muted">
-                                        {{ order.customer.name }} • {{ order.order_date|date:"M d, Y" }}
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="fw-bold">{{ order.total_amount|floatformat:2 }}</span>
-                                    <div class="mt-1">
-                                        {% if order.status == 'draft' %}
-                                        <span class="status-badge status-draft">Draft</span>
-                                        {% elif order.status == 'confirmed' %}
-                                        <span class="status-badge status-confirmed">Confirmed</span>
-                                        {% elif order.status == 'processing' %}
-                                        <span class="status-badge status-processing">Processing</span>
-                                        {% elif order.status == 'shipped' %}
-                                        <span class="status-badge status-shipped">Shipped</span>
-                                        {% elif order.status == 'delivered' %}
-                                        <span class="status-badge status-delivered">Delivered</span>
-                                        {% elif order.status == 'cancelled' %}
-                                        <span class="status-badge status-cancelled">Cancelled</span>
-                                        {% else %}
-                                        <span class="status-badge status-draft">{{ order.get_status_display }}</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% empty %}
-                        <div class="text-center py-5">
-                            <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
-                            <p class="text-muted">No recent orders</p>
-                        </div>
-                        {% endfor %}
+                <div class="card-body">
+                    {% if recent_orders %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Order #</th>
+                                    <th>Customer</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in recent_orders %}
+                                <tr>
+                                    <td><a href="{% url 'sales:order_detail' order.id %}">{{ order.order_number }}</a></td>
+                                    <td>{{ order.customer.name|truncatechars:20 }}</td>
+                                    <td>{{ order.order_date|date:"M d" }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if order.status == 'draft' %}secondary{% elif order.status == 'confirmed' %}primary{% elif order.status == 'processing' %}info{% elif order.status == 'shipped' %}success{% elif order.status == 'delivered' %}success{% elif order.status == 'cancelled' %}danger{% endif %}">
+                                            {{ order.get_status_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ order.total_amount|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
+                        <p class="text-muted">No recent orders</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
-
-        <div class="col-md-6 mb-4">
-            <div class="card shadow-sm h-100">
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Recent Invoices</h5>
-                    <a href="{% url 'sales:invoice_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
+                    <a href="{% url 'sales:invoice_list' %}" class="btn btn-sm btn-outline-primary">View All <i class="bi bi-arrow-right"></i></a>
                 </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush">
-                        {% for invoice in recent_invoices %}
-                        <div class="list-group-item recent-item">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <a href="{% url 'sales:invoice_detail' invoice.id %}" class="fw-bold text-decoration-none">
-                                        {{ invoice.invoice_number }}
-                                    </a>
-                                    <div class="small text-muted">
-                                        {{ invoice.customer.name }} • {{ invoice.invoice_date|date:"M d, Y" }}
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="fw-bold">{{ invoice.total_amount|floatformat:2 }}</span>
-                                    <div class="mt-1">
-                                        {% if invoice.status == 'draft' %}
-                                        <span class="status-badge status-draft">Draft</span>
-                                        {% elif invoice.status == 'posted' %}
-                                        <span class="status-badge status-confirmed">Posted</span>
-                                        {% elif invoice.status == 'sent' %}
-                                        <span class="status-badge status-processing">Sent</span>
-                                        {% elif invoice.status == 'partial' %}
-                                        <span class="status-badge status-ready_to_ship">Partial</span>
-                                        {% elif invoice.status == 'paid' %}
-                                        <span class="status-badge status-paid">Paid</span>
-                                        {% elif invoice.status == 'overdue' %}
-                                        <span class="status-badge status-overdue">Overdue</span>
-                                        {% endif %}
-                                        {% if invoice.due_date < today and invoice.status not in 'paid,cancelled' %}
-                                        <span class="overdue-badge">Overdue</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% empty %}
-                        <div class="text-center py-5">
-                            <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
-                            <p class="text-muted">No recent invoices</p>
-                        </div>
-                        {% endfor %}
+                <div class="card-body">
+                    {% if recent_invoices %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Invoice #</th>
+                                    <th>Customer</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invoice in recent_invoices %}
+                                <tr>
+                                    <td><a href="{% url 'sales:invoice_detail' invoice.id %}">{{ invoice.invoice_number }}</a></td>
+                                    <td>{{ invoice.customer.name|truncatechars:20 }}</td>
+                                    <td>{{ invoice.invoice_date|date:"M d" }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if invoice.status == 'draft' %}secondary{% elif invoice.status == 'sent' %}info{% elif invoice.status == 'posted' %}primary{% elif invoice.status == 'partial' %}warning{% elif invoice.status == 'paid' %}success{% elif invoice.status == 'overdue' %}danger{% elif invoice.status == 'cancelled' %}secondary{% endif %}">
+                                            {{ invoice.get_status_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ invoice.total_amount|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
+                        <p class="text-muted">No recent invoices</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -364,58 +288,48 @@
     <!-- Top Customers -->
     <div class="row">
         <div class="col-12">
-            <div class="card shadow-sm">
+            <div class="card">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-trophy me-2"></i>Top Customers</h5>
                 </div>
                 <div class="card-body">
+                    {% if top_customers %}
                     <div class="table-responsive">
                         <table class="table table-hover">
-                            <thead class="table-light">
+                            <thead>
                                 <tr>
                                     <th>Customer</th>
-                                    <th class="text-end">Total Orders</th>
-                                    <th class="text-end">Total Spent</th>
-                                    <th class="text-end">Average Order</th>
+                                    <th>Total Orders</th>
+                                    <th>Total Spent</th>
+                                    <th>Average Order</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for customer in top_customers %}
                                 <tr>
-                                    <td>{{ customer.name }}</td>
-                                    <td class="text-end">{{ customer.total_orders|default:0 }}</td>
-                                    <td class="text-end">{{ customer.total_spent|default:0|floatformat:2 }}</td>
-                                    <td class="text-end">{{ customer.avg_order|default:0|floatformat:2 }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="4" class="text-center py-4">
-                                        <i class="bi bi-people fs-1 d-block mb-3 text-muted"></i>
-                                        <p class="text-muted">No customer data available</p>
+                                    <td>
+                                        <a href="{% url 'sales:customer_history' customer.id %}">
+                                            {{ customer.name }}
+                                        </a>
                                     </td>
+                                    <td>{{ customer.order_count }}</td>
+                                    <td>{{ customer.total_spent|floatformat:2|default:"0.00" }}</td>
+                                    <td>{{ customer.avg_order|floatformat:2|default:"0.00" }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-people fs-1 text-muted d-block mb-2"></i>
+                        <p class="text-muted">No customer data available</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Overdue Invoices Alert -->
-    {% if overdue_invoices > 0 %}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                <strong>Attention!</strong> You have {{ overdue_invoices }} overdue invoice(s). 
-                <a href="{% url 'sales:invoice_list' %}?status=overdue" class="alert-link">View overdue invoices</a>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
 
@@ -423,78 +337,72 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 <script>
-    $(document).ready(function() {
-        // Sales Trend Chart
-        var ctx = document.getElementById('salesChart').getContext('2d');
-        var salesChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: {{ months|safe|default:"[]" }},
-                datasets: [{
-                    label: 'Sales Amount',
-                    data: {{ monthly_sales|safe|default:"[]" }},
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.1,
-                    fill: true
-                }]
+$(document).ready(function() {
+    // Monthly Sales Chart
+    var ctx1 = document.getElementById('monthlySalesChart').getContext('2d');
+    var monthlySalesChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: {{ monthly_labels|safe }},
+            datasets: [{
+                label: 'Sales',
+                data: {{ monthly_data|safe }},
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return value.toLocaleString();
-                            }
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value, index, values) {
+                            return '$' + value.toLocaleString();
                         }
                     }
                 }
             }
-        });
-
-        // Status Distribution Chart
-        var ctx2 = document.getElementById('statusChart').getContext('2d');
-        var statusChart = new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: {{ status_labels|safe|default:"['Draft', 'Confirmed', 'Processing', 'Shipped', 'Delivered']" }},
-                datasets: [{
-                    data: {{ status_data|safe|default:"[0,0,0,0,0]" }},
-                    backgroundColor: [
-                        '#6c757d',  // draft
-                        '#007bff',  // confirmed
-                        '#17a2b8',  // processing
-                        '#28a745',  // shipped
-                        '#20c997',  // delivered
-                        '#ffc107',  // ready_to_ship
-                        '#6610f2',  // invoiced
-                        '#dc3545'   // cancelled
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            boxWidth: 12,
-                            padding: 15
-                        }
-                    }
-                }
-            }
-        });
+        }
     });
+
+    // Order Status Chart
+    var ctx2 = document.getElementById('orderStatusChart').getContext('2d');
+    var orderStatusChart = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: {{ status_labels|safe }},
+            datasets: [{
+                data: {{ status_data|safe }},
+                backgroundColor: [
+                    '#6c757d',  // Draft - grey
+                    '#007bff',  // Confirmed - blue
+                    '#fd7e14',  // Processing - orange
+                    '#28a745',  // Shipped/Delivered - green
+                    '#dc3545'   // Cancelled - red
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+});
 </script>
 {% endblock %}

@@ -57,7 +57,7 @@ class BOM(CompanyModel):
     base_quantity = models.DecimalField(
         max_digits=10,
         decimal_places=4,
-        default=1000.0000,
+        default=Decimal("1000.0000"),
         help_text="Base quantity (1000 kg)",
     )
 
@@ -163,10 +163,39 @@ class BOM(CompanyModel):
         return total
 
     @property
+    def base_quantity_kg(self):
+        """
+        Normalize BOM base quantity to kilograms.
+        Supports either:
+        - base_uom = kg with base_quantity = 1000
+        - base_uom = MT/ton with base_quantity = 1
+        """
+        if not self.base_quantity:
+            return Decimal("0")
+
+        uom_abbr = ""
+        uom_name = ""
+        if self.base_uom_id:
+            uom_abbr = (self.base_uom.abbreviation or "").strip().lower()
+            uom_name = (self.base_uom.name or "").strip().lower()
+
+        mt_abbr = {"mt", "t", "ton", "tonne"}
+        if (
+            uom_abbr in mt_abbr
+            or "metric ton" in uom_name
+            or "metric tonne" in uom_name
+            or uom_name in {"ton", "tonne"}
+        ):
+            return self.base_quantity * Decimal("1000")
+
+        return self.base_quantity
+
+    @property
     def total_material_cost_per_kg(self):
 
-        if self.base_quantity > 0:
-            return self.total_material_cost_per_base / self.base_quantity
+        base_kg = self.base_quantity_kg
+        if base_kg > 0:
+            return self.total_material_cost_per_base / base_kg
 
         return Decimal("0")
 
@@ -281,8 +310,9 @@ class BOMLine(CompanyModel):
     @property
     def quantity_per_kg(self):
 
-        if self.bom.base_quantity > 0:
-            return self.quantity_per_base / self.bom.base_quantity
+        base_kg = self.bom.base_quantity_kg
+        if base_kg > 0:
+            return self.quantity_per_base / base_kg
 
         return Decimal("0")
 
@@ -506,10 +536,22 @@ class ProductionRun(CompanyModel):
         default='planned',
         db_index=True
     )
+    batch_number = models.CharField(
+        max_length=50,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Unique batch number for the finished lot."
+    )
     start_date = models.DateTimeField(
         default=timezone.now,
         help_text="When production was started / planned",
         db_index=True
+    )
+    planned_end_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Planned completion datetime"
     )
     end_date = models.DateTimeField(
         null=True,
@@ -629,6 +671,11 @@ class ProductionRun(CompanyModel):
                 'planned_quantity': "Planned quantity must be greater than zero"
             })
 
+        if self.planned_end_date and self.start_date and self.planned_end_date < self.start_date:
+            raise ValidationError({
+                'planned_end_date': "Planned end date must be after start date."
+            })
+
     def save(self, *args, **kwargs):
         """Auto-set fields on save"""
         is_new = self.pk is None
@@ -733,147 +780,151 @@ class ProductionRun(CompanyModel):
 
     def complete(self, actual_qty=None, waste_qty=0):
         """
-        Complete the run: deduct components, add finished goods, log movements
-        With proper stock checking and preventing double completion
+        Complete the run: deduct components, add finished goods, log movements.
+        This method is optimized for performance and data integrity by using
+        atomic transactions, row-level locking, and bulk database operations.
         """
-        # Prevent double completion
-        if self.status == 'completed':
-            raise ValidationError(f"Run #{self.id} is already completed")
-    
-        if not self.can_complete():
-            raise ValidationError("Only 'in progress' runs can be completed")
-
-        actual_qty = actual_qty or self.planned_quantity
-
-        if actual_qty <= 0:
-            raise ValidationError("Actual quantity must be positive")
-
-        # Refresh from database to get latest stock values
-        self.refresh_from_db()
-    
-        # Check if there are any existing consumption movements for this run
-        existing_consumption = self.movements.filter(movement_type='out_production').exists()
-        if existing_consumption:
-            raise ValidationError(
-                f"Run #{self.id} already has consumption movements recorded. "
-                "Cannot complete again."
-            )
-
-        # Check stock availability with current database values
-        insufficient = []
-        for line in self.bom.lines.all().select_related('component'):
-            # Refresh component stock from database
-            component = line.component
-            component.refresh_from_db()
-        
-            required = line.quantity_per_kg * actual_qty
-            required_with_wastage = required * (1 + line.wastage_percentage / 100)
-
-            current_stock = component.current_stock or Decimal('0.00')
-        
-            if current_stock < required_with_wastage:
-                insufficient.append({
-                    'code': component.code,
-                    'name': component.name,
-                    'required': required_with_wastage,
-                    'available': current_stock,
-                    'unit': line.unit.abbreviation
-                })
-
-        if insufficient:
-            error_msg = "Insufficient stock for the following components:\n"
-            for item in insufficient:
-                error_msg += f"  • {item['code']}: need {item['required']:.2f} {item['unit']}, "
-                error_msg += f"have {item['available']:.2f} {item['unit']}\n"
-            raise ValidationError(error_msg)
-
         # Use a transaction to ensure data consistency
         from django.db import transaction
-    
+        from apps.core.models import Item
+
+        # Ensure waste_qty is a Decimal
+        waste_qty = waste_qty or Decimal('0')
+
         with transaction.atomic():
-            # Calculate standard costs
-            self.standard_material_cost = self.bom.total_material_cost_per_base * actual_qty
-            standard_total_cost = self.standard_material_cost + (self.labor_cost or 0) + (self.overhead_cost or 0)
+            # 1. Lock the run and reload it to prevent concurrent completions.
+            # Using select_for_update() ensures we have the latest, locked data.
+            run = ProductionRun.objects.select_for_update().get(pk=self.pk)
 
-            # Calculate actual material cost from real consumption
-            actual_material = Decimal('0.00')
+            # 2. Perform status checks on the locked instance.
+            if run.status == 'completed':
+                raise ValidationError(f"Run #{run.id} is already completed.")
+            if not run.can_complete():
+                raise ValidationError("Only 'in progress' runs can be completed.")
 
-            # ── Deduct components & log movements ──
-            for line in self.bom.lines.all().select_related('component', 'unit'):
-                component = line.component
-                component.refresh_from_db()  # Get latest stock
+            # Prevent double-booking of consumption
+            if run.movements.filter(movement_type='out_production').exists():
+                raise ValidationError(
+                    f"Run #{run.id} already has consumption movements recorded. "
+                    "Cannot complete again."
+                )
+
+            actual_qty = actual_qty or run.planned_quantity
+            if actual_qty <= 0:
+                raise ValidationError("Actual quantity must be positive.")
+
+            # 3. Gather all items (components + product) and lock them for update.
+            bom_lines = list(run.bom.lines.select_related('component', 'unit').all())
+            item_ids_to_lock = {line.component_id for line in bom_lines}
+            if run.product_id:
+                item_ids_to_lock.add(run.product_id)
+
+            # Lock all relevant Item rows to prevent stock changes during this transaction.
+            items_map = {
+                item.id: item
+                for item in Item.objects.filter(id__in=item_ids_to_lock).select_for_update()
+            }
+
+            # 4. Check stock availability on locked items and prepare updates.
+            # Material consumption is based on total output (good quantity + waste).
+            total_output_for_consumption = actual_qty + waste_qty
             
-                required = line.quantity_per_kg * actual_qty
-                required_with_wastage = required * (1 + line.wastage_percentage / 100)
+            insufficient = []
+            items_to_update = []
+            movements_to_create = []
+            actual_material_cost = Decimal('0.00')
 
-                # Calculate cost
-                line_cost = required_with_wastage * (component.unit_cost or Decimal('0.00'))
-                actual_material += line_cost
+            for line in bom_lines:
+                component = items_map.get(line.component_id)
+                if not component:
+                    raise ValidationError(f"Component item with ID {line.component_id} not found.")
 
-                # Update stock
+                required_with_wastage = line.quantity_per_kg * total_output_for_consumption * (1 + line.wastage_percentage / 100)
+
+                if component.current_stock < required_with_wastage:
+                    insufficient.append({
+                        'code': component.code,
+                        'name': component.name,
+                        'required': required_with_wastage,
+                        'available': component.current_stock,
+                        'unit': line.unit.abbreviation
+                    })
+                
+                # Prepare component for stock update
                 component.current_stock -= required_with_wastage
-                component.save(update_fields=['current_stock', 'updated_at'])
+                items_to_update.append(component)
 
-                # Log consumption
-                InventoryMovement.objects.create(
+                # Prepare movement for bulk creation
+                movements_to_create.append(InventoryMovement(
                     item=component,
                     quantity=-required_with_wastage,
                     movement_type='out_production',
-                    reference=f"Run #{self.id}",
-                    notes=f"Consumed for {actual_qty} kg of {self.product_name}",
-                    production_run=self,
-                    created_by=self.created_by
-                )
+                    reference=f"Run #{run.id}",
+                    notes=f"Consumed for {actual_qty} kg of {run.product_name}",
+                    production_run=run,
+                    created_by=run.created_by
+                ))
 
-            # ── Add finished product & log movement ──
-            product = self.get_product
+                # Calculate actual material cost
+                line_cost = required_with_wastage * (component.unit_cost or Decimal('0.00'))
+                actual_material_cost += line_cost
+
+            if insufficient:
+                error_msg = "Insufficient stock for the following components:\n"
+                for item in insufficient:
+                    error_msg += f"  • {item['code']}: need {item['required']:.2f} {item['unit']}, have {item['available']:.2f} {item['unit']}\n"
+                raise ValidationError(error_msg)
+
+            # 5. Prepare finished product stock update.
+            product = items_map.get(run.product_id)
             if not product:
-                raise ValidationError("Cannot complete run: No product associated")
+                raise ValidationError("Cannot complete run: No product associated with this run.")
             
-            product.refresh_from_db()
-            produced = actual_qty * self.bom.base_quantity
-            product.current_stock += produced
-            product.save(update_fields=['current_stock', 'updated_at'])
+            product.current_stock += actual_qty
+            if product not in items_to_update:
+                items_to_update.append(product)
 
-            InventoryMovement.objects.create(
+            movements_to_create.append(InventoryMovement(
                 item=product,
-                quantity=produced,
+                quantity=actual_qty,
                 movement_type='in_production',
-                reference=f"Run #{self.id}",
-                notes=f"Produced {produced} {product.unit} from run",
-                production_run=self,
-                created_by=self.created_by
-            )
+                reference=f"Run #{run.id}",
+                notes=f"Produced {actual_qty} {product.unit.abbreviation} from run",
+                production_run=run,
+                created_by=run.created_by
+            ))
 
-            # Update costs
-            self.actual_material_cost = actual_material
-            actual_total_cost = actual_material + (self.labor_cost or 0) + (self.overhead_cost or 0)
-
-            # Calculate variances
-            self.material_variance = self.actual_material_cost - self.standard_material_cost
-            self.total_variance = actual_total_cost - standard_total_cost
-
-            # Record waste if any
-            if waste_qty > 0:
-                self.waste_quantity = waste_qty
-                InventoryMovement.objects.create(
-                    item=product,
-                    quantity=-waste_qty,
-                    movement_type='scrap',
-                    reference=f"Run #{self.id}",
-                    notes=f"Waste/Scrap from production run",
-                    production_run=self,
-                    created_by=self.created_by
-                )
+            # 6. Perform bulk database operations for efficiency.
+            Item.objects.bulk_update(items_to_update, ['current_stock'])
+            InventoryMovement.objects.bulk_create(movements_to_create)
 
             # Finalize run
-            self.actual_quantity = actual_qty
-            self.status = 'completed'
-            self.end_date = timezone.now()
-            self.save()
+            run.actual_quantity = actual_qty
+            run.waste_quantity = waste_qty
+            run.status = 'completed'
+            run.end_date = timezone.now()
+            
+            if not run.batch_number:
+                run.batch_number = f"LOT-{run.id:06d}"
+            
+            # Update costs (Fixing bug in standard cost calculation)
+            run.actual_material_cost = actual_material_cost
+            run.standard_material_cost = run.bom.total_material_cost_per_kg * actual_qty
+            
+            run.material_variance = run.actual_material_cost - run.standard_material_cost
+            
+            # Calculate total variance
+            standard_total_cost = run.standard_material_cost + (run.labor_cost or 0) + (run.overhead_cost or 0)
+            actual_total_cost = run.actual_material_cost + (run.labor_cost or 0) + (run.overhead_cost or 0)
+            run.total_variance = actual_total_cost - standard_total_cost
+
+            run.save()
 
             # Create cost variance record
-            ProductionCostVariance.create_from_run(self)
+            ProductionCostVariance.create_from_run(run)
+
+            # Update the in-memory instance to reflect changes.
+            self.refresh_from_db()
 
         return True
 
@@ -895,8 +946,12 @@ class ProductionRun(CompanyModel):
         return [
             {
                 'component': line.component,
-                'required_qty': line.quantity_per_kg * self.planned_quantity,
-                'required_with_wastage': line.quantity_with_wastage * self.planned_quantity,
+                'required': line.quantity_per_kg * self.planned_quantity,
+                'required_with_wastage': (
+                    line.quantity_per_kg
+                    * self.planned_quantity
+                    * (Decimal("1") + (line.wastage_percentage / Decimal("100")))
+                ),
                 'unit': line.unit,
                 'available': line.component.current_stock,
                 'cost': line.cost_per_kg * self.planned_quantity,
@@ -1057,59 +1112,80 @@ class ProductionCostVariance(CompanyModel):
 
     @classmethod
     def create_from_run(cls, production_run):
-        """Create a cost variance record from a completed production run"""
+        """
+        Create or update a cost variance record from a completed production run.
+        Optimized to reduce database queries and preserve decimal precision.
+        """
         from django.db.models import Sum
         
         run = production_run
+        if not run.status == 'completed' or not run.actual_quantity or run.actual_quantity <= 0:
+            return None
+
         bom = run.bom
         
-        std_total = Decimal('0')
-        act_total = Decimal('0')
+        # 1. Fetch all actual consumption movements for this run in one query
+        actual_usages = {
+            m['item_id']: abs(m['total_quantity']) for m in
+            run.movements.filter(movement_type='out_production')
+                         .values('item_id')
+                         .annotate(total_quantity=Sum('quantity'))
+        }
+
+        std_material_total = Decimal('0')
+        act_material_total = Decimal('0')
         breakdown = {}
 
+        # 2. Loop through BOM lines to calculate standard vs actual for each component
         for bom_line in bom.lines.all().select_related('component'):
             item = bom_line.component
 
-            # Standard cost
+            # --- Standard Cost Calculation ---
             std_qty_per_kg = bom_line.quantity_per_kg * (1 + bom_line.wastage_percentage / 100)
-            std_cost = std_qty_per_kg * run.actual_quantity * (item.std_unit_price or item.unit_cost or 0)
-            std_total += std_cost
+            std_qty_needed = std_qty_per_kg * run.actual_quantity
+            std_price = getattr(item, 'std_unit_price', item.unit_cost) or Decimal('0')
+            std_cost = std_qty_needed * std_price
+            std_material_total += std_cost
 
-            # Actual cost (from stock transactions)
-            actual_usage = run.movements.filter(
-                item=item,
-                movement_type='out_production'
-            ).aggregate(total=Sum('quantity'))['total'] or 0
-            
-            act_cost = abs(actual_usage) * (item.current_avg_cost or item.unit_cost or 0)
-            act_total += act_cost
+            # --- Actual Cost Calculation ---
+            act_qty_consumed = actual_usages.get(item.id, Decimal('0'))
+            act_price = getattr(item, 'current_avg_cost', item.unit_cost) or Decimal('0')
+            act_cost = act_qty_consumed * act_price
+            act_material_total += act_cost
 
             variance = act_cost - std_cost
-            variance_pct = (variance / std_cost * 100) if std_cost else 0
+            variance_pct = (variance / std_cost * 100) if std_cost > 0 else Decimal('0')
 
+            # Use str() for Decimals to avoid float precision issues in JSON
             breakdown[item.code] = {
                 'name': item.name,
-                'std_qty': float(std_qty_per_kg * run.actual_quantity),
-                'std_price': float(item.std_unit_price or item.unit_cost or 0),
-                'std_cost': float(std_cost),
-                'act_qty': float(abs(actual_usage)),
-                'act_price': float(item.current_avg_cost or item.unit_cost or 0),
-                'act_cost': float(act_cost),
-                'variance': float(variance),
-                'variance_pct': float(variance_pct),
+                'std_qty': str(std_qty_needed.quantize(Decimal("0.0001"))),
+                'std_price': str(std_price.quantize(Decimal("0.01"))),
+                'std_cost': str(std_cost.quantize(Decimal("0.01"))),
+                'act_qty': str(act_qty_consumed.quantize(Decimal("0.0001"))),
+                'act_price': str(act_price.quantize(Decimal("0.01"))),
+                'act_cost': str(act_cost.quantize(Decimal("0.01"))),
+                'variance': str(variance.quantize(Decimal("0.01"))),
+                'variance_pct': str(variance_pct.quantize(Decimal("0.01"))),
             }
 
-        # Create or update variance record
+        # 3. Calculate total costs and variances
+        std_total = std_material_total + (run.labor_cost or 0) + (run.overhead_cost or 0)
+        act_total = act_material_total + (run.labor_cost or 0) + (run.overhead_cost or 0)
+        total_variance = act_total - std_total
+        total_variance_pct = (total_variance / std_total * 100) if std_total > 0 else Decimal('0')
+
+        # 4. Create or update the single variance record for the run
         variance, created = cls.objects.update_or_create(
             production_run=run,
             defaults={
-                'standard_material_cost': std_total,
-                'actual_material_cost': act_total,
-                'material_variance': act_total - std_total,
-                'standard_total_cost': std_total + (run.labor_cost or 0) + (run.overhead_cost or 0),
-                'actual_total_cost': act_total + (run.labor_cost or 0) + (run.overhead_cost or 0),
-                'total_variance': (act_total - std_total),
-                'variance_percentage': ((act_total - std_total) / std_total * 100) if std_total else 0,
+                'standard_material_cost': std_material_total,
+                'actual_material_cost': act_material_total,
+                'material_variance': act_material_total - std_material_total,
+                'standard_total_cost': std_total,
+                'actual_total_cost': act_total,
+                'total_variance': total_variance,
+                'variance_percentage': total_variance_pct,
                 'item_breakdown': breakdown,
             }
         )

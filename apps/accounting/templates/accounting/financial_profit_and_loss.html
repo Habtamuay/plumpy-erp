@@ -1,23 +1,178 @@
-{% extends 'base.html' %}
-{% block title %}Profit and Loss{% endblock %}
+{% extends "core/base.html" %}
+{% load humanize %}
+
+{% block title %}Profit & Loss | {{ company.name }}{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-  <h3>Profit and Loss</h3>
-  <p class="text-muted">Company: {{ company.name }}</p>
-  <table class="table table-bordered w-auto">
-    <tr>
-      <th>Income</th>
-      <td class="text-end">{{ report.income|floatformat:2 }}</td>
-    </tr>
-    <tr>
-      <th>Expenses</th>
-      <td class="text-end">{{ report.expenses|floatformat:2 }}</td>
-    </tr>
-    <tr class="fw-bold">
-      <th>Profit</th>
-      <td class="text-end">{{ report.profit|floatformat:2 }}</td>
-    </tr>
-  </table>
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Profit and Loss</h1>
+        <div class="d-flex gap-2">
+            <a href="?{{ request.GET.urlencode }}&export=excel" class="btn btn-success">
+                <i class="fas fa-file-excel"></i> Export Excel
+            </a>
+            <button onclick="window.print()" class="btn btn-outline-secondary">
+                <i class="fas fa-print"></i> Print
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Report Settings</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="period" class="form-label">Fiscal Period</label>
+                    <select class="form-select" id="period" name="period" onchange="this.form.submit()">
+                        <option value="">Custom Date Range</option>
+                        {% for p in fiscal_periods %}
+                        <option value="{{ p.id }}" {% if selected_period == p.id %}selected{% endif %}>
+                            {{ p.name }} ({{ p.start_date }} - {{ p.end_date }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="start_date" class="form-label">Start Date</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" 
+                           value="{{ start_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="end_date" class="form-label">End Date</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" 
+                           value="{{ end_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Run Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Report Content -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="text-center mb-4">
+                <h4 class="font-weight-bold">{{ company.name }}</h4>
+                <h5>Profit and Loss Statement</h5>
+                <p class="text-muted">
+                    {{ start_date }} to {{ end_date }}
+                    {% if compare_start_date %}
+                    <br><small>Compared to: {{ compare_start_date }} to {{ compare_end_date }}</small>
+                    {% endif %}
+                </p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Account</th>
+                            <th class="text-end">Current Period</th>
+                            <th class="text-end">Budget</th>
+                            <th class="text-end">Variance</th>
+                            {% if compare_start_date %}
+                            <th class="text-end">Previous Year</th>
+                            <th class="text-end">Change</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- REVENUES -->
+                        <tr class="table-group-header"><td colspan="{% if compare_start_date %}6{% else %}4{% endif %}"><h5 class="mb-0 mt-2">REVENUES</h5></td></tr>
+                        {% for group in report.revenues %}
+                            <tr class="fw-bold bg-light"><td colspan="{% if compare_start_date %}6{% else %}4{% endif %}" class="ps-4">{{ group.name }}</td></tr>
+                            {% for acc in group.accounts %}
+                            <tr>
+                                <td class="ps-5">{{ acc.name }}</td>
+                                <td class="text-end">{{ acc.balance|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-muted">{{ acc.budget|floatformat:2|intcomma }}</td>
+                                <td class="text-end {% if acc.variance < 0 %}text-danger{% else %}text-success{% endif %}">{{ acc.variance|floatformat:2|intcomma }}</td>
+                                {% if compare_start_date %}
+                                <td class="text-end text-muted">{{ acc.previous_balance|floatformat:2|intcomma }}</td>
+                                <td class="text-end">
+                                    {% with change=acc.balance|add:acc.previous_balance|stringformat:"f" %} 
+                                    <!-- Note: previous_balance is already signed correctly for calculation if needed, 
+                                         but usually simple subtraction in view is safer. 
+                                         Here we rely on view data passing implicitly or simple calc. 
+                                         Let's assume we want (Current - Prev) visually. 
+                                    -->
+                                    {{ acc.balance|sub:acc.previous_balance|floatformat:2|intcomma }}
+                                    {% endwith %}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                            <tr class="fw-bold">
+                                <td class="ps-4">Total {{ group.name }}</td>
+                                <td class="text-end">{{ group.total|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-muted">{{ group.budget_total|floatformat:2|intcomma }}</td>
+                                <td class="text-end">{{ group.variance_total|floatformat:2|intcomma }}</td>
+                                {% if compare_start_date %}
+                                <td class="text-end text-muted">{{ group.previous_total|floatformat:2|intcomma }}</td>
+                                <td class="text-end">{{ group.total|sub:group.previous_total|floatformat:2|intcomma }}</td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                        <tr class="table-dark">
+                            <td>TOTAL REVENUE</td>
+                            <td class="text-end">{{ report.total_revenue|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_budget_revenue|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_revenue_variance|floatformat:2|intcomma }}</td>
+                            {% if compare_start_date %}
+                            <td class="text-end">{{ report.total_prev_revenue|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_revenue|sub:report.total_prev_revenue|floatformat:2|intcomma }}</td>
+                            {% endif %}
+                        </tr>
+
+                        <!-- EXPENSES -->
+                        <tr class="table-group-header"><td colspan="{% if compare_start_date %}6{% else %}4{% endif %}"><h5 class="mb-0 mt-4">EXPENSES</h5></td></tr>
+                        {% for group in report.expenses %}
+                            <tr class="fw-bold bg-light"><td colspan="{% if compare_start_date %}6{% else %}4{% endif %}" class="ps-4">{{ group.name }}</td></tr>
+                            {% for acc in group.accounts %}
+                            <tr>
+                                <td class="ps-5">{{ acc.name }}</td>
+                                <td class="text-end">{{ acc.balance|floatformat:2|intcomma }}</td>
+                                <td class="text-end text-muted">{{ acc.budget|floatformat:2|intcomma }}</td>
+                                <td class="text-end {% if acc.variance > 0 %}text-danger{% else %}text-success{% endif %}">{{ acc.variance|floatformat:2|intcomma }}</td>
+                                {% if compare_start_date %}
+                                <td class="text-end text-muted">{{ acc.previous_balance|floatformat:2|intcomma }}</td>
+                                <td class="text-end">{{ acc.balance|sub:acc.previous_balance|floatformat:2|intcomma }}</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        {% endfor %}
+                        <tr class="table-dark">
+                            <td>TOTAL EXPENSES</td>
+                            <td class="text-end">{{ report.total_expenses|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_budget_expenses|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_expenses_variance|floatformat:2|intcomma }}</td>
+                            {% if compare_start_date %}
+                            <td class="text-end">{{ report.total_prev_expenses|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.total_expenses|sub:report.total_prev_expenses|floatformat:2|intcomma }}</td>
+                            {% endif %}
+                        </tr>
+
+                        <!-- NET INCOME -->
+                        <tr class="table-success fw-bold" style="font-size: 1.1em;">
+                            <td>NET INCOME</td>
+                            <td class="text-end">{{ report.net_income|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.budget_net_income|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.net_income_variance|floatformat:2|intcomma }}</td>
+                            {% if compare_start_date %}
+                            <td class="text-end">{{ report.prev_net_income|floatformat:2|intcomma }}</td>
+                            <td class="text-end">{{ report.net_income|sub:report.prev_net_income|floatformat:2|intcomma }}</td>
+                            {% endif %}
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
-

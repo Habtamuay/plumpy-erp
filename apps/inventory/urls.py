@@ -22,6 +22,7 @@ urlpatterns = [
     
     # Current Stock URLs
     path('current-stock/', views.current_stock, name='current_stock'),
+    path('stock-ledger/', views.stock_ledger, name='stock_ledger'),
     
     # Report URLs
     path('stock-summary/', views.stock_summary, name='stock_summary'),
@@ -30,6 +31,7 @@ urlpatterns = [
     path('low-stock-widget/', views.low_stock_widget, name='low_stock_widget'),
     path('analytics/', views.inventory_analytics, name='inventory_analytics'),
     path('trends/', views.inventory_trends, name='inventory_trends'),
+    
     
     # Export URLs
     path('export/transactions/', views.export_transactions, name='export_transactions'),

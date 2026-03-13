@@ -4,11 +4,14 @@ from django.urls import reverse
 from django.contrib import messages
 from django.shortcuts import redirect
 from django.utils import timezone
+from decimal import Decimal
+
 from .models import (
     Supplier, PurchaseRequisition, PurchaseRequisitionLine,
     PurchaseOrder, PurchaseOrderLine, PurchaseOrderApproval,
     GoodsReceipt, GoodsReceiptLine, VendorPerformance
 )
+from apps.core.models import Item, Unit
 
 
 class PurchaseRequisitionLineInline(admin.TabularInline):
@@ -17,7 +20,7 @@ class PurchaseRequisitionLineInline(admin.TabularInline):
     extra = 1
     fields = ('item', 'quantity', 'unit', 'unit_price_estimate', 'total_estimate', 'notes')
     readonly_fields = ('total_estimate',)
-    # Remove autocomplete_fields temporarily
+    autocomplete_fields = ['item', 'unit']
     
     def total_estimate(self, obj):
         if obj.quantity and obj.unit_price_estimate:
@@ -31,9 +34,27 @@ class PurchaseOrderLineInline(admin.TabularInline):
     """Inline for purchase order lines"""
     model = PurchaseOrderLine
     extra = 1
-    fields = ('item', 'quantity_ordered', 'unit', 'unit_price', 'tax_rate', 'total_price', 'quantity_received', 'remaining', 'notes')
-    readonly_fields = ('total_price', 'remaining')
-    # Remove autocomplete_fields temporarily
+    fields = ('item_display', 'quantity_ordered', 'unit_display', 'unit_price', 'tax_rate', 'total_price', 'quantity_received', 'remaining', 'notes')
+    readonly_fields = ('total_price', 'remaining', 'item_display', 'unit_display')
+    
+    def item_display(self, obj):
+        """Display item with link to edit"""
+        if obj.item_id:
+            url = reverse('admin:core_item_change', args=[obj.item_id])
+            return format_html('<a href="{}">{}</a>', url, obj.item or f"Item #{obj.item_id}")
+        return obj.item or '-'
+    item_display.short_description = 'Item'
+    
+    def unit_display(self, obj):
+        """Display unit - just show the value since it's a CharField"""
+        if obj.unit_id:
+            try:
+                unit = Unit.objects.get(id=obj.unit_id)
+                return unit.abbreviation
+            except Unit.DoesNotExist:
+                pass
+        return obj.unit or '-'
+    unit_display.short_description = 'Unit'
     
     def remaining(self, obj):
         remaining = obj.remaining
@@ -48,8 +69,7 @@ class GoodsReceiptLineInline(admin.TabularInline):
     model = GoodsReceiptLine
     extra = 1
     fields = ('po_line', 'quantity_received', 'lot', 'notes')
-    # Remove autocomplete_fields to fix the error
-    # autocomplete_fields = ['po_line']
+    autocomplete_fields = ['po_line']
 
 
 @admin.register(Supplier)
@@ -242,8 +262,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     )
     
     def save_model(self, request, obj, form, change):
-        if not change:  # If creating new object
-            # Auto-generate PO number if not provided
+        if not change:
             if not obj.po_number:
                 last_po = PurchaseOrder.objects.order_by('-id').first()
                 if last_po and last_po.po_number and last_po.po_number.startswith('PO-'):
@@ -258,7 +277,6 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
                 today = timezone.now().strftime('%Y%m%d')
                 obj.po_number = f"PO-{today}-{new_num:03d}"
             
-            # Set created_by to current user
             if not obj.created_by:
                 obj.created_by = request.user
         
@@ -268,11 +286,13 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         url = reverse('admin:purchasing_supplier_change', args=[obj.supplier.id])
         return format_html('<a href="{}">{}</a>', url, obj.supplier.name)
     supplier_link.short_description = 'Supplier'
-    supplier_link.admin_order_field = 'supplier__name'
     
     def total_amount_display(self, obj):
-        return f"{float(obj.total_amount or 0):.2f}"
+        # CRITICAL FIX: Return a plain string, NOT format_html
+        amount = float(obj.total_amount or 0)
+        return f"{amount:.2f}"
     total_amount_display.short_description = 'Total Amount'
+    total_amount_display.admin_order_field = 'total_amount'
     
     def receipt_status(self, obj):
         lines = obj.lines.all()
@@ -290,6 +310,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         if percentage >= 100:
             return format_html('<span style="color: green;">✓ Fully Received</span>')
         elif percentage > 0:
+            # This is safe - using a simple number format
             return format_html('<span style="color: orange;">⬇ {:.0f}% Received</span>', percentage)
         return format_html('<span style="color: #6c757d;">⏳ Pending</span>')
     receipt_status.short_description = 'Receipt Status'
@@ -366,13 +387,13 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     cancel_orders.short_description = "Cancel orders"
 
 
-# Register PurchaseOrderLineAdmin to fix the autocomplete error
 @admin.register(PurchaseOrderLine)
 class PurchaseOrderLineAdmin(admin.ModelAdmin):
-    list_display = ('po_link', 'item', 'quantity_ordered', 'unit_price', 'total_price', 'quantity_received', 'remaining', 'status_indicator')
+    list_display = ('po_link', 'item_display', 'quantity_ordered', 'unit_price', 'total_price', 'quantity_received', 'remaining', 'status_indicator')
     list_filter = ('po__supplier', 'po__status')
     search_fields = ('item', 'po__po_number')
-    readonly_fields = ('total_price', 'remaining')
+    raw_id_fields = ['po']
+    readonly_fields = ('total_price', 'remaining', 'item_display')
     list_per_page = 25
     
     def po_link(self, obj):
@@ -380,13 +401,20 @@ class PurchaseOrderLineAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">{}</a>', url, obj.po.po_number)
     po_link.short_description = 'PO'
     
-    def total_price(self, obj):
-        return f"{float(obj.total_price or 0):.2f}"
-    total_price.short_description = 'Total Price'
+    def item_display(self, obj):
+        if obj.item_id:
+            url = reverse('admin:core_item_change', args=[obj.item_id])
+            return format_html('<a href="{}">{}</a>', url, obj.item or f"Item #{obj.item_id}")
+        return obj.item or '-'
+    item_display.short_description = 'Item'
     
     def remaining(self, obj):
         return f"{float(obj.remaining or 0):.2f}"
     remaining.short_description = 'Remaining'
+    
+    def total_price(self, obj):
+        return f"{float(obj.total_price or 0):.2f}"
+    total_price.short_description = 'Total Price'
     
     def status_indicator(self, obj):
         if obj.remaining <= 0:
@@ -472,20 +500,29 @@ class GoodsReceiptAdmin(admin.ModelAdmin):
         total = sum(float(line.quantity_received or 0) * float(line.po_line.unit_price or 0) for line in obj.lines.all())
         return f"{total:.2f}"
     total_value.short_description = 'Total Value'
+    
+    def save_model(self, request, obj, form, change):
+        """Set received_by to current user if not set"""
+        if not obj.received_by:
+            obj.received_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(GoodsReceiptLine)
 class GoodsReceiptLineAdmin(admin.ModelAdmin):
-    list_display = ('receipt', 'po_line', 'item_info', 'quantity_received', 'unit_price', 'line_total', 'lot_link')
+    list_display = ('receipt', 'po_line_link', 'quantity_received', 'unit_price', 'line_total', 'lot_link')
     list_filter = ('receipt__receipt_date',)
     search_fields = ('receipt__receipt_number', 'po_line__po__po_number', 'lot')
     raw_id_fields = ['receipt', 'po_line']
     readonly_fields = ('line_total',)
     list_per_page = 25
     
-    def item_info(self, obj):
-        return obj.po_line.item
-    item_info.short_description = 'Item'
+    def po_line_link(self, obj):
+        if obj.po_line and obj.po_line.item_id:
+            url = reverse('admin:core_item_change', args=[obj.po_line.item_id])
+            return format_html('<a href="{}">{}</a>', url, obj.po_line.item or f"Item #{obj.po_line.item_id}")
+        return obj.po_line.item if obj.po_line else '-'
+    po_line_link.short_description = 'Item'
     
     def unit_price(self, obj):
         return f"{float(obj.po_line.unit_price or 0):.2f}"
@@ -500,6 +537,7 @@ class GoodsReceiptLineAdmin(admin.ModelAdmin):
         if obj.lot:
             return obj.lot
         return '-'
+    lot_link.short_description = 'Lot/Batch'
 
 
 @admin.register(VendorPerformance)

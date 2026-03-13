@@ -1,604 +1,233 @@
-{% extends 'base.html' %}
-{% load static %}
+{% extends "base.html" %}
+{% load humanize %}
 
-{% block title %}Purchase Orders{% endblock %}
-
-{% block extra_css %}
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
-<!-- Date Range Picker CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
-<!-- Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
-{% endblock %}
+{% block title %}Purchase Orders{% endblock title %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <!-- Page Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <h2 class="mb-1"><i class="fas fa-shopping-cart me-2"></i>Purchase Orders</h2>
-                        <p class="text-muted mb-0">
-                            <i class="fas fa-list me-2"></i>Manage and track all purchase orders
-                            {% if request.session.current_company_name %}
-                                <span class="ms-2">| Company: <strong>{{ request.session.current_company_name }}</strong></span>
-                            {% endif %}
-                        </p>
+<div class="container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Purchase Orders</h1>
+        <a href="{% url 'purchasing:po_create' %}" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm">
+            <i class="fas fa-plus fa-sm text-white-50"></i> Create New PO
+        </a>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total POs</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_po_count }}</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-file-invoice fa-2x text-gray-300"></i></div>
                     </div>
-                    <div>
-                        <a href="{% url 'purchasing:po_create' %}" class="btn btn-primary">
-                            <i class="fas fa-plus-circle me-2"></i>New Purchase Order
-                        </a>
-                        <a href="{% url 'purchasing:dashboard' %}" class="btn btn-outline-secondary ms-2">
-                            <i class="fas fa-chart-pie me-2"></i>Dashboard
-                        </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total PO Value</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_po_value }}</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-dollar-sign fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Pending POs</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ pending_count }}</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-hourglass-half fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">This Month</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ this_month_count }}</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-calendar-alt fa-2x text-gray-300"></i></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card bg-primary text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-white-50 mb-1">Total POs</h6>
-                            <h3 class="text-white mb-0">{{ total_po_count|default:"156" }}</h3>
-                        </div>
-                        <i class="fas fa-file-invoice fa-3x opacity-50"></i>
-                    </div>
-                </div>
-            </div>
+    <!-- PO List Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Purchase Order List</h6>
         </div>
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card bg-success text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-white-50 mb-1">Total Value</h6>
-                            <h3 class="text-white mb-0">${{ total_po_value|default:"1,234,567" }}</h3>
-                        </div>
-                        <i class="fas fa-dollar-sign fa-3x opacity-50"></i>
+        <div class="card-body">
+            <!-- Filter Form -->
+            <form method="get" class="mb-4">
+                <div class="row">
+                    <div class="col-md-3">
+                        <input type="text" name="search" class="form-control" placeholder="Search PO# or Supplier..." value="{{ request.GET.search }}">
+                    </div>
+                    <div class="col-md-3">
+                        <select name="supplier" class="form-control">
+                            <option value="">All Suppliers</option>
+                            {% for s in suppliers %}
+                            <option value="{{ s.id }}" {% if request.GET.supplier == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="status" class="form-control">
+                            <option value="">All Statuses</option>
+                            {% for val, display in status_choices %}
+                            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="{% url 'purchasing:po_list' %}" class="btn btn-secondary">Reset</a>
                     </div>
                 </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>PO Number</th>
+                            <th>Supplier</th>
+                            <th>Order Date</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for po in purchase_orders %}
+                        <tr>
+                            <td><a href="{% url 'purchasing:po_detail' po.id %}">{{ po.po_number }}</a></td>
+                            <td>{{ po.supplier.name }}</td>
+                            <td>{{ po.order_date|date:"Y-m-d" }}</td>
+                            <td>{{ po.total_amount|floatformat:2|intcomma }} {{ po.currency }}</td>
+                            <td>
+                                <span class="badge badge-pill badge-{{ po.status|lower }}">{{ po.get_status_display }}</span>
+                            </td>
+                            <td class="text-center">
+                                <a href="{% url 'purchasing:po_detail' po.id %}" class="btn btn-sm btn-info" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if po.can_edit %}
+                                <a href="{% url 'purchasing:po_edit' po.id %}" class="btn btn-sm btn-primary" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% endif %}
+                                {% if po.can_cancel %}
+                                <button type="button" class="btn btn-sm btn-danger" title="Cancel" data-toggle="modal" data-target="#cancelPOModal-{{ po.id }}">
+                                    <i class="fas fa-times-circle"></i>
+                                </button>
+                                {% endif %}
+                                <a href="{% url 'purchasing:po_print' po.id %}" target="_blank" class="btn btn-sm btn-secondary" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No purchase orders found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card bg-warning text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-white-50 mb-1">Pending</h6>
-                            <h3 class="text-white mb-0">{{ pending_count|default:"23" }}</h3>
-                        </div>
-                        <i class="fas fa-clock fa-3x opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card bg-info text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-white-50 mb-1">This Month</h6>
-                            <h3 class="text-white mb-0">{{ this_month_count|default:"18" }}</h3>
-                        </div>
-                        <i class="fas fa-calendar-alt fa-3x opacity-50"></i>
-                    </div>
-                </div>
-            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+            <nav>
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page=1&{{ request.GET.urlencode }}">&laquo; First</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a></li>
+                    {% endif %}
+
+                    <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.</span></li>
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}">Last &raquo;</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Filters Card -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-light">
-                    <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h5>
-                </div>
-                <div class="card-body">
-                    <form method="get" id="filterForm" class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label">Date Range</label>
-                            <input type="text" class="form-control" id="dateRange" name="date_range" 
-                                   value="{{ request.GET.date_range }}">
+    <!-- Modals -->
+    {% for po in purchase_orders %}
+        {% if po.can_cancel %}
+        <!-- Cancel PO Modal for {{ po.po_number }} -->
+        <div class="modal fade" id="cancelPOModal-{{ po.id }}" tabindex="-1" role="dialog" aria-labelledby="cancelPOModalLabel-{{ po.id }}" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cancelPOModalLabel-{{ po.id }}">Cancel Purchase Order: {{ po.po_number }}</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <form action="{% url 'purchasing:po_cancel' po.id %}" method="post">
+                        {% csrf_token %}
+                        <div class="modal-body">
+                            <p>Are you sure you want to cancel this purchase order? This action cannot be undone.</p>
+                            <div class="form-group">
+                                <label for="cancel-reason-{{ po.id }}">Reason for Cancellation</label>
+                                <input type="text" name="reason" class="form-control" id="cancel-reason-{{ po.id }}" placeholder="e.g., Duplicate order" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cancel-notes-{{ po.id }}">Additional Notes (Optional)</label>
+                                <textarea name="notes" class="form-control" id="cancel-notes-{{ po.id }}" rows="3"></textarea>
+                            </div>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Status</label>
-                            <select class="form-select" id="status" name="status">
-                                <option value="">All Status</option>
-                                <option value="draft" {% if request.GET.status == 'draft' %}selected{% endif %}>Draft</option>
-                                <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Pending</option>
-                                <option value="approved" {% if request.GET.status == 'approved' %}selected{% endif %}>Approved</option>
-                                <option value="sent" {% if request.GET.status == 'sent' %}selected{% endif %}>Sent to Supplier</option>
-                                <option value="received" {% if request.GET.status == 'received' %}selected{% endif %}>Received</option>
-                                <option value="cancelled" {% if request.GET.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Supplier</label>
-                            <select class="form-select" id="supplier" name="supplier">
-                                <option value="">All Suppliers</option>
-                                {% for supplier in suppliers %}
-                                <option value="{{ supplier.id }}" {% if request.GET.supplier == supplier.id|stringformat:"s" %}selected{% endif %}>
-                                    {{ supplier.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Search</label>
-                            <input type="text" class="form-control" id="search" name="search" 
-                                   placeholder="PO #, Reference..." value="{{ request.GET.search }}">
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary w-100 me-2">
-                                <i class="fas fa-search me-2"></i>Apply
-                            </button>
-                            <a href="{% url 'purchasing:po_list' %}" class="btn btn-outline-secondary w-100">
-                                <i class="fas fa-redo me-2"></i>Reset
-                            </a>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-danger">Confirm Cancellation</button>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
-    </div>
+        {% endif %}
+    {% endfor %}
 
-    <!-- Purchase Orders Table -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Purchase Orders List</h5>
-                    <div>
-                        <button class="btn btn-sm btn-outline-success me-2" onclick="exportToExcel()">
-                            <i class="fas fa-file-excel me-1"></i>Excel
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger me-2" onclick="exportToPDF()">
-                            <i class="fas fa-file-pdf me-1"></i>PDF
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="printTable()">
-                            <i class="fas fa-print me-1"></i>Print
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="poTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>PO Number</th>
-                                    <th>Order Date</th>
-                                    <th>Supplier</th>
-                                    <th>Items</th>
-                                    <th>Total Amount</th>
-                                    <th>Status</th>
-                                    <th>Expected Date</th>
-                                    <th>Created By</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for po in purchase_orders %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ po.po_number }}</strong>
-                                        {% if po.requisition %}
-                                        <br><small class="text-muted">Requisition: {{ po.requisition.req_number }}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ po.order_date|date:"Y-m-d" }}</td>
-                                    <td>
-                                        {{ po.supplier.name }}
-                                        {% if po.supplier.code %}
-                                        <br><small class="text-muted">{{ po.supplier.code }}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">{{ po.lines.count }}</td>
-                                    <td class="text-end">
-                                        <strong>${{ po.total_amount|floatformat:2 }}</strong>
-                                    </td>
-                                    <td>
-                                        {% if po.status == 'draft' %}
-                                            <span class="badge bg-secondary">Draft</span>
-                                        {% elif po.status == 'pending' %}
-                                            <span class="badge bg-warning">Pending</span>
-                                        {% elif po.status == 'approved' %}
-                                            <span class="badge bg-info">Approved</span>
-                                        {% elif po.status == 'sent' %}
-                                            <span class="badge bg-primary">Sent</span>
-                                        {% elif po.status == 'received' %}
-                                            <span class="badge bg-success">Received</span>
-                                        {% elif po.status == 'cancelled' %}
-                                            <span class="badge bg-danger">Cancelled</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">{{ po.status }}</span>
-                                        {% endif %}
-                                        
-                                        {% if po.is_overdue and po.status != 'received' and po.status != 'cancelled' %}
-                                        <br><span class="badge bg-danger mt-1">Overdue</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if po.expected_delivery_date %}
-                                            {{ po.expected_delivery_date|date:"Y-m-d" }}
-                                            <br><small class="text-muted">{{ po.expected_delivery_date|timeuntil }}</small>
-                                        {% elif po.requisition and po.requisition.required_date %}
-                                            {{ po.requisition.required_date|date:"Y-m-d" }}
-                                            <br><small class="text-muted">From Requisition</small>
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if po.created_by %}
-                                            {{ po.created_by.get_full_name|default:po.created_by.username }}
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <div class="btn-group" role="group">
-                                            <a href="{% url 'purchasing:po_detail' po.id %}" class="btn btn-sm btn-outline-info" title="View">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                            <a href="{% url 'purchasing:po_edit' po.id %}" class="btn btn-sm btn-outline-primary" title="Edit">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <button type="button" class="btn btn-sm btn-outline-success" title="Receive" 
-                                                    onclick="receivePO({{ po.id }})">
-                                                <i class="fas fa-truck-loading"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" title="Cancel"
-                                                    onclick="cancelPO({{ po.id }})">
-                                                <i class="fas fa-times"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" title="Print"
-                                                    onclick="printPO({{ po.id }})">
-                                                <i class="fas fa-print"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="9" class="text-center py-5">
-                                        <i class="fas fa-file-invoice fa-4x text-muted mb-3"></i>
-                                        <h5 class="text-muted">No Purchase Orders Found</h5>
-                                        <p class="text-muted mb-3">Get started by creating your first purchase order</p>
-                                        <a href="{% url 'purchasing:po_create' %}" class="btn btn-primary">
-                                            <i class="fas fa-plus-circle me-2"></i>Create Purchase Order
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Pagination -->
-                    {% if is_paginated %}
-                    <nav aria-label="Page navigation" class="mt-4">
-                        <ul class="pagination justify-content-center">
-                            {% if page_obj.has_previous %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key,value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                                    <i class="fas fa-chevron-left"></i>
-                                </a>
-                            </li>
-                            {% endif %}
-                            
-                            {% for num in page_obj.paginator.page_range %}
-                                {% if page_obj.number == num %}
-                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
-                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                                <li class="page-item">
-                                    <a class="page-link" href="?page={{ num }}{% for key,value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
-                                </li>
-                                {% endif %}
-                            {% endfor %}
-                            
-                            {% if page_obj.has_next %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key,value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
-                                    <i class="fas fa-chevron-right"></i>
-                                </a>
-                            </li>
-                            {% endif %}
-                        </ul>
-                    </nav>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
-<!-- Receive PO Modal -->
-<div class="modal fade" id="receivePOModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Receive Purchase Order</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="receivePOForm" method="post" action="">
-                    {% csrf_token %}
-                    <p>Are you sure you want to mark this purchase order as received?</p>
-                    <p class="text-muted small">This will create goods receipt records and update inventory.</p>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Received Date</label>
-                        <input type="date" class="form-control" name="received_date" value="{% now 'Y-m-d' %}" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Receipt Number</label>
-                        <input type="text" class="form-control" name="receipt_number" placeholder="GRN-{{ 'now'|date:'Ymd' }}-001" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea class="form-control" name="notes" rows="2"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" form="receivePOForm" class="btn btn-success">
-                    <i class="fas fa-check me-2"></i>Confirm Receipt
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Cancel PO Modal -->
-<div class="modal fade" id="cancelPOModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cancel Purchase Order</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="cancelPOForm" method="post" action="">
-                    {% csrf_token %}
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Are you sure you want to cancel this purchase order? This action cannot be undone.
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Cancellation Reason *</label>
-                        <select class="form-select" name="reason" required>
-                            <option value="">Select reason...</option>
-                            <option value="supplier_unavailable">Supplier unavailable</option>
-                            <option value="prices_changed">Prices changed</option>
-                            <option value="requirements_changed">Requirements changed</option>
-                            <option value="budget_issues">Budget issues</option>
-                            <option value="duplicate_order">Duplicate order</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Additional Notes</label>
-                        <textarea class="form-control" name="notes" rows="2"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep it</button>
-                <button type="submit" form="cancelPOForm" class="btn btn-danger">
-                    <i class="fas fa-times me-2"></i>Yes, Cancel PO
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% block extra_css %}
+<style>
+    .table .btn {
+        margin: 0 2px;
+    }
+    .badge-draft { background-color: #6c757d; color: white; }
+    .badge-pending { background-color: #ffc107; color: black; }
+    .badge-approved { background-color: #17a2b8; color: white; }
+    .badge-ordered { background-color: #007bff; color: white; }
+    .badge-partial { background-color: #fd7e14; color: white; }
+    .badge-received { background-color: #28a745; color: white; }
+    .badge-closed { background-color: #343a40; color: white; }
+    .badge-cancelled { background-color: #dc3545; color: white; }
+</style>
 {% endblock %}
 
-{% block extra_js %}
-<!-- Moment JS -->
-<script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
-<!-- Date Range Picker -->
-<script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
-<!-- DataTables -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
-<!-- Select2 -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<!-- JSZip for Excel export -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<!-- pdfmake for PDF export -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-
-<script>
-    $(document).ready(function() {
-        // Initialize Select2 for supplier dropdown
-        $('#supplier').select2({
-            theme: 'bootstrap-5',
-            placeholder: 'Select a supplier',
-            allowClear: true
-        });
-        
-        // Initialize Date Range Picker
-        $('#dateRange').daterangepicker({
-            autoUpdateInput: false,
-            locale: {
-                cancelLabel: 'Clear',
-                format: 'YYYY-MM-DD'
-            },
-            ranges: {
-                'Today': [moment(), moment()],
-                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                'This Month': [moment().startOf('month'), moment().endOf('month')],
-                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-            }
-        });
-        
-        $('#dateRange').on('apply.daterangepicker', function(ev, picker) {
-            $(this).val(picker.startDate.format('YYYY-MM-DD') + ' to ' + picker.endDate.format('YYYY-MM-DD'));
-        });
-        
-        $('#dateRange').on('cancel.daterangepicker', function(ev, picker) {
-            $(this).val('');
-        });
-        
-        // Initialize DataTable
-        var table = $('#poTable').DataTable({
-            paging: false,
-            searching: false,
-            info: false,
-            ordering: true,
-            responsive: true,
-            dom: 'Bfrtip',
-            buttons: [
-                {
-                    extend: 'copy',
-                    text: '<i class="fas fa-copy"></i> Copy',
-                    className: 'btn btn-sm btn-outline-secondary'
-                },
-                {
-                    extend: 'excel',
-                    text: '<i class="fas fa-file-excel"></i> Excel',
-                    className: 'btn btn-sm btn-outline-success',
-                    filename: 'purchase_orders_{{ now|date:"Ymd" }}',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'pdf',
-                    text: '<i class="fas fa-file-pdf"></i> PDF',
-                    className: 'btn btn-sm btn-outline-danger',
-                    filename: 'purchase_orders_{{ now|date:"Ymd" }}',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'print',
-                    text: '<i class="fas fa-print"></i> Print',
-                    className: 'btn btn-sm btn-outline-secondary',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                    }
-                }
-            ],
-            columnDefs: [
-                { orderable: false, targets: [8] } // Actions column not sortable
-            ]
-        });
-        
-        // Apply filter button click
-        $('#applyFilters').click(function() {
-            $('#filterForm').submit();
-        });
-        
-        // Auto-submit on filter change (optional)
-        $('#status, #supplier').change(function() {
-            $('#filterForm').submit();
-        });
-    });
-    
-    // Export functions
-    function exportToExcel() {
-        $('#poTable').DataTable().button('.buttons-excel').trigger();
-    }
-    
-    function exportToPDF() {
-        $('#poTable').DataTable().button('.buttons-pdf').trigger();
-    }
-    
-    function printTable() {
-        $('#poTable').DataTable().button('.buttons-print').trigger();
-    }
-    
-    // Receive PO
-    function receivePO(poId) {
-        $('#receivePOForm').attr('action', `/purchasing/pos/${poId}/receive/`);
-        $('#receivePOModal').modal('show');
-    }
-    
-    // Cancel PO
-    function cancelPO(poId) {
-        $('#cancelPOForm').attr('action', `/purchasing/pos/${poId}/cancel/`);
-        $('#cancelPOModal').modal('show');
-    }
-    
-    // Print PO
-    function printPO(poId) {
-        window.open(`/purchasing/pos/${poId}/print/`, '_blank');
-    }
-    
-    // Mark as received form submission
-    $('#receivePOForm').on('submit', function(e) {
-        e.preventDefault();
-        var form = $(this);
-        $.ajax({
-            url: form.attr('action'),
-            method: 'POST',
-            data: form.serialize(),
-            success: function(response) {
-                if (response.success) {
-                    $('#receivePOModal').modal('hide');
-                    location.reload();
-                } else {
-                    alert('Error: ' + response.error);
-                }
-            },
-            error: function(xhr) {
-                alert('Error receiving purchase order: ' + xhr.responseText);
-            }
-        });
-    });
-    
-    // Cancel PO form submission
-    $('#cancelPOForm').on('submit', function(e) {
-        e.preventDefault();
-        var form = $(this);
-        if (confirm('Are you sure you want to cancel this purchase order?')) {
-            $.ajax({
-                url: form.attr('action'),
-                method: 'POST',
-                data: form.serialize(),
-                success: function(response) {
-                    if (response.success) {
-                        $('#cancelPOModal').modal('hide');
-                        location.reload();
-                    } else {
-                        alert('Error: ' + response.error);
-                    }
-                },
-                error: function(xhr) {
-                    alert('Error cancelling purchase order: ' + xhr.responseText);
-                }
-            });
-        }
-    });
-</script>
-{% endblock %}
+{% endblock content %}

@@ -343,6 +343,35 @@ class GoodsReceipt(CompanyModel):
     def __str__(self):
         return self.receipt_number
 
+    def save(self, *args, **kwargs):
+        """Generate receipt number if not exists"""
+        if not self.receipt_number:
+            # Generate receipt number based on PO and date
+            today = timezone.now()
+            year = today.strftime('%Y')
+            month = today.strftime('%m')
+            
+            # Get the last receipt for this month
+            last_receipt = GoodsReceipt.objects.filter(
+                receipt_number__startswith=f"GR-{year}{month}"
+            ).order_by('-receipt_number').first()
+            
+            if last_receipt:
+                # Extract the sequence number and increment
+                try:
+                    # Format: GR-202503-0001
+                    last_num = int(last_receipt.receipt_number.split('-')[-1])
+                    new_num = last_num + 1
+                except (ValueError, IndexError):
+                    new_num = 1
+            else:
+                new_num = 1
+            
+            # Format with leading zeros (4 digits)
+            self.receipt_number = f"GR-{year}{month}-{new_num:04d}"
+        
+        super().save(*args, **kwargs)
+
 
 class GoodsReceiptLine(CompanyModel):
     receipt = models.ForeignKey(
@@ -364,7 +393,6 @@ class GoodsReceiptLine(CompanyModel):
     def line_total(self):
         """Calculate line total value"""
         return self.quantity_received * self.po_line.unit_price
-
 
 # =====================================================
 # VENDOR PERFORMANCE
