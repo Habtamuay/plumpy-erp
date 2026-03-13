@@ -301,12 +301,21 @@
                             <table class="table table-bordered table-hover" id="orderLinesTable">
                                 <thead class="table-light">
                                     <tr>
+<<<<<<< HEAD
                                     <th style="width: 30%">Item <span class="text-danger">*</span></th>
                                         <th style="width: 10%">Quantity <span class="text-danger">*</span></th>
                                         <th style="width: 10%">Unit</th>
                                     <th style="width: 15%">Unit Price <span class="text-danger">*</span></th>
                                         <th style="width: 15%">Subtotal</th>
                                         <th style="width: 8%">Actions</th>
+=======
+                                        <th style="width: 30%">Item <span class="text-danger">*</span></th>
+                                        <th style="width: 12%">Quantity <span class="text-danger">*</span></th>
+                                        <th style="width: 12%">Unit</th>
+                                        <th style="width: 18%">Unit Price <span class="text-danger">*</span></th>
+                                        <th style="width: 18%">Subtotal</th>
+                                        <th style="width: 10%">Actions</th>
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
                                     </tr>
                                 </thead>
                                 <tbody id="orderLinesBody">
@@ -348,6 +357,10 @@
                                             <td>
                                                 <input type="text" class="form-control form-control-sm line-subtotal bg-light" readonly 
                                                        value="{{ line.subtotal|floatformat:2 }}">
+<<<<<<< HEAD
+=======
+                                                <input type="hidden" name="tax_rate" class="tax-rate-input" value="{{ line.tax_rate|default:15 }}">
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
                                             </td>
                                             <td class="text-center">
                                                 <button type="button" class="btn btn-sm btn-outline-danger remove-item" title="Remove item">
@@ -376,6 +389,7 @@
                                         <td></td>
                                     </tr>
                                     <tr>
+<<<<<<< HEAD
                                         <td colspan="4" class="text-end fw-bold align-middle">
                                             <label for="vat_rate_selection" class="form-label d-inline mb-0 me-2">VAT Rate:</label>
                                             <select name="vat_rate_selection" id="vat_rate_selection" class="form-select form-select-sm d-inline" style="width: auto;">
@@ -383,6 +397,9 @@
                                                 <option value="0" {% if vat_rate == 0 %}selected{% endif %}>Exempt</option>
                                             </select>
                                         </td>
+=======
+                                        <td colspan="4" class="text-end fw-bold">VAT (15%):</td>
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
                                         <td class="fw-bold"><span id="taxTotal">0.00</span></td>
                                         <td></td>
                                     </tr>
@@ -417,7 +434,11 @@
                                     </tr>
                                     <tr class="table-primary">
                                         <td colspan="4" class="text-end fw-bold h5 mb-0">Grand Total:</td>
+<<<<<<< HEAD
                                         <td class="fw-bold h5 mb-0"><span id="grandTotal">0.00</span><span> {{ po.currency|default:'ETB' }}</span></td>
+=======
+                                        <td class="fw-bold h5 mb-0"><span id="grandTotal">0.00</span> {{ po.currency|default:'ETB' }}</td>
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
                                         <td></td>
                                     </tr>
                                 </tfoot>
@@ -618,6 +639,7 @@
         </td>
         <td>
             <input type="text" class="form-control form-control-sm line-subtotal bg-light" readonly value="0.00">
+            <input type="hidden" name="tax_rate" class="tax-rate-input" value="15">
         </td>
         <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-danger remove-item" title="Remove item">
@@ -996,6 +1018,11 @@
             });
         }
         
+<<<<<<< HEAD
+=======
+
+        
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
         if (itemSelect) {
             const onItemChange = function() {
                 const selectedOption = this.options[this.selectedIndex];
@@ -1070,9 +1097,15 @@
         const quantity = parseFloat(quantityInput.value) || 0;
         const unitPrice = parseFloat(unitPriceInput.value) || 0;
         
+<<<<<<< HEAD
         const lineSubtotal = quantity * unitPrice;
         
         subtotalInput.value = lineSubtotal.toFixed(2);
+=======
+        const subtotal = quantity * unitPrice;
+        
+        subtotalInput.value = subtotal.toFixed(2);
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
         
         calculateGrandTotal();
     }
@@ -1084,7 +1117,10 @@
         document.querySelectorAll('.order-line-row').forEach(row => {
             const quantityInput = row.querySelector('.quantity-input');
             const unitPriceInput = row.querySelector('.unit-price-input');
+<<<<<<< HEAD
             const lineSubtotalInput = row.querySelector('.line-subtotal');
+=======
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
             
             if (!quantityInput || !unitPriceInput) return;
             
@@ -1092,13 +1128,20 @@
             const unitPrice = parseFloat(unitPriceInput.value) || 0;
             
             const lineSubtotal = quantity * unitPrice;
+<<<<<<< HEAD
 
             subtotalBeforeVat += lineSubtotal;
 
             if (lineSubtotalInput) {
                 lineSubtotalInput.value = lineSubtotal.toFixed(2);
             }
+=======
+            subtotalBeforeVat += lineSubtotal;
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
         });
+        
+        // Calculate 15% VAT on the subtotal
+        const taxTotal = subtotalBeforeVat * 0.15;
         
         const shipping = parseFloat(document.getElementById('shipping_cost')?.value) || 0;
         const discount = parseFloat(document.getElementById('discount')?.value) || 0;

@@ -10,6 +10,7 @@ from apps.sales.models import SalesOrder, SalesInvoice, SalesInvoiceLine, SalesS
 from apps.production.models import ProductionRun
 from apps.core.models import Item
 from apps.accounting.models import JournalEntry, JournalLine, Account
+from apps.accounting.signals import get_account  # Import the helper function
 from apps.company.models import Customer
 from apps.inventory.models import StockTransaction, Lot, Warehouse
 
@@ -174,6 +175,71 @@ def auto_create_invoice_from_sales_order(sender, instance, created, **kwargs):
                 raise
 
 
+<<<<<<< HEAD
+=======
+def create_invoice_journal_entry(invoice):
+    """Create journal entry for invoice"""
+    try:
+        # Get accounts (with fallback creation if not exists)
+        ar_account = Account.objects.filter(code='1100').first()
+        sales_account = Account.objects.filter(code='4100').first()
+        
+        if not ar_account:
+            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
+        
+        if not sales_account:
+            sales_account = get_account('4100', 'Sales Revenue', 'revenue')
+        
+        # Create journal entry
+        je = JournalEntry.objects.create(
+            company=invoice.customer.company,
+            entry_date=invoice.invoice_date,
+            reference=invoice.invoice_number,
+            narration=f"Invoice {invoice.invoice_number} for {invoice.customer.name}",
+            is_posted=True,
+            posted_at=timezone.now()
+        )
+        
+        # Dr Accounts Receivable
+        JournalLine.objects.create(
+            journal=je,
+            account=ar_account,
+            debit=invoice.total_amount,
+            narration=f"Invoice {invoice.invoice_number}"
+        )
+        
+        # Cr Sales Revenue
+        JournalLine.objects.create(
+            journal=je,
+            account=sales_account,
+            credit=invoice.total_amount - (invoice.tax_amount or 0),
+            narration=f"Sales revenue - {invoice.invoice_number}"
+        )
+        
+        # Cr VAT Payable if tax exists
+        if invoice.tax_amount and invoice.tax_amount > 0:
+            vat_account = Account.objects.filter(code='2200').first()
+            if not vat_account:
+                vat_account = get_account('2200', 'VAT Payable', 'liability')
+            
+            JournalLine.objects.create(
+                journal=je,
+                account=vat_account,
+                credit=invoice.tax_amount,
+                narration=f"VAT on {invoice.invoice_number}"
+            )
+        
+        # Link journal entry to invoice
+        invoice.journal_entry = je
+        invoice.status = 'posted'
+        invoice.save(update_fields=['journal_entry', 'status'])
+        
+    except Exception as e:
+        logger.error(f"Failed to create journal entry for invoice {invoice.invoice_number}: {e}")
+        raise
+
+
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
 # ============================
 # Production Run Signals
 # ============================
@@ -322,7 +388,59 @@ def handle_payment_received(sender, instance, created, **kwargs):
             instance.invoice.status = 'paid'
             instance.invoice.save(update_fields=['status'])
             
+<<<<<<< HEAD
             # Note: Journal entry creation for payments should be handled in accounting app
+=======
+            # Create journal entry for payment
+            create_payment_journal_entry(instance)
+
+
+def create_payment_journal_entry(payment):
+    """Create journal entry for payment"""
+    try:
+        # Get accounts
+        cash_account = Account.objects.filter(code='1010').first()
+        ar_account = Account.objects.filter(code='1100').first()
+        
+        if not cash_account:
+            cash_account = get_account('1010', 'Cash/Bank', 'asset')
+        
+        if not ar_account:
+            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
+        
+        # Create journal entry
+        je = JournalEntry.objects.create(
+            company=payment.invoice.customer.company,
+            entry_date=payment.payment_date,
+            reference=f"PAY-{payment.id}",
+            narration=f"Payment received for {payment.invoice.invoice_number}",
+            is_posted=True,
+            posted_at=timezone.now()
+        )
+        
+        # Dr Cash/Bank
+        JournalLine.objects.create(
+            journal=je,
+            account=cash_account,
+            debit=payment.amount,
+            narration=f"Payment from {payment.invoice.customer.name}"
+        )
+        
+        # Cr Accounts Receivable
+        JournalLine.objects.create(
+            journal=je,
+            account=ar_account,
+            credit=payment.amount,
+            narration=f"Payment for {payment.invoice.invoice_number}"
+        )
+        
+        # Link journal entry to payment
+        payment.journal_entry = je
+        payment.save(update_fields=['journal_entry'])
+        
+    except Exception as e:
+        logger.error(f"Failed to create journal entry for payment {payment.id}: {e}")
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
 
 
 # ============================

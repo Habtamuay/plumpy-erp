@@ -81,5 +81,9 @@ urlpatterns = [
     path('ajax/po-lines/<int:po_id>/', views.ajax_po_lines, name='ajax_po_lines'),
     path('ajax/item-price/<int:item_id>/<int:supplier_id>/', views.ajax_item_price, name='ajax_item_price'),
     path('ajax/check-po-number/', views.ajax_check_po_number, name='ajax_check_po_number'),
+<<<<<<< HEAD
     path('ajax/check-receipt-number/', views.ajax_check_receipt_number, name='ajax_check_receipt_number'),
+=======
+    path('ajax/add-supplier/', views.ajax_add_supplier, name='ajax_add_supplier'),
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
 ]

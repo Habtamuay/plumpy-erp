@@ -18,9 +18,15 @@ from .utils import generate_po_pdf
 from apps.company.models import Company
 
 from .models import (
+<<<<<<< HEAD
     PurchaseOrder, PurchaseOrderLine, PurchaseOrderApproval, Supplier,
     PurchaseRequisition, PurchaseRequisitionLine, GoodsReceipt, GoodsReceiptLine,
     VendorPerformance
+=======
+    PurchaseOrder, PurchaseOrderLine, Supplier, 
+    PurchaseRequisition, GoodsReceipt, GoodsReceiptLine,
+    PurchaseOrderApproval
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
 )
 from apps.inventory.models import Item, Warehouse, Lot, StockTransaction
 from apps.core.models import Unit
@@ -111,6 +117,7 @@ def dashboard(request):
     """
     company_name = request.session.get('current_company_name')
     
+<<<<<<< HEAD
     # Base queryset with company filter
     po_qs = PurchaseOrder.objects.all()
     if company_name:
@@ -157,6 +164,45 @@ def dashboard(request):
         'pending_approvals': pending_approvals,
         'recent_requisitions': recent_requisitions,
         'monthly_spend': monthly_spend,
+=======
+    # Base querysets
+    po_qs = PurchaseOrder.objects.all()
+    requisition_qs = PurchaseRequisition.objects.all()
+    receipt_qs = GoodsReceipt.objects.all()
+    approval_qs = PurchaseOrderApproval.objects.all()
+    supplier_qs = Supplier.objects.filter(is_active=True)
+    
+    # Filter by company if set
+    if company_name:
+        po_qs = po_qs.filter(company=company_name)
+        requisition_qs = requisition_qs.filter(company=company_name)
+        supplier_qs = supplier_qs.filter(company=company_name)
+        # GoodsReceipt and PurchaseOrderApproval don't have company field directly,
+        # they're linked through PO
+        receipt_qs = receipt_qs.filter(po__company=company_name)
+        approval_qs = approval_qs.filter(po__company=company_name)
+    
+    context = {
+        'current_period': timezone.now().strftime('%B %Y'),
+        'total_po_count': po_qs.count(),
+        'pending_po_count': po_qs.filter(status='pending').count(),
+        'total_suppliers': supplier_qs.count(),
+        'recent_pos': po_qs.select_related('supplier').order_by('-order_date')[:5],
+        
+        # Purchase Requisitions
+        'total_requisition_count': requisition_qs.count(),
+        'pending_requisition_count': requisition_qs.filter(status__in=['draft', 'submitted']).count(),
+        'approved_requisition_count': requisition_qs.filter(status='approved').count(),
+        'recent_requisitions': requisition_qs.select_related('requested_by').order_by('-created_at')[:5],
+        
+        # Goods Receipts
+        'total_receipt_count': receipt_qs.count(),
+        'recent_receipts': receipt_qs.select_related('po', 'received_by').order_by('-receipt_date')[:5],
+        
+        # Approval Workflow
+        'pending_approvals': approval_qs.filter(status='pending').select_related('po', 'approver').order_by('-created_at')[:5],
+        'pending_approval_count': approval_qs.filter(status='pending').count(),
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
     }
     return render(request, 'purchasing/dashboard.html', context)
 
@@ -309,8 +355,13 @@ def po_detail(request, po_id):
     net_grand_total = grand_total - withholding_tax
 
     # Get related receipts if any
+<<<<<<< HEAD
     receipts = GoodsReceipt.objects.filter(po=po).select_related('received_by')
 
+=======
+    receipts = GoodsReceipt.objects.filter(po=po).select_related('received_by', 'created_by')
+    
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
     context = {
         'po': po,
         'lines': lines,
@@ -707,7 +758,11 @@ def receive_po(request, po_id):
                 receipt_date=received_date,
                 notes=notes,
                 received_by=request.user,
+<<<<<<< HEAD
                 warehouse=receiving_warehouse.name
+=======
+                created_by=request.user
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
             )
 
             # Update inventory for each line
@@ -1791,6 +1846,28 @@ def goods_receipt_create(request):
         try:
             po_id = request.POST.get('po')
             po = get_object_or_404(PurchaseOrder, id=po_id)
+<<<<<<< HEAD
+=======
+            
+            receipt = GoodsReceipt.objects.create(
+                receipt_number=request.POST.get('receipt_number'),
+                po=po,
+                receipt_date=request.POST.get('receipt_date'),
+                notes=request.POST.get('notes'),
+                received_by=request.user,
+                created_by=request.user
+            )
+            
+            messages.success(request, f"Goods receipt {receipt.receipt_number} created successfully.")
+            return redirect('purchasing:goods_receipt_detail', receipt_id=receipt.id)
+        except Exception as e:
+            messages.error(request, f"Error creating goods receipt: {str(e)}")
+            return redirect('purchasing:goods_receipt_create')
+    
+    pos = PurchaseOrder.objects.filter(status__in=['ordered', 'approved']).order_by('-order_date')
+    context = {'pos': pos}
+    return render(request, 'purchasing/receipt_form.html', context)
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
 
             if po.status not in ['approved', 'ordered', 'partial']:
                 messages.error(request, f"Cannot receive a PO with status '{po.get_status_display()}'.")
@@ -2341,6 +2418,7 @@ def ajax_check_po_number(request):
         return JsonResponse({'exists': exists})
     return JsonResponse({'exists': False})
 
+<<<<<<< HEAD
 
 @login_required
 def ajax_check_receipt_number(request):
@@ -2350,3 +2428,63 @@ def ajax_check_receipt_number(request):
         exists = GoodsReceipt.objects.filter(receipt_number=receipt_number).exists()
         return JsonResponse({'exists': exists})
     return JsonResponse({'exists': False})
+=======
+@login_required
+def ajax_add_supplier(request):
+    """AJAX endpoint to add a new supplier"""
+    if request.method == 'POST':
+        try:
+            company_name = request.session.get('current_company_name')
+            if not company_name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No company selected'
+                }, status=400)
+            
+            # Generate supplier code if not provided
+            supplier_code = request.POST.get('code', '').strip()
+            if not supplier_code:
+                # Auto-generate code based on name
+                name = request.POST.get('name', '').strip()
+                if name:
+                    # Use first 3 letters of name + timestamp
+                    prefix = ''.join(filter(str.isalnum, name[:3])).upper()
+                    timestamp = timezone.now().strftime('%y%m%d%H%M')
+                    supplier_code = f"{prefix}{timestamp}"
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Supplier name is required'
+                    }, status=400)
+            
+            # Create supplier
+            supplier = Supplier.objects.create(
+                company=company_name,
+                code=supplier_code,
+                name=request.POST.get('name', '').strip(),
+                contact_person=request.POST.get('contact_person', '').strip(),
+                email=request.POST.get('email', '').strip(),
+                phone=request.POST.get('phone', '').strip(),
+                address=request.POST.get('address', '').strip(),
+                tax_id=request.POST.get('tax_id', '').strip(),
+                payment_terms_days=int(request.POST.get('payment_terms_days', 30)),
+                notes=request.POST.get('notes', '').strip(),
+                is_active=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'supplier_id': supplier.id,
+                'supplier_name': supplier.name,
+                'supplier_code': supplier.code
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+>>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b

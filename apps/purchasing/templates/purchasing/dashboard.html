@@ -270,6 +270,159 @@
         </div>
     </div>
 
+    <!-- Purchase Requisitions, Goods Receipts, and Approval Workflow -->
+    <div class="row mb-4">
+        <!-- Purchase Requisitions -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Purchase Requisitions</h5>
+                    <a href="{% url 'purchasing:requisition_list' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list me-1"></i>View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Total Requisitions</span>
+                            <span class="badge bg-primary fs-6">{{ total_requisition_count }}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Pending Approval</span>
+                            <span class="badge bg-warning fs-6">{{ pending_requisition_count }}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Approved</span>
+                            <span class="badge bg-success fs-6">{{ approved_requisition_count }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-2">Recent Requisitions</h6>
+                    <div class="list-group">
+                        {% for req in recent_requisitions %}
+                        <a href="{% url 'purchasing:requisition_detail' req.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ req.requisition_number }}</h6>
+                                <small>{{ req.requested_date|date:"M d" }}</small>
+                            </div>
+                            <p class="mb-1 small text-muted">By: {{ req.requested_by.get_full_name|default:req.requested_by.username }}</p>
+                            <span class="badge 
+                                {% if req.status == 'draft' %}bg-secondary
+                                {% elif req.status == 'submitted' %}bg-info
+                                {% elif req.status == 'approved' %}bg-success
+                                {% elif req.status == 'rejected' %}bg-danger
+                                {% else %}bg-primary{% endif %}">{{ req.get_status_display }}</span>
+                        </a>
+                        {% empty %}
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-inbox fa-2x mb-2"></i>
+                            <p class="mb-0">No recent requisitions</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3">
+                        <a href="{% url 'purchasing:requisition_create' %}" class="btn btn-sm btn-success w-100">
+                            <i class="fas fa-plus"></i> New Requisition
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Goods Receipts / Purchase Receipts -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Goods Receipts</h5>
+                    <a href="{% url 'purchasing:goods_receipt_list' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list me-1"></i>View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Total Receipts</span>
+                            <span class="badge bg-primary fs-6">{{ total_receipt_count }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-2">Recent Receipts</h6>
+                    <div class="list-group">
+                        {% for receipt in recent_receipts %}
+                        <a href="{% url 'purchasing:goods_receipt_detail' receipt.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ receipt.receipt_number }}</h6>
+                                <small>{{ receipt.receipt_date|date:"M d" }}</small>
+                            </div>
+                            <p class="mb-1 small text-muted">
+                                PO: {{ receipt.po.po_number }}<br>
+                                Received by: {{ receipt.received_by.get_full_name|default:receipt.received_by.username }}
+                            </p>
+                        </a>
+                        {% empty %}
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-inbox fa-2x mb-2"></i>
+                            <p class="mb-0">No recent receipts</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3">
+                        <a href="{% url 'purchasing:goods_receipt_create' %}" class="btn btn-sm btn-success w-100">
+                            <i class="fas fa-plus"></i> New Receipt
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Approval Workflow -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Pending Approvals</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Awaiting Your Approval</span>
+                            <span class="badge bg-warning fs-6">{{ pending_approval_count }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-2">Recent Approvals</h6>
+                    <div class="list-group">
+                        {% for approval in pending_approvals %}
+                        <a href="{% url 'purchasing:po_detail' approval.po.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ approval.po.po_number }}</h6>
+                                <small>Level {{ approval.level }}</small>
+                            </div>
+                            <p class="mb-1 small text-muted">
+                                Supplier: {{ approval.po.supplier.name }}<br>
+                                Amount: {{ approval.po.currency }} {{ approval.po.total_amount|floatformat:2 }}
+                            </p>
+                            <span class="badge 
+                                {% if approval.status == 'pending' %}bg-warning
+                                {% elif approval.status == 'approved' %}bg-success
+                                {% elif approval.status == 'rejected' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">{{ approval.get_status_display }}</span>
+                        </a>
+                        {% empty %}
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-check-circle fa-2x mb-2"></i>
+                            <p class="mb-0">No pending approvals</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Lead Time Analysis -->
     <div class="row mb-4">
         <div class="col-12">

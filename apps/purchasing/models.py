@@ -129,9 +129,11 @@ class PurchaseRequisitionLine(CompanyModel):
 class PurchaseOrder(CompanyModel):
     STATUS_CHOICES = [
         ("draft", "Draft"),
+        ("pending", "Pending Approval"),
         ("approved", "Approved"),
+        ("rejected", "Rejected"),
         ("ordered", "Ordered"),
-        ("partial", "Partial"),
+        ("partial", "Partial Receipt"),
         ("received", "Received"),
         ("closed", "Closed"),
         ("cancelled", "Cancelled"),
@@ -334,6 +336,13 @@ class GoodsReceipt(CompanyModel):
         on_delete=models.PROTECT,
         related_name='goods_receipts',
         null=True
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='created_goods_receipts',
+        null=True,
+        blank=True
     )
 
     notes = models.TextField(blank=True, null=True)
