@@ -8,11 +8,11 @@ from datetime import timedelta
 from decimal import Decimal
 import json
 
-from .models import (
+from apps.accounting.models import (
     Account, JournalEntry, PurchaseBill, Payment,  # Removed SalesInvoice from here
     AccountType, AccountGroup, AccountCategory, ReconciliationAuditLog, FiscalPeriod
 )
-from .resources import ARAgingResource, APAgingResource
+from apps.accounting.resources import ARAgingResource, APAgingResource
 from apps.company.models import Customer, Company
 from apps.purchasing.models import Supplier
 from apps.sales.models import SalesInvoice  # Import SalesInvoice from sales app
@@ -822,15 +822,3 @@ def fiscal_period_close(request, period_id):
         'period': period,
     }
     return render(request, 'accounting/fiscal_period_close.html', context)
-    company = _current_company(request)
-    if company is None:
-        return redirect('core:home')
-
-    company = _current_company(request)
-    if company is None:
-        return redirect('core:home')
-
-    company = _current_company(request)
-    if company is None:
-        messages.error(request, "Please select a company first.")
-        return redirect('core:home')

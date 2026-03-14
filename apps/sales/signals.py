@@ -1,515 +1,181 @@
+import logging
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
-from django.db import transaction
-from django.core.exceptions import ValidationError
 from decimal import Decimal
-import logging
-
-from apps.sales.models import SalesOrder, SalesInvoice, SalesInvoiceLine, SalesShipment, SalesPayment
-from apps.production.models import ProductionRun
-from apps.core.models import Item
-from apps.accounting.models import JournalEntry, JournalLine, Account
-from apps.accounting.signals import get_account  # Import the helper function
-from apps.company.models import Customer
-from apps.inventory.models import StockTransaction, Lot, Warehouse
 
 logger = logging.getLogger(__name__)
 
+# Import helper for getting models dynamically to avoid circular imports
+from django.apps import apps
 
 # ============================
-# Sales Order Signals
+# Helper Functions
 # ============================
 
-@receiver(pre_save, sender=SalesOrder)
-def validate_sales_order(sender, instance, **kwargs):
-    """Validate sales order before saving"""
-    if instance.pk:  # Existing order
-        old_instance = SalesOrder.objects.get(pk=instance.pk)
-        
-        # Prevent changing customer after order is confirmed
-        if old_instance.status != 'draft' and old_instance.customer_id != instance.customer_id:
-            raise ValidationError("Cannot change customer after order is confirmed")
-        
-        # Prevent reducing total after order is confirmed
-        if old_instance.status != 'draft' and instance.total_amount < old_instance.total_amount:
-            raise ValidationError("Cannot reduce order total after confirmation")
-
-
-@receiver(post_save, sender=SalesOrder)
-def handle_sales_order_status_change(sender, instance, created, **kwargs):
-    """Handle sales order status changes"""
-    if created:
-        logger.info(f"Sales Order {instance.order_number} created")
-        return
+def get_or_create_account_type(name, code_prefix=None):
+    AccountType = apps.get_model('account', 'AccountType')
+    if not code_prefix:
+        prefix_map = {'Asset': '1', 'Liability': '2', 'Equity': '3', 'Revenue': '4', 'Expense': '5'}
+        code_prefix = prefix_map.get(name, '1')
     
+    account_type, _ = AccountType.objects.get_or_create(
+        name=name,
+        defaults={'code_prefix': code_prefix, 'description': f'{name} accounts', 'is_active': True}
+    )
+    return account_type
+
+def get_account(code, name=None, account_type_name=None):
+    Account = apps.get_model('account', 'Account')
+    AccountGroup = apps.get_model('account', 'AccountGroup')
+    AccountCategory = apps.get_model('account', 'AccountCategory')
+
     try:
-        old_instance = SalesOrder.objects.get(pk=instance.pk)
+        return Account.objects.get(code=code)
+    except Account.DoesNotExist:
+        # Determine types/groups for automatic creation
+        type_name = account_type_name or 'Asset'
         
-        # Status changed to confirmed
-        if old_instance.status != 'confirmed' and instance.status == 'confirmed':
-            handle_order_confirmed(instance)
+        # This is a simplified version of your logic to ensure the account exists
+        acc_type = get_or_create_account_type(type_name)
         
-        # Status changed to shipped
-        elif old_instance.status != 'shipped' and instance.status == 'shipped':
-            handle_order_shipped(instance)
-        
-        # Status changed to delivered
-        elif old_instance.status != 'delivered' and instance.status == 'delivered':
-            handle_order_delivered(instance)
-        
-        # Status changed to cancelled
-        elif old_instance.status != 'cancelled' and instance.status == 'cancelled':
-            handle_order_cancelled(instance)
-            
-    except SalesOrder.DoesNotExist:
-        pass
+        # Ensure Group and Category exist (Simplified)
+        group, _ = AccountGroup.objects.get_or_create(
+            name=f"Default {type_name} Group", 
+            defaults={'account_type': acc_type, 'code_range_start': '1000', 'code_range_end': '9999'}
+        )
+        category, _ = AccountCategory.objects.get_or_create(
+            name=f"Default {type_name} Category",
+            defaults={'account_group': group}
+        )
 
+        return Account.objects.create(
+            code=code,
+            name=name or code,
+            account_type=acc_type,
+            account_category=category,
+            account_group=group,
+            is_active=True,
+            opening_balance=Decimal('0.00'),
+            current_balance=Decimal('0.00')
+        )
 
-def handle_order_confirmed(order):
-    """Handle order confirmation"""
-    # Check stock availability
-    insufficient_items = []
-    for line in order.lines.all():
-        if line.item.current_stock < line.quantity:
-            insufficient_items.append(f"{line.item.code}: need {line.quantity}, have {line.item.current_stock}")
-    
-    if insufficient_items:
-        # Log warning but don't prevent confirmation
-        logger.warning(f"Order {order.order_number} confirmed with insufficient stock: {', '.join(insufficient_items)}")
-    
-    logger.info(f"Order {order.order_number} confirmed")
+# ============================
+# Journal Entry Signals
+# ============================
 
+@receiver(post_save, sender='account.JournalEntry')
+def post_journal_update_balances(sender, instance, created, **kwargs):
+    """Update account balances when a journal entry is posted"""
+    if instance.is_posted:
+        for line in instance.lines.all():
+            if line.account:
+                line.account.update_balance()
 
-def handle_order_shipped(order):
-    """Handle order shipment"""
-    # Update actual ship date
-    order.actual_ship_date = timezone.now().date()
-    order.save(update_fields=['actual_ship_date'])
-    
-    # Create stock transactions for shipped items
-    with transaction.atomic():
-        for line in order.lines.all():
-            if line.quantity_shipped > 0:
-                # Find warehouse (default to first available)
-                warehouse = line.warehouse or Warehouse.objects.filter(is_active=True).first()
-                
-                if warehouse:
-                    # Create stock transaction
-                    StockTransaction.objects.create(
-                        transaction_type='issue',
-                        item=line.item,
-                        quantity=-line.quantity_shipped,
-                        warehouse_from=warehouse,
-                        reference=f"SO-{order.order_number}",
-                        notes=f"Shipped for order {order.order_number}"
-                    )
-                    
-                    # Update item stock
-                    line.item.current_stock -= line.quantity_shipped
-                    line.item.save(update_fields=['current_stock'])
-    
-    logger.info(f"Order {order.order_number} shipped")
+# ============================
+# Sales Invoice Signals (Replaces PurchaseBill logic if in Sales)
+# ============================
 
-
-def handle_order_delivered(order):
-    """Handle order delivery"""
-    order.delivery_date = timezone.now().date()
-    order.save(update_fields=['delivery_date'])
-    logger.info(f"Order {order.order_number} delivered")
-
-
-def handle_order_cancelled(order):
-    """Handle order cancellation"""
-    # Release any reserved stock
-    logger.info(f"Order {order.order_number} cancelled")
-
-
-@receiver(post_save, sender=SalesOrder)
-def auto_create_invoice_from_sales_order(sender, instance, created, **kwargs):
+@receiver(post_save, sender='sales.SalesInvoice')
+def auto_post_sales_invoice(sender, instance, created, **kwargs):
     """
-    Automatically create invoice when sales order is confirmed
+    Automatically create journal entry when sales invoice is posted
+    Dr Accounts Receivable
+    Cr Sales Revenue
     """
-    if created:
-        return
+    JournalEntry = apps.get_model('account', 'JournalEntry')
+    JournalLine = apps.get_model('account', 'JournalLine')
 
-    # Check if order is confirmed AND has no existing invoices
-    if instance.status == 'confirmed' and not instance.invoices.exists():
-        with transaction.atomic():
-            try:
-                # Create invoice
-                invoice = SalesInvoice.objects.create(
-                    company=instance.company,
-                    sales_order=instance,
-                    customer=instance.customer,
-                    invoice_date=timezone.now().date(),
-                    due_date=timezone.now().date() + timezone.timedelta(days=30),
-                    tax_rate=instance.tax_rate,
-                )
-
-                # Copy lines from Sales Order to Invoice
-                for line in instance.lines.all():
-                    # Use shipped quantity if available, otherwise use ordered quantity
-                    invoice_quantity = line.quantity_shipped if line.quantity_shipped > 0 else line.quantity
-                    
-                    SalesInvoiceLine.objects.create(
-                        company=instance.company,
-                        invoice=invoice,
-                        item=line.item,
-                        quantity=invoice_quantity,
-                        unit=line.unit,
-                        unit_price=line.unit_price,
-                    )
-
-                # Calculate invoice totals
-                invoice.calculate_totals()
-                
-                # Update order status to invoiced
-                instance.status = 'invoiced'
-                instance.save(update_fields=['status'])
-
-                logger.info(f"Auto-created invoice {invoice.invoice_number} from SO {instance.order_number}")
-                
-            except Exception as e:
-                logger.error(f"Failed to auto-create invoice for SO {instance.order_number}: {e}")
-                raise
-
-
-<<<<<<< HEAD
-=======
-def create_invoice_journal_entry(invoice):
-    """Create journal entry for invoice"""
     try:
-        # Get accounts (with fallback creation if not exists)
-        ar_account = Account.objects.filter(code='1100').first()
-        sales_account = Account.objects.filter(code='4100').first()
-        
-        if not ar_account:
-            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
-        
-        if not sales_account:
-            sales_account = get_account('4100', 'Sales Revenue', 'revenue')
-        
-        # Create journal entry
-        je = JournalEntry.objects.create(
-            company=invoice.customer.company,
-            entry_date=invoice.invoice_date,
-            reference=invoice.invoice_number,
-            narration=f"Invoice {invoice.invoice_number} for {invoice.customer.name}",
-            is_posted=True,
-            posted_at=timezone.now()
-        )
-        
-        # Dr Accounts Receivable
-        JournalLine.objects.create(
-            journal=je,
-            account=ar_account,
-            debit=invoice.total_amount,
-            narration=f"Invoice {invoice.invoice_number}"
-        )
-        
-        # Cr Sales Revenue
-        JournalLine.objects.create(
-            journal=je,
-            account=sales_account,
-            credit=invoice.total_amount - (invoice.tax_amount or 0),
-            narration=f"Sales revenue - {invoice.invoice_number}"
-        )
-        
-        # Cr VAT Payable if tax exists
-        if invoice.tax_amount and invoice.tax_amount > 0:
-            vat_account = Account.objects.filter(code='2200').first()
-            if not vat_account:
-                vat_account = get_account('2200', 'VAT Payable', 'liability')
-            
-            JournalLine.objects.create(
-                journal=je,
-                account=vat_account,
-                credit=invoice.tax_amount,
-                narration=f"VAT on {invoice.invoice_number}"
-            )
-        
-        # Link journal entry to invoice
-        invoice.journal_entry = je
-        invoice.status = 'posted'
-        invoice.save(update_fields=['journal_entry', 'status'])
-        
-    except Exception as e:
-        logger.error(f"Failed to create journal entry for invoice {invoice.invoice_number}: {e}")
-        raise
-
-
->>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
-# ============================
-# Production Run Signals
-# ============================
-
-@receiver(post_save, sender=ProductionRun)
-def auto_create_invoice_from_production(sender, instance, created, **kwargs):
-    """
-    Automatically create invoice when production run is completed
-    This is for internal transfers or direct sales from production
-    """
-    if created:
-        return
-        
-    if instance.status == 'completed' and not hasattr(instance, 'invoice'):
-        # Only for finished goods that are sold directly
-        if instance.product.category == 'finished' and instance.product.product_type in ['plumpy_nut', 'plumpy_sup']:
+        if not created and instance.status == 'posted':
             with transaction.atomic():
-                try:
-                    # Get default customer (you might want to make this configurable)
-                    default_customer = Customer.objects.filter(is_active=True).first()
-                    
-                    if not default_customer:
-                        logger.warning(f"No customer found for production invoice from run {instance.id}")
-                        return
-                    
-                    # Create invoice
-                    invoice = SalesInvoice.objects.create(
-                        company=instance.company,
-                        customer=default_customer,
-                        invoice_date=timezone.now().date(),
-                        due_date=timezone.now().date() + timezone.timedelta(days=30),
-                        status='draft',
-                        notes=f"Invoice from production run #{instance.id}",
-                        created_by=instance.created_by
-                    )
-
-                    # Use BOM to create invoice lines (per produced kg)
-                    bom = instance.bom
-                    produced_kg = instance.actual_quantity or instance.planned_quantity
-
-                    for bom_line in bom.lines.all():
-                        # Calculate quantity with wastage
-                        line_qty = bom_line.quantity_per_kg * produced_kg
-                        line_qty_with_wastage = line_qty * (1 + bom_line.wastage_percentage / 100)
-                        
-                        # Get standard price or cost
-                        unit_price = bom_line.component.unit_cost or Decimal('0.00')
-                        
-                        SalesInvoiceLine.objects.create(
-                            company=instance.company,
-                            invoice=invoice,
-                            item=bom_line.component,
-                            description=f"From production run #{instance.id}",
-                            quantity=line_qty_with_wastage,
-                            unit=bom_line.unit,
-                            unit_price=unit_price,
-                        )
-
-                    invoice.calculate_totals()
-                    
-                    logger.info(f"Auto-created invoice {invoice.invoice_number} from production run #{instance.id}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to create invoice from production run #{instance.id}: {e}")
-
-
-# ============================
-# Sales Invoice Signals
-# ============================
-
-@receiver(pre_save, sender=SalesInvoice)
-def set_invoice_overdue(sender, instance, **kwargs):
-    """Auto-set overdue status if due date passed"""
-    if instance.pk:  # Only for existing invoices
-        if instance.due_date and instance.due_date < timezone.now().date():
-            if instance.status not in ['paid', 'cancelled']:
-                instance.status = 'overdue'
-
-
-@receiver(post_save, sender=SalesInvoice)
-def handle_invoice_status_change(sender, instance, created, **kwargs):
-    """Handle invoice status changes"""
-    if created:
-        logger.info(f"Invoice {instance.invoice_number} created")
-        return
-    
-    try:
-        old_instance = SalesInvoice.objects.get(pk=instance.pk)
-        
-        # Status changed to posted
-        if old_instance.status != 'posted' and instance.status == 'posted':
-            handle_invoice_posted(instance)
-        
-        # Status changed to paid
-        elif old_instance.status != 'paid' and instance.status == 'paid':
-            handle_invoice_paid(instance)
-        
-        # Status changed to cancelled
-        elif old_instance.status != 'cancelled' and instance.status == 'cancelled':
-            handle_invoice_cancelled(instance)
-            
-    except SalesInvoice.DoesNotExist:
-        pass
-
-
-def handle_invoice_posted(invoice):
-    """Handle invoice being posted"""
-    logger.info(f"Invoice {invoice.invoice_number} posted")
-    
-    # Note: Journal entry creation is now handled separately in accounting app
-    # We're removing the call to create_invoice_journal_entry here since it's causing issues
-
-
-def handle_invoice_paid(invoice):
-    """Handle invoice being marked as paid"""
-    logger.info(f"Invoice {invoice.invoice_number} marked as paid")
-    
-    # Update sales order status if all invoices are paid
-    if invoice.sales_order:
-        all_paid = all(inv.status == 'paid' for inv in invoice.sales_order.invoices.all())
-        if all_paid:
-            invoice.sales_order.status = 'closed'
-            invoice.sales_order.save(update_fields=['status'])
-
-
-def handle_invoice_cancelled(invoice):
-    """Handle invoice cancellation"""
-    logger.info(f"Invoice {invoice.invoice_number} cancelled")
-    
-    # Reverse journal entry if exists - this would need to be implemented separately
-    pass
-
+                ar_account = get_account('1100', 'Accounts Receivable - Trade', 'Asset')
+                sales_account = get_account('4100', 'Sales Revenue', 'Revenue')
+                
+                je = JournalEntry.objects.create(
+                    company=instance.company,
+                    entry_date=instance.invoice_date,
+                    reference=instance.invoice_number,
+                    narration=f"Sales Invoice {instance.invoice_number} - {instance.customer.name}",
+                    is_posted=True,
+                    posted_at=timezone.now()
+                )
+                
+                # Dr AR
+                JournalLine.objects.create(journal=je, account=ar_account, debit=instance.total_amount)
+                # Cr Revenue
+                JournalLine.objects.create(journal=je, account=sales_account, credit=instance.total_amount)
+    except Exception as e:
+        logger.exception(f"Failed to auto-post journal entry for Sales Invoice {instance.invoice_number}")
 
 # ============================
 # Sales Payment Signals
 # ============================
 
-@receiver(post_save, sender=SalesPayment)
-def handle_payment_received(sender, instance, created, **kwargs):
-    """Handle payment received"""
-    if created:
-        logger.info(f"Payment of {instance.amount} received for invoice {instance.invoice.invoice_number}")
-        
-        # Check if invoice is now fully paid
-        if instance.invoice.is_fully_paid:
-            instance.invoice.status = 'paid'
-            instance.invoice.save(update_fields=['status'])
-            
-<<<<<<< HEAD
-            # Note: Journal entry creation for payments should be handled in accounting app
-=======
-            # Create journal entry for payment
-            create_payment_journal_entry(instance)
+@receiver(post_save, sender='sales.SalesPayment')
+def auto_post_payment(sender, instance, created, **kwargs):
+    """
+    Automatically create journal entry for payments
+    Dr Cash/Bank
+    Cr Accounts Receivable
+    """
+    JournalEntry = apps.get_model('account', 'JournalEntry')
+    JournalLine = apps.get_model('account', 'JournalLine')
 
-
-def create_payment_journal_entry(payment):
-    """Create journal entry for payment"""
     try:
-        # Get accounts
-        cash_account = Account.objects.filter(code='1010').first()
-        ar_account = Account.objects.filter(code='1100').first()
-        
-        if not cash_account:
-            cash_account = get_account('1010', 'Cash/Bank', 'asset')
-        
-        if not ar_account:
-            ar_account = get_account('1100', 'Accounts Receivable', 'asset')
-        
-        # Create journal entry
-        je = JournalEntry.objects.create(
-            company=payment.invoice.customer.company,
-            entry_date=payment.payment_date,
-            reference=f"PAY-{payment.id}",
-            narration=f"Payment received for {payment.invoice.invoice_number}",
-            is_posted=True,
-            posted_at=timezone.now()
-        )
-        
-        # Dr Cash/Bank
-        JournalLine.objects.create(
-            journal=je,
-            account=cash_account,
-            debit=payment.amount,
-            narration=f"Payment from {payment.invoice.customer.name}"
-        )
-        
-        # Cr Accounts Receivable
-        JournalLine.objects.create(
-            journal=je,
-            account=ar_account,
-            credit=payment.amount,
-            narration=f"Payment for {payment.invoice.invoice_number}"
-        )
-        
-        # Link journal entry to payment
-        payment.journal_entry = je
-        payment.save(update_fields=['journal_entry'])
-        
+        if created and instance.amount > 0:
+            with transaction.atomic():
+                cash_account = get_account('1010', 'Cash/Bank', 'Asset')
+                ar_account = get_account('1100', 'Accounts Receivable - Trade', 'Asset')
+                
+                je = JournalEntry.objects.create(
+                    company=instance.company,
+                    entry_date=instance.payment_date,
+                    reference=instance.reference or f"PAY-{instance.id}",
+                    narration=f"Payment from {instance.invoice.customer.name}",
+                    is_posted=True,
+                    posted_at=timezone.now()
+                )
+                
+                # Dr Cash
+                JournalLine.objects.create(journal=je, account=cash_account, debit=instance.amount)
+                # Cr AR
+                JournalLine.objects.create(journal=je, account=ar_account, credit=instance.amount)
     except Exception as e:
-        logger.error(f"Failed to create journal entry for payment {payment.id}: {e}")
->>>>>>> 8f6d5a6faa537f99b7aab118429879e683d07a2b
-
+        logger.exception(f"Error in auto-posting sales payment {instance.id}: {e}")
 
 # ============================
-# Sales Shipment Signals
+# Stock / Production Signals
 # ============================
 
-@receiver(post_save, sender=SalesShipment)
-def handle_shipment_status_change(sender, instance, created, **kwargs):
-    """Handle shipment status changes"""
-    if created:
-        logger.info(f"Shipment {instance.shipment_number} created")
-        return
-    
+@receiver(post_save, sender='inventory.StockTransaction')
+def auto_post_stock_adjustment(sender, instance, created, **kwargs):
+    JournalEntry = apps.get_model('account', 'JournalEntry')
+    JournalLine = apps.get_model('account', 'JournalLine')
+
     try:
-        old_instance = SalesShipment.objects.get(pk=instance.pk)
-        
-        # Check if the status field exists
-        if not hasattr(instance, 'status'):
-            logger.debug(f"Shipment {instance.shipment_number} has no 'status' field")
-            return
-            
-        # Only proceed if both instances have the status field
-        if hasattr(old_instance, 'status') and hasattr(instance, 'status'):
-            # Status changed to shipped
-            if old_instance.status != 'shipped' and instance.status == 'shipped':
-                handle_shipment_shipped(instance)
-            
-            # Status changed to delivered
-            elif old_instance.status != 'delivered' and instance.status == 'delivered':
-                handle_shipment_delivered(instance)
-        else:
-            logger.debug(f"Shipment {instance.shipment_number} status field missing on old or new instance")
-            
-    except SalesShipment.DoesNotExist:
-        pass
-    except AttributeError as e:
-        logger.error(f"AttributeError in shipment signal for {instance.shipment_number}: {e}")
-
-
-def handle_shipment_shipped(shipment):
-    """Handle shipment being marked as shipped"""
-    logger.info(f"Shipment {shipment.shipment_number} shipped")
-    
-    # Update sales order status if all items shipped
-    order = shipment.sales_order
-    if order:
-        # Check if all lines are fully shipped
-        all_shipped = all(line.quantity_remaining <= 0 for line in order.lines.all())
-        if all_shipped:
-            order.status = 'shipped'
-            order.save(update_fields=['status'])
-
-
-def handle_shipment_delivered(shipment):
-    """Handle shipment being marked as delivered"""
-    logger.info(f"Shipment {shipment.shipment_number} delivered")
-    
-    if hasattr(shipment, 'delivery_date'):
-        shipment.delivery_date = timezone.now().date()
-        shipment.save(update_fields=['delivery_date'])
-    
-    # Update sales order status if all shipments delivered
-    order = shipment.sales_order
-    if order:
-        # Check if all shipments are delivered
-        all_delivered = all(
-            hasattr(s, 'status') and s.status == 'delivered' 
-            for s in order.shipments.all()
-        )
-        if all_delivered:
-            order.status = 'delivered'
-            order.save(update_fields=['status'])
+        if created and instance.transaction_type in ['adjustment', 'scrap']:
+            with transaction.atomic():
+                inventory_account = get_account('1300', 'Inventory', 'Asset')
+                variance_account = get_account('5900', 'Inventory Variance', 'Expense')
+                
+                unit_cost = getattr(instance.item, 'unit_cost', Decimal('0.00')) or Decimal('0.00')
+                value = abs(instance.quantity) * unit_cost
+                
+                if value > 0:
+                    je = JournalEntry.objects.create(
+                        company=instance.company if hasattr(instance, 'company') else None,
+                        entry_date=timezone.now().date(),
+                        reference=f"ST-{instance.id}",
+                        narration=f"Stock adjustment for {instance.item.code}",
+                        is_posted=True
+                    )
+                    if instance.quantity > 0:
+                        JournalLine.objects.create(journal=je, account=inventory_account, debit=value)
+                        JournalLine.objects.create(journal=je, account=variance_account, credit=value)
+                    else:
+                        JournalLine.objects.create(journal=je, account=inventory_account, credit=value)
+                        JournalLine.objects.create(journal=je, account=variance_account, debit=value)
+    except Exception as e:
+        logger.exception(f"Failed to auto-post stock adjustment for Transaction {instance.id}")
